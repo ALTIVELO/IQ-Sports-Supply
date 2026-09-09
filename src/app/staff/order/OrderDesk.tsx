@@ -29,7 +29,7 @@ export default function OrderDesk({
   const [query, setQuery] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
-  const [placed, setPlaced] = useState<{ id: string } | null>(null);
+  const [placed, setPlaced] = useState<{ id: string; warning?: string } | null>(null);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
 
@@ -102,7 +102,7 @@ export default function OrderDesk({
         notes: notes.trim() || undefined,
       });
       if (result.ok) {
-        setPlaced({ id: result.orderId! });
+        setPlaced({ id: result.orderId!, warning: result.warning });
         setLines([]);
         setNotes('');
       } else {
@@ -132,6 +132,7 @@ export default function OrderDesk({
         </Card>
       )}
 
+      {placed?.warning && <Notice tone="info">{placed.warning}</Notice>}
       {error && <Notice>{error}</Notice>}
 
       <div className="grid lg:grid-cols-[280px_1fr] gap-4 items-start">

@@ -26,7 +26,7 @@ export default function SupplierScreen({
   const [extras, setExtras] = useState<{ sku: string; name: string; qty: number }[]>([]);
   const [locationId, setLocationId] = useState(defaultLocationId);
   const [receiving, setReceiving] = useState<Po | null>(null);
-  const [message, setMessage] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
   const [pendingTx, startTransition] = useTransition();
 
   const outstandingOf = (l: PendingLine) => l.bo_qty - l.po_qty;
@@ -41,7 +41,7 @@ export default function SupplierScreen({
         extraLines: extras.filter((e) => e.sku.trim() && e.qty > 0),
       });
       setMessage(r.ok
-        ? { tone: 'success', text: r.message ?? 'Supplier order created' }
+        ? { tone: r.warning ? 'info' : 'success', text: r.warning ?? r.message ?? 'Supplier order created' }
         : { tone: 'error', text: r.error ?? 'Could not create the supplier order' });
       if (r.ok) { setSelected({}); setExtras([]); }
     });

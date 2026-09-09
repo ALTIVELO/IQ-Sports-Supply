@@ -17,7 +17,7 @@ export default function LocationsScreen({
   assignments: { profile_id: string; location_id: string }[];
   unitsByLocation: Record<string, number>;
 }) {
-  const [message, setMessage] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
   const [draft, setDraft] = useState({ name: '', address: '' });
   const [pending, startTransition] = useTransition();
 
@@ -120,7 +120,7 @@ function StaffRow({
   profile, locations, assigned, onMessage,
 }: {
   profile: Profile; locations: Loc[]; assigned: string[];
-  onMessage: (m: { tone: 'error' | 'success'; text: string }) => void;
+  onMessage: (m: { tone: 'error' | 'success' | 'info'; text: string }) => void;
 }) {
   const [selected, setSelected] = useState<string[]>(assigned);
   const [pending, startTransition] = useTransition();

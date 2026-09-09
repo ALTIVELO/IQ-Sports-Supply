@@ -86,7 +86,9 @@ function configurationNeeded(missing: string[]) {
 <p>Add ${missing.length === 1 ? 'it' : 'them'} in your hosting project's environment settings,
 then <strong>redeploy</strong>. Values prefixed <code>NEXT_PUBLIC_</code> are compiled into the
 build, so adding them to an existing deployment has no effect until it is rebuilt.</p>
-<p>The Supabase values are under Project Settings → API.</p>
+<p>The Supabase values are under Project Settings → API. Set
+<code>SUPABASE_SERVICE_ROLE_KEY</code> at the same time — it is not checked here,
+but PDFs, emails and the trade-account application page need it.</p>
 </div></body></html>`;
 
   return new NextResponse(body, {

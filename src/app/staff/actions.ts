@@ -9,7 +9,32 @@ import {
   notifyOrderPlaced, notifySupplierOrder, notifyShipped,
 } from '@/lib/notifications';
 
-export interface ActionResult { ok: boolean; error?: string; message?: string; orderId?: string }
+export interface ActionResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  orderId?: string;
+  /** The action succeeded, but a follow-up notification did not go out. */
+  warning?: string;
+}
+
+/**
+ * Runs a notification without letting it fail the action that triggered it.
+ *
+ * By the time these run the work is already committed — the order is placed,
+ * the stock is allocated, the invoice is raised. Throwing here would show the
+ * user an error for something that actually succeeded, and they would very
+ * reasonably do it again. Report it instead; the message is also in the Outbox.
+ */
+async function notify(run: () => Promise<void>, what: string): Promise<string | undefined> {
+  try {
+    await run();
+    return undefined;
+  } catch (e) {
+    return `${what} could not be sent (${e instanceof Error ? e.message : String(e)}). ` +
+           'Everything else went through — check the Outbox.';
+  }
+}
 
 const fail = (e: unknown): ActionResult => ({
   ok: false,
@@ -47,12 +72,13 @@ export async function placeOrder(input: {
 
   if (error) return { ok: false, error: error.message };
 
-  await notifyOrderPlaced(orderId as string);
+  const warning = await notify(
+    () => notifyOrderPlaced(orderId as string), 'The order confirmation');
 
   revalidatePath('/staff/orders');
   revalidatePath('/staff/supplier');
   revalidatePath('/staff/invoices');
-  return { ok: true, orderId: orderId as string };
+  return { ok: true, orderId: orderId as string, warning };
 }
 
 // ── invoices ────────────────────────────────────────────────────────────────
@@ -130,11 +156,16 @@ export async function markShipped(input: {
   });
   if (error) return { ok: false, error: error.message };
 
-  await notifyShipped(input.invoiceId);
+  const warning = await notify(
+    () => notifyShipped(input.invoiceId), 'The shipping notification');
 
   revalidatePath('/staff/packing');
   revalidatePath('/staff/invoices');
-  return { ok: true, message: 'Shipped — the client has been sent the tracking link' };
+  return {
+    ok: true,
+    message: warning ? 'Marked shipped' : 'Shipped — the client has been sent the tracking link',
+    warning,
+  };
 }
 
 // ── supplier orders ─────────────────────────────────────────────────────────
@@ -154,10 +185,15 @@ export async function createSupplierOrder(input: {
   });
   if (error) return { ok: false, error: error.message };
 
-  await notifySupplierOrder(poId as string);
+  const warning = await notify(
+    () => notifySupplierOrder(poId as string), 'The supplier order email');
 
   revalidatePath('/staff/supplier');
-  return { ok: true, message: 'Supplier order created and sent' };
+  return {
+    ok: true,
+    message: warning ? 'Supplier order created' : 'Supplier order created and sent',
+    warning,
+  };
 }
 
 export async function receivePo(input: {
@@ -182,13 +218,11 @@ export async function receivePo(input: {
 /** Re-sends a supplier order — the copy James forwards. */
 export async function resendSupplierOrder(poId: string): Promise<ActionResult> {
   await requireStaff();
-  try {
-    await notifySupplierOrder(poId);
-    revalidatePath('/staff/outbox');
-    return { ok: true, message: 'Supplier order sent' };
-  } catch (e) {
-    return fail(e);
-  }
+  const warning = await notify(() => notifySupplierOrder(poId), 'The supplier order email');
+  revalidatePath('/staff/outbox');
+  return warning
+    ? { ok: false, error: warning }
+    : { ok: true, message: 'Supplier order sent' };
 }
 
 // ── stock ───────────────────────────────────────────────────────────────────

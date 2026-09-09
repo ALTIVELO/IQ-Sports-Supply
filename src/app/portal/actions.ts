@@ -5,7 +5,9 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { requireClient } from '@/lib/auth';
 import { notifyOrderPlaced } from '@/lib/notifications';
 
-export interface PortalResult { ok: boolean; error?: string; orderNumber?: string }
+export interface PortalResult {
+  ok: boolean; error?: string; orderNumber?: string; warning?: string;
+}
 
 /**
  * A client placing their own order. place_order() refuses any client_id but
@@ -33,11 +35,19 @@ export async function placeClientOrder(
 
   if (error) return { ok: false, error: error.message };
 
-  await notifyOrderPlaced(orderId as string);
+  // The order is already committed. A failed confirmation email must not tell
+  // the client their order did not go through, or they will place it twice.
+  let warning: string | undefined;
+  try {
+    await notifyOrderPlaced(orderId as string);
+  } catch {
+    warning = 'Your order is placed, but we could not email your confirmation just yet. '
+            + 'You can see the order and download the invoice here at any time.';
+  }
 
   const { data: order } = await sb.from('orders').select('number').eq('id', orderId).single();
 
   revalidatePath('/portal/orders');
   revalidatePath('/portal/invoices');
-  return { ok: true, orderNumber: order?.number };
+  return { ok: true, orderNumber: order?.number, warning };
 }

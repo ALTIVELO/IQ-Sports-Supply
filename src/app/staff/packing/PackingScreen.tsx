@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 import { markPacked, markShipped } from '../actions';
+import type { ActionResult } from '../actions';
 
 interface Inv {
   id: string; number: string; type: 'full' | 'shipment' | 'backorder'; date: string;
@@ -24,7 +25,7 @@ export default function PackingScreen({
   queue: Inv[]; waiting: Inv[]; recent: Inv[];
 }) {
   const router = useRouter();
-  const [message, setMessage] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
 
   return (
     <div className="space-y-5">
@@ -102,7 +103,7 @@ export default function PackingScreen({
 
 function PackRow({
   inv, onMessage,
-}: { inv: Inv; onMessage: (m: { tone: 'error' | 'success'; text: string }) => void }) {
+}: { inv: Inv; onMessage: (m: { tone: 'error' | 'success' | 'info'; text: string }) => void }) {
   const [shipping, setShipping] = useState(false);
   const [carrier, setCarrier] = useState(inv.carrier ?? '');
   const [tracking, setTracking] = useState(inv.tracking_number ?? '');
@@ -110,11 +111,11 @@ function PackRow({
 
   const units = inv.invoice_lines.reduce((a, l) => a + l.qty, 0);
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string; message?: string }>) =>
+  const run = (fn: () => Promise<ActionResult>) =>
     startTransition(async () => {
       const r = await fn();
       onMessage(r.ok
-        ? { tone: 'success', text: r.message ?? 'Done' }
+        ? { tone: r.warning ? 'info' : 'success', text: r.warning ?? r.message ?? 'Done' }
         : { tone: 'error', text: r.error ?? 'Something went wrong' });
       if (r.ok) setShipping(false);
     });

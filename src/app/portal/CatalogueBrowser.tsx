@@ -16,6 +16,7 @@ export default function CatalogueBrowser({
   const [query, setQuery] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [placed, setPlaced] = useState<string | null>(null);
+  const [placedWarning, setPlacedWarning] = useState<string | undefined>();
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
 
@@ -44,7 +45,7 @@ export default function CatalogueBrowser({
       const r = await placeClientOrder(
         cartLines.map((l) => ({ product_id: l.product.id, qty: l.qty })),
       );
-      if (r.ok) { setPlaced(r.orderNumber ?? ''); setCart({}); }
+      if (r.ok) { setPlaced(r.orderNumber ?? ''); setPlacedWarning(r.warning); setCart({}); }
       else setError(r.error ?? 'Could not place your order');
     });
   }
@@ -53,8 +54,11 @@ export default function CatalogueBrowser({
     return (
       <Card accent>
         <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Order {placed} placed</h1>
+        {placedWarning && (
+          <div className="mt-3"><Notice tone="info">{placedWarning}</Notice></div>
+        )}
         <p className="text-[13px] text-mute mt-2 leading-relaxed">
-          Your invoice has been raised and emailed to you. Anything we did not have on the
+          Your invoice has been raised{placedWarning ? '' : ' and emailed to you'}. Anything we did not have on the
           shelf has gone straight to our supplier — you will see an expected date on your
           back order list as soon as we have one. Nothing is dispatched until payment
           reaches us.

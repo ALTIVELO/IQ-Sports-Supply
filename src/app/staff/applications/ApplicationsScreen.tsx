@@ -5,13 +5,14 @@ import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 import { approveApplication, rejectApplication } from './actions';
 import type { AccountRequest } from '@/lib/types';
+import type { ActionResult } from '../actions';
 
 interface Named { id: string; name: string }
 
 export default function ApplicationsScreen({
   requests, tiers, locations,
 }: { requests: AccountRequest[]; tiers: Named[]; locations: Named[] }) {
-  const [message, setMessage] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
 
   const pending = requests.filter((r) => r.status === 'pending');
   const reviewed = requests.filter((r) => r.status !== 'pending');
@@ -73,7 +74,7 @@ function RequestCard({
   request, tiers, locations, onMessage,
 }: {
   request: AccountRequest; tiers: Named[]; locations: Named[];
-  onMessage: (m: { tone: 'error' | 'success'; text: string }) => void;
+  onMessage: (m: { tone: 'error' | 'success' | 'info'; text: string }) => void;
 }) {
   const [tierId, setTierId] = useState(tiers[0]?.id ?? '');
   const [locationId, setLocationId] = useState(locations[0]?.id ?? '');
@@ -82,11 +83,11 @@ function RequestCard({
   const [notify, setNotify] = useState(true);
   const [pending, startTransition] = useTransition();
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string; message?: string }>) =>
+  const run = (fn: () => Promise<ActionResult>) =>
     startTransition(async () => {
       const r = await fn();
       onMessage(r.ok
-        ? { tone: 'success', text: r.message ?? 'Done' }
+        ? { tone: r.warning ? 'info' : 'success', text: r.warning ?? r.message ?? 'Done' }
         : { tone: 'error', text: r.error ?? 'Something went wrong' });
     });
 

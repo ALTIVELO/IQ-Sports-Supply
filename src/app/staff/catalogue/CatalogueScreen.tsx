@@ -15,7 +15,7 @@ interface Transfer {
   stock_transfer_lines: { id: string; sku: string; name: string; qty: number }[];
 }
 
-type Msg = { tone: 'error' | 'success'; text: string } | null;
+type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
 
 export default function CatalogueScreen({
   products, tiers, locations, prices, stock, transfers, query, tab,

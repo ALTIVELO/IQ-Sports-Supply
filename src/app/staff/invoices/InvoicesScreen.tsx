@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 import { markPaid, markUnpaid } from '../actions';
+import type { ActionResult } from '../actions';
 import { pushToXero, pullPaymentStatus } from './actions';
 
 interface Inv {
@@ -25,16 +26,16 @@ export default function InvoicesScreen({
   invoices, status, xeroConfigured, xeroConnected,
 }: { invoices: Inv[]; status: string; xeroConfigured: boolean; xeroConnected: boolean }) {
   const router = useRouter();
-  const [message, setMessage] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const unsynced = invoices.filter((i) => i.xero_status !== 'synced');
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string; message?: string }>) =>
+  const run = (fn: () => Promise<ActionResult>) =>
     startTransition(async () => {
       const r = await fn();
       setMessage(r.ok
-        ? { tone: 'success', text: r.message ?? 'Done' }
+        ? { tone: r.warning ? 'info' : 'success', text: r.warning ?? r.message ?? 'Done' }
         : { tone: 'error', text: r.error ?? 'Something went wrong' });
     });
 

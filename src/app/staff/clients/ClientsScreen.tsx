@@ -22,7 +22,7 @@ export default function ClientsScreen({
   const [draft, setDraft] = useState(() => blank(tiers[0]?.id ?? '', locations[0]?.id ?? null));
   const [editId, setEditId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const tierName = (id: string) => tiers.find((t) => t.id === id)?.name ?? '—';

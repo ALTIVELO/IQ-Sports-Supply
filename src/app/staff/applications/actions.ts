@@ -24,11 +24,23 @@ export async function approveApplication(input: {
   });
   if (error) return { ok: false, error: error.message };
 
-  await notifyApproved(clientId as string);
+  // The client record exists now; a failed welcome email must not make the
+  // approval look like it failed, or it will be attempted again.
+  let warning: string | undefined;
+  try {
+    await notifyApproved(clientId as string);
+  } catch (e) {
+    warning = `Approved, but the welcome email did not send (${
+      e instanceof Error ? e.message : String(e)}). Send them the sign-in link by hand.`;
+  }
 
   revalidatePath('/staff/applications');
   revalidatePath('/staff/clients');
-  return { ok: true, message: 'Approved — welcome email sent with their sign-in link' };
+  return {
+    ok: true,
+    message: warning ? 'Approved' : 'Approved — welcome email sent with their sign-in link',
+    warning,
+  };
 }
 
 export async function rejectApplication(input: {
@@ -50,10 +62,19 @@ export async function rejectApplication(input: {
   }).eq('id', input.requestId);
   if (error) return { ok: false, error: error.message };
 
+  let warning: string | undefined;
   if (input.notify) {
-    await notifyRejected(request.email, request.company_name, input.note ?? null);
+    try {
+      await notifyRejected(request.email, request.company_name, input.note ?? null);
+    } catch {
+      warning = 'Rejected, but the notification email did not send.';
+    }
   }
 
   revalidatePath('/staff/applications');
-  return { ok: true, message: input.notify ? 'Rejected and the applicant notified' : 'Rejected' };
+  return {
+    ok: true,
+    message: input.notify && !warning ? 'Rejected and the applicant notified' : 'Rejected',
+    warning,
+  };
 }
