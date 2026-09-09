@@ -12,6 +12,9 @@ Apply in order against a fresh Supabase project:
 With the Supabase CLI: `supabase db push`. Or paste each file into the SQL
 editor in order.
 
+Then run `verify.sql` in the SQL editor. Every row must say PASS — a FAIL means
+that migration did not land, and you should re-run it before going further.
+
 ## Making yourself an admin
 
 Sign in once via magic link so an `auth.users` row exists, then:
