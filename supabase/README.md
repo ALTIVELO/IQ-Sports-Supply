@@ -15,6 +15,21 @@ editor in order.
 Then run `verify.sql` in the SQL editor. Every row must say PASS — a FAIL means
 that migration did not land, and you should re-run it before going further.
 
+## If a statement fails
+
+All four files are safe to re-run. Every object is created with `IF NOT EXISTS`
+or an equivalent guard, so if a run stops halfway you can fix the cause and
+paste the same file again — you do not need to reset the database.
+
+The one statement that commonly cannot run on a hosted project is the trigger on
+`auth.users`, which is owned by the auth service rather than by you. It is
+wrapped so that a permission error prints a notice and the rest of the file
+still installs. The app does not depend on it: `getSessionUser()` creates the
+profile row itself on first sign-in when the trigger is absent.
+
+`verify.sql` reports `FAIL` for `signup trigger on auth.users` in that case, and
+that one failure is safe to ignore. Any other `FAIL` is not.
+
 ## Making yourself an admin
 
 Sign in once via magic link so an `auth.users` row exists, then:

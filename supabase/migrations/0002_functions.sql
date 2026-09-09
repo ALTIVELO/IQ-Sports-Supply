@@ -655,7 +655,20 @@ begin
   return new;
 end $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
+-- auth.users is owned by the auth service, and some hosted setups do not let
+-- the SQL editor's role add a trigger to it. That must not abort this file:
+-- the trigger is a convenience (it creates the profile row and links an
+-- approved client on first sign-in), and the app degrades to a manual
+-- `update profiles set role = ...` without it.
+do $$
+begin
+  drop trigger if exists on_auth_user_created on auth.users;
+  create trigger on_auth_user_created
+    after insert on auth.users
+    for each row execute function public.handle_new_user();
+exception when insufficient_privilege then
+  raise notice
+    'Could not add the signup trigger to auth.users (%). Everything else is '
+    'installed. Add it from the Supabase dashboard, or create profile rows by '
+    'hand — see supabase/README.md.', sqlerrm;
+end $$;

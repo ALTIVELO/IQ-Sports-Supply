@@ -3,32 +3,63 @@
 -- 0001: core schema
 -- ============================================================================
 
-create extension if not exists "pgcrypto";
+-- gen_random_uuid() is core Postgres since 13, so this is optional. Hosted
+-- platforms often disallow CREATE EXTENSION, and that must not stop the run.
+do $$
+begin
+  create extension if not exists "pgcrypto";
+exception when insufficient_privilege or duplicate_object then
+  raise notice 'pgcrypto not created (%) — continuing, gen_random_uuid() is built in', sqlerrm;
+end $$;
 
 -- ── enums ───────────────────────────────────────────────────────────────────
-create type user_role        as enum ('admin', 'accounts', 'ops', 'client');
-create type order_status     as enum ('open', 'complete', 'cancelled');
-create type invoice_type     as enum ('full', 'shipment', 'backorder');
-create type request_status   as enum ('pending', 'approved', 'rejected');
-create type transfer_status  as enum ('draft', 'in_transit', 'received', 'cancelled');
-create type xero_status      as enum ('not_synced', 'synced', 'error');
-create type email_status     as enum ('sent', 'suppressed', 'failed');
+do $$ begin
+  create type user_role        as enum ('admin', 'accounts', 'ops', 'client');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type order_status     as enum ('open', 'complete', 'cancelled');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type invoice_type     as enum ('full', 'shipment', 'backorder');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type request_status   as enum ('pending', 'approved', 'rejected');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type transfer_status  as enum ('draft', 'in_transit', 'received', 'cancelled');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type xero_status      as enum ('not_synced', 'synced', 'error');
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  create type email_status     as enum ('sent', 'suppressed', 'failed');
 
+exception when duplicate_object then null;
+end $$;
 -- The client-facing timeline is driven entirely by these events; there is no
 -- manually editable status field anywhere in the order lifecycle.
-create type order_event_type as enum (
-  'placed',
-  'invoice_sent',
-  'payment_received',
-  'supplier_ordered',
-  'stock_arrived',
-  'packed',
-  'shipped'
-);
+do $$ begin
+  create type order_event_type as enum (
+    'placed',
+    'invoice_sent',
+    'payment_received',
+    'supplier_ordered',
+    'stock_arrived',
+    'packed',
+    'shipped'
+  );
 
+exception when duplicate_object then null;
+end $$;
 -- ── identity ────────────────────────────────────────────────────────────────
 -- One row per auth user. Role drives every RLS policy in 0002.
-create table profiles (
+create table if not exists profiles (
   id         uuid primary key references auth.users(id) on delete cascade,
   role       user_role not null default 'client',
   full_name  text,
@@ -37,13 +68,13 @@ create table profiles (
 );
 
 -- ── reference data ──────────────────────────────────────────────────────────
-create table tiers (
+create table if not exists tiers (
   id   uuid primary key default gen_random_uuid(),
   name text not null unique,
   sort int  not null default 0
 );
 
-create table locations (
+create table if not exists locations (
   id      uuid primary key default gen_random_uuid(),
   name    text not null unique,
   address text,
@@ -52,14 +83,14 @@ create table locations (
 
 -- Which sites an ops user works. Their packing/receiving queues are scoped to
 -- these; admin sees every location.
-create table ops_locations (
+create table if not exists ops_locations (
   profile_id  uuid references profiles(id) on delete cascade,
   location_id uuid references locations(id) on delete cascade,
   primary key (profile_id, location_id)
 );
 
 -- ── catalogue ───────────────────────────────────────────────────────────────
-create table products (
+create table if not exists products (
   id         uuid primary key default gen_random_uuid(),
   sku        text not null unique,
   name       text not null,
@@ -68,10 +99,10 @@ create table products (
   created_at timestamptz not null default now()
 );
 -- SKU matching on import is trimmed and case-insensitive.
-create unique index products_sku_lower_idx on products (lower(sku));
+create unique index if not exists products_sku_lower_idx on products (lower(sku));
 
 -- Stock is held per location; a product's total is the sum across locations.
-create table stock_levels (
+create table if not exists stock_levels (
   product_id  uuid not null references products(id) on delete cascade,
   location_id uuid not null references locations(id) on delete cascade,
   qty         integer not null default 0 check (qty >= 0),
@@ -80,7 +111,7 @@ create table stock_levels (
 
 -- Current price = latest row with effective_from <= today. Older rows are the
 -- quarterly price history and are never deleted.
-create table tier_prices (
+create table if not exists tier_prices (
   id             uuid primary key default gen_random_uuid(),
   product_id     uuid not null references products(id) on delete cascade,
   tier_id        uuid not null references tiers(id) on delete cascade,
@@ -89,10 +120,10 @@ create table tier_prices (
   created_at     timestamptz not null default now(),
   unique (product_id, tier_id, effective_from)
 );
-create index tier_prices_lookup_idx on tier_prices (product_id, tier_id, effective_from desc);
+create index if not exists tier_prices_lookup_idx on tier_prices (product_id, tier_id, effective_from desc);
 
 -- ── clients ─────────────────────────────────────────────────────────────────
-create table clients (
+create table if not exists clients (
   id                  uuid primary key default gen_random_uuid(),
   name                text not null,
   tier_id             uuid not null references tiers(id),
@@ -106,11 +137,11 @@ create table clients (
   active              boolean not null default true,
   created_at          timestamptz not null default now()
 );
-create index clients_auth_user_idx on clients (auth_user_id);
+create index if not exists clients_auth_user_idx on clients (auth_user_id);
 
 -- Approval is the ONLY path from application to access. Nothing here grants
 -- any visibility until an admin approves it.
-create table account_requests (
+create table if not exists account_requests (
   id            uuid primary key default gen_random_uuid(),
   company_name  text not null,
   contact_name  text not null,
@@ -130,7 +161,7 @@ create table account_requests (
 );
 
 -- ── orders ──────────────────────────────────────────────────────────────────
-create table orders (
+create table if not exists orders (
   id                     uuid primary key default gen_random_uuid(),
   number                 text not null unique,
   client_id              uuid not null references clients(id),
@@ -141,9 +172,9 @@ create table orders (
   notes                  text,
   created_at             timestamptz not null default now()
 );
-create index orders_client_idx on orders (client_id, date desc);
+create index if not exists orders_client_idx on orders (client_id, date desc);
 
-create table order_lines (
+create table if not exists order_lines (
   id            uuid primary key default gen_random_uuid(),
   order_id      uuid not null references orders(id) on delete cascade,
   product_id    uuid references products(id),
@@ -160,10 +191,10 @@ create table order_lines (
   po_qty        integer not null default 0 check (po_qty >= 0),
   invoiced_ship boolean not null default false
 );
-create index order_lines_order_idx on order_lines (order_id);
-create index order_lines_backorder_idx on order_lines (sku) where bo_qty > 0;
+create index if not exists order_lines_order_idx on order_lines (order_id);
+create index if not exists order_lines_backorder_idx on order_lines (sku) where bo_qty > 0;
 
-create table order_events (
+create table if not exists order_events (
   id         uuid primary key default gen_random_uuid(),
   order_id   uuid not null references orders(id) on delete cascade,
   type       order_event_type not null,
@@ -172,10 +203,10 @@ create table order_events (
   created_at timestamptz not null default clock_timestamp(),
   meta       jsonb not null default '{}'::jsonb
 );
-create index order_events_order_idx on order_events (order_id, created_at);
+create index if not exists order_events_order_idx on order_events (order_id, created_at);
 
 -- ── invoices ────────────────────────────────────────────────────────────────
-create table invoices (
+create table if not exists invoices (
   id              uuid primary key default gen_random_uuid(),
   number          text not null unique,
   order_id        uuid not null references orders(id) on delete cascade,
@@ -204,11 +235,11 @@ create table invoices (
   exported        boolean not null default false,
   created_at      timestamptz not null default now()
 );
-create index invoices_client_idx on invoices (client_id, date desc);
-create index invoices_packing_queue_idx on invoices (location_id)
+create index if not exists invoices_client_idx on invoices (client_id, date desc);
+create index if not exists invoices_packing_queue_idx on invoices (location_id)
   where paid and ready_to_pack and not packed and not superseded;
 
-create table invoice_lines (
+create table if not exists invoice_lines (
   id         uuid primary key default gen_random_uuid(),
   invoice_id uuid not null references invoices(id) on delete cascade,
   sku        text not null,
@@ -216,12 +247,12 @@ create table invoice_lines (
   qty        integer not null check (qty > 0),
   unit_price numeric(12,2) not null check (unit_price >= 0)
 );
-create index invoice_lines_invoice_idx on invoice_lines (invoice_id);
+create index if not exists invoice_lines_invoice_idx on invoice_lines (invoice_id);
 
 -- ── purchase orders ─────────────────────────────────────────────────────────
 -- Deliberately carries NO price columns and NO client identity: what goes to
 -- the supplier is SKUs and quantities only.
-create table purchase_orders (
+create table if not exists purchase_orders (
   id                  uuid primary key default gen_random_uuid(),
   number              text not null unique,
   date                date not null default current_date,
@@ -231,7 +262,7 @@ create table purchase_orders (
   created_at          timestamptz not null default now()
 );
 
-create table po_lines (
+create table if not exists po_lines (
   id           uuid primary key default gen_random_uuid(),
   po_id        uuid not null references purchase_orders(id) on delete cascade,
   sku          text not null,
@@ -243,10 +274,10 @@ create table po_lines (
   order_id     uuid references orders(id) on delete set null,
   received_qty integer not null default 0 check (received_qty >= 0)
 );
-create index po_lines_po_idx on po_lines (po_id);
+create index if not exists po_lines_po_idx on po_lines (po_id);
 
 -- ── stock transfers ─────────────────────────────────────────────────────────
-create table stock_transfers (
+create table if not exists stock_transfers (
   id               uuid primary key default gen_random_uuid(),
   number           text not null unique,
   from_location_id uuid not null references locations(id),
@@ -257,7 +288,7 @@ create table stock_transfers (
   check (from_location_id <> to_location_id)
 );
 
-create table stock_transfer_lines (
+create table if not exists stock_transfer_lines (
   id          uuid primary key default gen_random_uuid(),
   transfer_id uuid not null references stock_transfers(id) on delete cascade,
   product_id  uuid not null references products(id),
@@ -267,7 +298,7 @@ create table stock_transfer_lines (
 );
 
 -- ── import audit ────────────────────────────────────────────────────────────
-create table price_imports (
+create table if not exists price_imports (
   id            uuid primary key default gen_random_uuid(),
   date          timestamptz not null default now(),
   tier_id       uuid references tiers(id),
@@ -281,7 +312,7 @@ create table price_imports (
 
 -- Saved column mapping per tier, so every subsequent quarter is pure
 -- drag-and-drop with no setup.
-create table import_templates (
+create table if not exists import_templates (
   id           uuid primary key default gen_random_uuid(),
   scope        text not null,              -- 'prices' | 'clients' | 'stock'
   tier_id      uuid references tiers(id),
@@ -292,7 +323,7 @@ create table import_templates (
 );
 
 -- ── settings (single row) ───────────────────────────────────────────────────
-create table settings (
+create table if not exists settings (
   id                 integer primary key default 1 check (id = 1),
   company            text not null default 'IQ Sports Supply Ltd',
   company_address    text not null default '2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ',
@@ -316,7 +347,7 @@ create table settings (
 -- Every outbound email is recorded here. Without RESEND_API_KEY messages are
 -- stored 'suppressed' and shown in-app instead of being sent, so the whole
 -- flow works before the email provider exists.
-create table email_log (
+create table if not exists email_log (
   id          uuid primary key default gen_random_uuid(),
   created_at  timestamptz not null default now(),
   kind        text not null,       -- order_confirmation | supplier_order | shipped | ...
@@ -332,7 +363,7 @@ create table email_log (
 );
 
 -- ── Xero connection (single row) ────────────────────────────────────────────
-create table xero_connection (
+create table if not exists xero_connection (
   id            integer primary key default 1 check (id = 1),
   tenant_id     text,
   access_token  text,
@@ -343,7 +374,7 @@ create table xero_connection (
 );
 
 -- ── audit log ───────────────────────────────────────────────────────────────
-create table audit_log (
+create table if not exists audit_log (
   id         uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   actor      uuid references profiles(id),
@@ -352,4 +383,4 @@ create table audit_log (
   action     text not null,
   detail     jsonb not null default '{}'::jsonb
 );
-create index audit_log_entity_idx on audit_log (entity, entity_id, created_at desc);
+create index if not exists audit_log_entity_idx on audit_log (entity, entity_id, created_at desc);
