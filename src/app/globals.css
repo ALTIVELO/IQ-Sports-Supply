@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-parch text-ink font-sans antialiased;
+  }
+  /* Tabular figures everywhere numbers line up: SKUs, quantities, money. */
+  .num { font-variant-numeric: tabular-nums; }
+
+  input, select, textarea {
+    @apply w-full bg-white border border-line rounded text-[13px] text-ink px-[9px] py-[7px] outline-none;
+  }
+  input[type='checkbox'], input[type='radio'] { @apply w-auto; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+    @apply outline outline-2 outline-cobalt outline-offset-1;
+  }
+  input:disabled, select:disabled { @apply bg-parch text-mute; }
+
+  table { @apply border-collapse w-full; }
+  th {
+    @apply text-left text-[11px] font-semibold text-mute px-2 py-1.5 border-b border-line whitespace-nowrap;
+  }
+  td { @apply text-[13px] px-2 py-[7px] border-b border-row-line align-middle; }
+  tbody tr:last-child td { @apply border-b-0; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+}
