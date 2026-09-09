@@ -14,9 +14,12 @@ cp .env.example .env.local     # fill in the Supabase values
 npm run dev
 ```
 
-Apply `supabase/migrations/*.sql` in order to a fresh Supabase project — see
-[`supabase/README.md`](supabase/README.md). Then sign in once so an auth user
-exists, and promote yourself:
+Paste [`supabase/setup.sql`](supabase/setup.sql) into the Supabase SQL editor
+and run it — that is the whole schema, and it prints a table of checks that
+should all say PASS. It is safe to re-run. See
+[`supabase/README.md`](supabase/README.md) for the details.
+
+Then sign in once so an auth user exists, and promote yourself:
 
 ```sql
 update profiles set role = 'admin' where email = 'you@example.com';

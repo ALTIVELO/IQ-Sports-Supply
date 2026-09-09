@@ -9,11 +9,15 @@ Apply in order against a fresh Supabase project:
 0004_seed.sql       settings, tiers, locations, sample catalogue and client
 ```
 
-With the Supabase CLI: `supabase db push`. Or paste each file into the SQL
-editor in order.
+**The easy way:** paste the whole of [`setup.sql`](setup.sql) into the Supabase
+SQL editor and run it once. It is all four migrations plus the verification
+query, and it ends by printing a table of checks — every row should say PASS.
 
-Then run `verify.sql` in the SQL editor. Every row must say PASS — a FAIL means
-that migration did not land, and you should re-run it before going further.
+That file is generated. After changing anything under `migrations/`, regenerate
+it with `./build-setup.sh`.
+
+Alternatively, apply the four migrations individually in the order above (with
+the Supabase CLI, `supabase db push`), then run `verify.sql` yourself.
 
 ## If a statement fails
 
