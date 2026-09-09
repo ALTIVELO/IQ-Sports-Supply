@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sendEmail } from '@/lib/email/send';
 import { applicationNotice } from '@/lib/email/templates';
+import { appUrl } from '@/lib/app-url';
 
 const Application = z.object({
   company_name: z.string().trim().min(2, 'Company name is required').max(200),
@@ -76,7 +77,6 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   const { data: settings } = await db
     .from('settings').select('company, application_recipient').eq('id', 1).single();
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
   const notice = applicationNotice({
     company: settings?.company ?? 'IQ Sports Supply Ltd',
     companyName: parsed.data.company_name,
@@ -88,7 +88,7 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
     vatNo: parsed.data.vat_no ?? null,
     address: parsed.data.address ?? null,
     message: parsed.data.message ?? null,
-    reviewUrl: `${appUrl}/staff/applications`,
+    reviewUrl: `${appUrl()}/staff/applications`,
   });
 
   // Notification goes to James only.

@@ -5,8 +5,7 @@ import {
   orderConfirmation, supplierOrder, shippedNotice, welcomeEmail, rejectionEmail,
 } from '@/lib/email/templates';
 import { invoiceDocData, renderInvoicePdf } from '@/lib/pdf/render';
-
-const appUrl = () => process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+import { appUrl } from '@/lib/app-url';
 
 /**
  * Order confirmation with the invoice PDF attached, to the client, CC'd to the
