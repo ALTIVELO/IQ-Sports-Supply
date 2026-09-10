@@ -56,7 +56,7 @@ with checks as (
 
   union all
   select 'fulfilment locations seeded',
-         (select count(*)::text from locations), '5'
+         (select count(*)::text from locations), '4'
 )
 select
   case when found = expected then 'PASS' else 'FAIL' end as result,

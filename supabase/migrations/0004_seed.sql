@@ -12,12 +12,13 @@ insert into tiers (name, sort) values
   ('Distributor', 1), ('Shop', 2), ('Club', 3), ('Retail', 4)
 on conflict (name) do nothing;
 
+-- The four fulfilment sites. Addresses are left blank for the three that do
+-- not share the registered office; fill them in on the Locations screen.
 insert into locations (name, address) values
   ('Slough',      '2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ'),
-  ('Blackpool',   'Unit 4 Wellington Point, Amy Johnson Way, Blackpool FY4 2RG'),
-  ('Manchester',  'Manchester fulfilment'),
-  ('Bristol',     'Bristol fulfilment'),
-  ('Glasgow',     'Glasgow fulfilment')
+  ('Cornwall',    null),
+  ('Maryport',    null),
+  ('Glastonbury', null)
 on conflict (name) do nothing;
 
 -- ── sample catalogue ────────────────────────────────────────────────────────
