@@ -55,7 +55,13 @@ insert into categories (slug, name, sort) values
   ('saddles',         'Saddles',                230),
   ('cables',          'Cables & housing',       240),
   ('tools',           'Tools',                  250),
-  ('lubricants',      'Lubricants & care',      260)
+  ('lubricants',      'Lubricants & care',      260),
+  -- Added after seeing a real supplier order form: Di2 batteries, chargers and
+  -- E-tube wires; power-meter chainsets, which the form lists only by chainring
+  -- size; and complete groupset bundles.
+  ('groupsets',       'Groupsets',                5),
+  ('power-meters',    'Power meters',            55),
+  ('electronics',     'Di2 & electronics',       95)
 on conflict (slug) do update set name = excluded.name, sort = excluded.sort;
 
 -- The client-facing view gains the category, so the portal can filter on it.

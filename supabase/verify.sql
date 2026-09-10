@@ -56,7 +56,7 @@ with checks as (
 
   union all
   select 'product categories seeded',
-         (select count(*)::text from categories), '26'
+         (select count(*)::text from categories), '29'
 
   union all
   select 'products carry a category column',

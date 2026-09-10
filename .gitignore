@@ -6,3 +6,6 @@ out
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+
+# Generated supplier price files — these are commercial data, not source.
+*-catalogue-*.csv

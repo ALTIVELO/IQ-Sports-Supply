@@ -40,6 +40,9 @@ export const CATEGORIES: CategoryDef[] = [
   { slug: 'cables',          name: 'Cables & housing',    sort: 240 },
   { slug: 'tools',           name: 'Tools',               sort: 250 },
   { slug: 'lubricants',      name: 'Lubricants & care',   sort: 260 },
+  { slug: 'power-meters',    name: 'Power meters',        sort: 55 },
+  { slug: 'electronics',     name: 'Di2 & electronics',   sort: 95 },
+  { slug: 'groupsets',       name: 'Groupsets',           sort: 5 },
 ];
 
 export const CATEGORY_BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
@@ -52,6 +55,37 @@ export const CATEGORY_BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
  * nobody thinks to look for it.
  */
 const COMPOUND_RULES: { slug: string; patterns: RegExp[] }[] = [
+  // Supplier order forms are written in trade shorthand — "STI LVR", "RR MECH",
+  // "C/SET", "CASS" — which no general keyword rule would catch. These come
+  // first because the abbreviations are unambiguous where the long words are
+  // not: "STI LVR STR9270/BRR9270 Di2 hydra" names a brake in passing but is a
+  // shifter.
+  { slug: 'shifters', patterns: [
+      /\bsti\s*lvr\b/i, /\bsti\b/i, /\bshift(er)?\s*lvr\b/i,
+  ]},
+  { slug: 'derailleurs', patterns: [
+      /\b(rr|fr|rear|front)\s*mech\b/i, /\bmech\b.*\bdi2\b/i,
+  ]},
+  // Di2 batteries, chargers and E-tube wires. Kept ahead of the cable rules,
+  // which would otherwise claim "CABLE E-tube Di2 SD300" as a gear cable, and
+  // narrow enough not to swallow "RR MECH D/Ace Di2", which is a derailleur.
+  { slug: 'electronics', patterns: [
+      /\bbatt(ery)?\b/i, /\bcharger\b/i, /\be-?\s*tube\b/i,
+      /\bjunction\s*(box|a|b)\b/i, /\bcharging\s*cable\b/i,
+      /\bwireless\s*unit\b/i,
+  ]},
+  // Power-meter chainsets. The order form describes these only as
+  // "Power 50 / 34 - double - 170 mm", with the chainring sizes and no noun.
+  { slug: 'power-meters', patterns: [
+      /\bpower\s*meters?\b/i, /\bpowermeter\b/i,
+      /^power\s+\d+\s*\/\s*\d+/i, /\bpower\b.*\bdouble\b/i,
+  ]},
+  { slug: 'groupsets', patterns: [
+      /\bgroup\s*sets?\b/i, /\bgroupsets?\b/i,
+      /\b(standard|complete)\s+build\b/i,
+  ]},
+  { slug: 'chainsets', patterns: [/\bc\s*\/\s*set\b/i] },
+  { slug: 'cassettes', patterns: [/\bcass\b/i] },
   { slug: 'tools', patterns: [
       /\bchain\s*(whip|tool|breaker|checker|splitter)\b/i,
       /\bspoke\s*(key|wrench|spanner)\b/i,
