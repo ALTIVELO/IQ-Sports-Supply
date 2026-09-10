@@ -21,9 +21,12 @@ select place_order((select id from clients where name='MDI Ltd'),
   jsonb_build_array(jsonb_build_object('product_id',(select id from products where sku='BPB05SR25'),'qty',2)));
 
 -- RLS is bypassed for the table owner, so test as a non-superuser role.
-drop owned by app_user; -- no-op when the role does not exist yet
-drop role if exists app_user;
-create role app_user nologin;
+-- Roles are cluster-wide, so a role left behind by another database's grants
+-- cannot simply be dropped. Create it only if it is not already there.
+do $$ begin
+  create role app_user nologin;
+exception when duplicate_object then null;
+end $$;
 grant usage on schema public to app_user;
 grant select, insert, update, delete on all tables in schema public to app_user;
 grant execute on all functions in schema public to app_user;

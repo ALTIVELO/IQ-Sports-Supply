@@ -6,6 +6,7 @@ import { requireStaff } from '@/lib/auth';
 import { SUSPICIOUS_DELTA, type ClientRow, type ImportScope, type PriceChange,
          type PricePreview, type PriceRow, type StockRow, type ColumnMapping } from '@/lib/import/types';
 import type { ActionResult } from '../actions';
+import { classifyProduct } from '@/lib/catalogue/categories';
 
 const norm = (sku: string) => sku.trim().toLowerCase();
 
@@ -156,10 +157,22 @@ export async function applyPrices(input: {
     if (toCreate.length) {
       // Dedupe within the sheet before inserting.
       const unique = new Map(toCreate.map((r) => [norm(r.sku), r]));
+
+      // Categories come from the description, so clients can filter the
+      // catalogue without anyone maintaining a category column in Excel.
+      const { data: categories } = await sb.from('categories').select('id, slug');
+      const categoryId = new Map((categories ?? []).map((c) => [c.slug, c.id]));
+
       const { data: inserted, error } = await sb.from('products')
-        .insert([...unique.values()].map((r) => ({
-          sku: r.sku.trim(), name: r.name?.trim() || r.sku.trim(), brand: r.brand?.trim() || null,
-        })))
+        .insert([...unique.values()].map((r) => {
+          const slug = classifyProduct({ name: r.name, brand: r.brand, sku: r.sku });
+          return {
+            sku: r.sku.trim(),
+            name: r.name?.trim() || r.sku.trim(),
+            brand: r.brand?.trim() || null,
+            category_id: slug ? categoryId.get(slug) ?? null : null,
+          };
+        }))
         .select('id, sku');
       if (error) return { ok: false, error: `Creating new SKUs failed: ${error.message}` };
       for (const p of inserted ?? []) bySku.set(norm(p.sku), p.id);
@@ -288,4 +301,62 @@ export async function applyStock(rows: StockRow[]): Promise<ActionResult> {
     message: `${upserts.length} stock line${upserts.length === 1 ? '' : 's'} updated` +
       (skipped.length ? `, ${skipped.length} skipped (unknown SKU or site)` : ''),
   };
+}
+
+// ── categorisation ──────────────────────────────────────────────────────────
+
+/**
+ * Assigns categories to products that do not have one, from their description.
+ * Runs over existing rows so a catalogue imported before categories existed
+ * gets filed without re-importing. Only ever fills a blank — a category set by
+ * hand is never overwritten.
+ */
+export async function categoriseUncategorised(): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  const sb = await supabaseServer();
+
+  const [{ data: products }, { data: categories }] = await Promise.all([
+    sb.from('products').select('id, sku, name, brand').is('category_id', null),
+    sb.from('categories').select('id, slug'),
+  ]);
+
+  const categoryId = new Map((categories ?? []).map((c) => [c.slug, c.id]));
+  const updates = new Map<string, string[]>();
+
+  for (const p of products ?? []) {
+    const slug = classifyProduct({ name: p.name, brand: p.brand, sku: p.sku });
+    const id = slug ? categoryId.get(slug) : undefined;
+    if (!id) continue;
+    if (!updates.has(id)) updates.set(id, []);
+    updates.get(id)!.push(p.id);
+  }
+
+  let filed = 0;
+  for (const [id, productIds] of updates) {
+    const { error } = await sb.from('products').update({ category_id: id }).in('id', productIds);
+    if (error) return { ok: false, error: error.message };
+    filed += productIds.length;
+  }
+
+  const left = (products?.length ?? 0) - filed;
+  revalidatePath('/staff/catalogue');
+  revalidatePath('/staff/import');
+  return {
+    ok: true,
+    message: `${filed} product${filed === 1 ? '' : 's'} categorised` +
+      (left > 0 ? `, ${left} left uncategorised — set those by hand on the Catalogue screen` : ''),
+  };
+}
+
+/** Staff override for a single product. */
+export async function setProductCategory(
+  productId: string,
+  categoryId: string | null,
+): Promise<ActionResult> {
+  await requireStaff();
+  const sb = await supabaseServer();
+  const { error } = await sb.from('products').update({ category_id: categoryId }).eq('id', productId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/staff/catalogue');
+  return { ok: true };
 }

@@ -7,7 +7,7 @@ with checks as (
   select 'tables created' as item,
          (select count(*) from information_schema.tables
            where table_schema='public' and table_type='BASE TABLE')::text as found,
-         '24' as expected
+         '25' as expected
 
   union all
   select 'RLS enabled on every table',
@@ -53,6 +53,15 @@ with checks as (
   union all
   select 'pricing tiers seeded',
          (select count(*)::text from tiers), '4'
+
+  union all
+  select 'product categories seeded',
+         (select count(*)::text from categories), '26'
+
+  union all
+  select 'products carry a category column',
+         (select count(*)::text from information_schema.columns
+           where table_name='products' and column_name='category_id'), '1'
 
   union all
   select 'fulfilment locations seeded',

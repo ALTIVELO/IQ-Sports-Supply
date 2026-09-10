@@ -6,8 +6,12 @@ import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
 import { fmtDate, today } from '@/lib/format';
 import { saveProduct, setProductActive } from './actions';
 import { setStock, createTransfer, receiveTransfer } from '../actions';
+import { categoriseUncategorised, setProductCategory } from '../import/actions';
 
-interface Product { id: string; sku: string; name: string; brand: string | null; active: boolean }
+interface Product {
+  id: string; sku: string; name: string; brand: string | null;
+  active: boolean; category_id: string | null;
+}
 interface Named { id: string; name: string }
 interface Transfer {
   id: string; number: string; date: string; status: string;
@@ -18,12 +22,13 @@ interface Transfer {
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
 
 export default function CatalogueScreen({
-  products, tiers, locations, prices, stock, transfers, query, tab,
+  products, tiers, locations, prices, stock, transfers, categories, query, tab,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
   stock: Record<string, Record<string, number>>;
-  transfers: Transfer[]; query: string; tab: 'catalogue' | 'transfers';
+  transfers: Transfer[]; categories: Named[];
+  query: string; tab: 'catalogue' | 'transfers';
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<Msg>(null);
@@ -59,7 +64,7 @@ export default function CatalogueScreen({
           </form>
           <StockMatrix
             products={products} tiers={tiers} locations={locations}
-            prices={prices} stock={stock} onMessage={setMessage}
+            prices={prices} stock={stock} categories={categories} onMessage={setMessage}
           />
         </>
       ) : (
@@ -124,11 +129,12 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
 }
 
 function StockMatrix({
-  products, tiers, locations, prices, stock, onMessage,
+  products, tiers, locations, prices, stock, categories, onMessage,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
   stock: Record<string, Record<string, number>>;
+  categories: Named[];
   onMessage: (m: Msg) => void;
 }) {
   const [editing, setEditing] = useState<{ productId: string; locationId: string } | null>(null);
@@ -150,17 +156,40 @@ function StockMatrix({
     });
   }
 
+  const uncategorised = products.filter((p) => !p.category_id).length;
+
   if (!products.length) {
     return <Card><Empty>No products match. Add SKUs above, or bulk-load them on the Import screen.</Empty></Card>;
   }
 
   return (
     <Card>
+      {uncategorised > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-3 pb-3 border-b border-line">
+          <span className="text-[12px] text-mute">
+            {uncategorised} product{uncategorised === 1 ? ' has' : 's have'} no category, so
+            {uncategorised === 1 ? ' it does' : ' they do'} not appear under any customer filter.
+          </span>
+          <Button
+            small kind="cobalt" disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const r = await categoriseUncategorised();
+                onMessage(r.ok
+                  ? { tone: 'success', text: r.message ?? 'Categorised' }
+                  : { tone: 'error', text: r.error ?? 'Failed' });
+              })
+            }
+          >
+            Categorise from descriptions
+          </Button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table>
           <thead>
             <tr>
-              <th>SKU</th><th>Product</th><th>Brand</th>
+              <th>SKU</th><th>Product</th><th>Brand</th><th>Category</th>
               {locations.map((l) => <th key={l.id} className="text-right">{l.name}</th>)}
               <th className="text-right">Total</th>
               {tiers.map((t) => <th key={t.id} className="text-right">{t.name}</th>)}
@@ -176,6 +205,23 @@ function StockMatrix({
                   <td className="num font-semibold">{p.sku}</td>
                   <td className="min-w-[200px]">{p.name}</td>
                   <td className="text-mute">{p.brand}</td>
+                  <td>
+                    <select
+                      className="text-[12px] min-w-[130px]"
+                      value={p.category_id ?? ''}
+                      onChange={(e) =>
+                        startTransition(async () => {
+                          const r = await setProductCategory(p.id, e.target.value || null);
+                          if (!r.ok) onMessage({ tone: 'error', text: r.error ?? 'Failed' });
+                        })
+                      }
+                    >
+                      <option value="">— none —</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </td>
                   {locations.map((l) => {
                     const isEditing = editing?.productId === p.id && editing.locationId === l.id;
                     return (

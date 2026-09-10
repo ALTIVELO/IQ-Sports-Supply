@@ -8,25 +8,70 @@ import { placeClientOrder } from './actions';
 interface CatalogueItem {
   id: string; sku: string; name: string; brand: string | null;
   price: number; in_stock: boolean;
+  category_slug: string | null; category_name: string | null;
+}
+
+function FilterChip({
+  children, active, onClick,
+}: { children: React.ReactNode; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`text-[12px] font-semibold rounded-full px-3 py-1.5 border transition-colors
+        ${active
+          ? 'bg-ink text-white border-ink'
+          : 'bg-white border-line text-ink hover:bg-parch'}`}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function CatalogueBrowser({
   products, vatRate,
 }: { products: CatalogueItem[]; vatRate: number }) {
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [placed, setPlaced] = useState<string | null>(null);
   const [placedWarning, setPlacedWarning] = useState<string | undefined>();
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
 
+  /**
+   * Only categories that actually have something in them, in the order the
+   * catalogue defines, with a count. An empty filter is worse than no filter.
+   */
+  const categories = useMemo(() => {
+    const counts = new Map<string, { slug: string; name: string; count: number }>();
+    for (const p of products) {
+      if (!p.category_slug || !p.category_name) continue;
+      const entry = counts.get(p.category_slug)
+        ?? { slug: p.category_slug, name: p.category_name, count: 0 };
+      entry.count += 1;
+      counts.set(p.category_slug, entry);
+    }
+    return [...counts.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [products]);
+
+  const uncategorised = useMemo(
+    () => products.filter((p) => !p.category_slug).length,
+    [products],
+  );
+
   const results = useMemo(() => {
     const s = query.trim().toLowerCase();
-    if (!s) return products.slice(0, 60);
     return products
-      .filter((p) => `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(s))
-      .slice(0, 60);
-  }, [query, products]);
+      .filter((p) =>
+        category === null ? true
+        : category === '__none' ? !p.category_slug
+        : p.category_slug === category)
+      .filter((p) => (inStockOnly ? p.in_stock : true))
+      .filter((p) => (s ? `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(s) : true))
+      .slice(0, 120);
+  }, [query, category, inStockOnly, products]);
 
   const cartLines = Object.entries(cart)
     .filter(([, qty]) => qty > 0)
@@ -99,8 +144,36 @@ export default function CatalogueBrowser({
         className="max-w-md"
       />
 
+      {categories.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by category">
+          <FilterChip active={category === null} onClick={() => setCategory(null)}>
+            All <span className="opacity-60">{products.length}</span>
+          </FilterChip>
+          {categories.map((c) => (
+            <FilterChip
+              key={c.slug}
+              active={category === c.slug}
+              onClick={() => setCategory(category === c.slug ? null : c.slug)}
+            >
+              {c.name} <span className="opacity-60">{c.count}</span>
+            </FilterChip>
+          ))}
+          {uncategorised > 0 && (
+            <FilterChip
+              active={category === '__none'}
+              onClick={() => setCategory(category === '__none' ? null : '__none')}
+            >
+              Other <span className="opacity-60">{uncategorised}</span>
+            </FilterChip>
+          )}
+          <FilterChip active={inStockOnly} onClick={() => setInStockOnly(!inStockOnly)}>
+            In stock only
+          </FilterChip>
+        </div>
+      )}
+
       {results.length === 0 ? (
-        <Card><Empty>Nothing matches that search.</Empty></Card>
+        <Card><Empty>Nothing matches those filters.</Empty></Card>
       ) : (
         <div className="space-y-2">
           {results.map((p) => (
@@ -109,8 +182,9 @@ export default function CatalogueBrowser({
                 <div className="min-w-0 flex-1">
                   <div className="num text-[12px] font-semibold text-mute">{p.sku}</div>
                   <div className="text-[13px] font-medium">{p.name}</div>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     {p.brand && <span className="text-[11px] text-mute">{p.brand}</span>}
+                    {p.category_name && <Tag tone="line">{p.category_name}</Tag>}
                     {p.in_stock
                       ? <Tag tone="green">In stock</Tag>
                       : <Tag tone="line">Back order</Tag>}

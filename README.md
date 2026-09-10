@@ -99,6 +99,28 @@ quarterly sheet can be uploaded early and switch over on its own. Order lines
 snapshot `unit_price` at placement, so past orders and invoices never move when
 prices do.
 
+## Categories
+
+Price sheets carry a SKU, a description and a price — never a category — so
+categories are derived from the description when a sheet is imported. New SKUs
+are filed automatically; existing ones can be back-filled from the Catalogue
+screen, and staff can override any product from a dropdown there.
+
+The rules live in one place, `src/lib/catalogue/categories.ts`, and are checked
+in two passes. Compound terms go first, because the meaning of a name often sits
+in its last word: a chain whip is a tool, a brake cable is a cable, chain lube is
+a lubricant. Only then are single keywords tried, most specific first, so a
+chainset is never filed under chains.
+
+A description that matches nothing stays uncategorised rather than being pushed
+into an approximate bucket — a product in the wrong filter is worse than one in
+none, because nobody thinks to look for it. The client portal shows only
+categories that actually contain something, each with a count, plus an "Other"
+chip when anything is unfiled.
+
+45 assertions in `tests/unit/categories.test.mjs` cover the real catalogue rows,
+the ordering traps, and the cases that must stay uncategorised.
+
 ## Numbering
 
 `next_order_number()`, `next_invoice_number()`, `next_po_number()` and

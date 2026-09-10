@@ -12,12 +12,15 @@ export default async function CataloguePage({
   const { q, tab } = await searchParams;
   const sb = await supabaseServer();
 
-  const [{ data: tiers }, { data: locations }] = await Promise.all([
+  const [{ data: tiers }, { data: locations }, { data: categories }] = await Promise.all([
     sb.from('tiers').select('id, name').order('sort'),
     sb.from('locations').select('id, name').eq('active', true).order('name'),
+    sb.from('categories').select('id, name, slug').order('sort'),
   ]);
 
-  let productQuery = sb.from('products').select('id, sku, name, brand, active').order('sku').limit(500);
+  let productQuery = sb.from('products')
+    .select('id, sku, name, brand, active, category_id')
+    .order('sku').limit(500);
   if (q?.trim()) productQuery = productQuery.or(`sku.ilike.%${q.trim()}%,name.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%`);
 
   const [{ data: products }, { data: prices }, { data: stock }, { data: transfers }] =
@@ -58,6 +61,7 @@ export default async function CataloguePage({
         prices={priceMap}
         stock={stockMap}
         transfers={(transfers ?? []) as never}
+        categories={categories ?? []}
         query={q ?? ''}
         tab={tab === 'transfers' ? 'transfers' : 'catalogue'}
       />
