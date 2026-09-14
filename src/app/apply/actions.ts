@@ -9,13 +9,18 @@ import { appUrl } from '@/lib/app-url';
 
 const Application = z.object({
   company_name: z.string().trim().min(2, 'Company name is required').max(200),
+  trading_name: z.string().trim().max(200).optional(),
   contact_name: z.string().trim().min(2, 'Contact name is required').max(200),
   email: z.string().trim().email('A valid email address is required').max(200),
   phone: z.string().trim().max(50).optional(),
   vat_no: z.string().trim().max(50).optional(),
+  company_number: z.string().trim().max(50).optional(),
+  eori_no: z.string().trim().max(50).optional(),
   address: z.string().trim().max(500).optional(),
+  invoicing_address: z.string().trim().max(500).optional(),
   business_type: z.enum(['shop', 'club', 'distributor', 'other']).optional(),
   website: z.string().trim().max(300).optional(),
+  social_media: z.string().trim().max(300).optional(),
   message: z.string().trim().max(2000).optional(),
 });
 
@@ -48,13 +53,21 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   }
 
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
+  // An untouched input arrives as '', which zod would accept as a present but
+  // empty value; every optional field is normalised to undefined so a blank
+  // stays null in the database rather than an empty string.
   const parsed = Application.safeParse({
     ...raw,
     business_type: raw.business_type || undefined,
+    trading_name: raw.trading_name || undefined,
     phone: raw.phone || undefined,
     vat_no: raw.vat_no || undefined,
+    company_number: raw.company_number || undefined,
+    eori_no: raw.eori_no || undefined,
     address: raw.address || undefined,
+    invoicing_address: raw.invoicing_address || undefined,
     website: raw.website || undefined,
+    social_media: raw.social_media || undefined,
     message: raw.message || undefined,
   });
 
@@ -80,13 +93,18 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   const notice = applicationNotice({
     company: settings?.company ?? 'IQ Sports Supply Ltd',
     companyName: parsed.data.company_name,
+    tradingName: parsed.data.trading_name ?? null,
     contactName: parsed.data.contact_name,
     email: parsed.data.email,
     phone: parsed.data.phone ?? null,
     businessType: parsed.data.business_type ?? null,
     website: parsed.data.website ?? null,
+    socialMedia: parsed.data.social_media ?? null,
     vatNo: parsed.data.vat_no ?? null,
+    companyNumber: parsed.data.company_number ?? null,
+    eoriNo: parsed.data.eori_no ?? null,
     address: parsed.data.address ?? null,
+    invoicingAddress: parsed.data.invoicing_address ?? null,
     message: parsed.data.message ?? null,
     reviewUrl: `${appUrl()}/staff/applications`,
   });

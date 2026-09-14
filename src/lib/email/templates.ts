@@ -111,22 +111,33 @@ ${o.company}`,
 }
 
 export function applicationNotice(a: {
-  company: string; companyName: string; contactName: string; email: string;
-  phone: string | null; businessType: string | null; website: string | null;
-  vatNo: string | null; address: string | null; message: string | null; reviewUrl: string;
+  company: string; companyName: string; tradingName: string | null;
+  contactName: string; email: string; phone: string | null;
+  businessType: string | null; website: string | null; socialMedia: string | null;
+  vatNo: string | null; companyNumber: string | null; eoriNo: string | null;
+  address: string | null; invoicingAddress: string | null;
+  message: string | null; reviewUrl: string;
 }) {
   return {
     subject: `Trade account application — ${a.companyName}`,
     body: `A new trade account application is waiting for review.
 
-Company        ${a.companyName}
-Contact        ${a.contactName}
-Email          ${a.email}
-Phone          ${a.phone ?? '—'}
-Business type  ${a.businessType ?? '—'}
-Website        ${a.website ?? '—'}
-VAT number     ${a.vatNo ?? '—'}
-Address        ${a.address ?? '—'}
+Company            ${a.companyName}
+Trading name       ${a.tradingName ?? '—'}
+Contact            ${a.contactName}
+Email              ${a.email}
+Phone              ${a.phone ?? '—'}
+Business type      ${a.businessType ?? '—'}
+
+VAT number         ${a.vatNo ?? '—'}
+Company number     ${a.companyNumber ?? '—'}
+EORI number        ${a.eoriNo ?? '—'}
+
+Website            ${a.website ?? '—'}
+Social media       ${a.socialMedia ?? '—'}
+
+Trading address    ${a.address ?? '—'}
+Invoicing address  ${a.invoicingAddress ?? '—'}
 
 ${a.message ? `Message:\n${a.message}\n` : ''}
 Review it here:

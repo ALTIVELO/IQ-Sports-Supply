@@ -36,10 +36,13 @@ export default function ApplyForm() {
       <Card className="space-y-4">
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Company name">
-            <input name="company_name" required maxLength={200} />
+            <input name="company_name" required maxLength={200} autoComplete="organization" />
+          </Field>
+          <Field label="Trading name" hint="If different from the company name">
+            <input name="trading_name" maxLength={200} />
           </Field>
           <Field label="Contact name">
-            <input name="contact_name" required maxLength={200} />
+            <input name="contact_name" required maxLength={200} autoComplete="name" />
           </Field>
           <Field label="Email">
             <input name="email" type="email" required maxLength={200} autoComplete="email" />
@@ -58,14 +61,29 @@ export default function ApplyForm() {
           <Field label="VAT number" hint="If you are VAT registered">
             <input name="vat_no" maxLength={50} />
           </Field>
+          <Field label="Company number" hint="Companies House registration number">
+            <input name="company_number" maxLength={50} />
+          </Field>
+          <Field label="EORI number" hint="If you import or export goods">
+            <input name="eori_no" maxLength={50} />
+          </Field>
         </div>
 
-        <Field label="Website or socials">
-          <input name="website" maxLength={300} placeholder="https://" />
-        </Field>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="Website">
+            <input name="website" maxLength={300} placeholder="https://" />
+          </Field>
+          <Field label="Social media">
+            <input name="social_media" maxLength={300} placeholder="@yourshop, or a link" />
+          </Field>
+        </div>
 
         <Field label="Trading address">
           <textarea name="address" rows={3} maxLength={500} />
+        </Field>
+
+        <Field label="Legal invoicing address" hint="If different from the trading address">
+          <textarea name="invoicing_address" rows={3} maxLength={500} />
         </Field>
 
         <Field label="Anything else we should know?">

@@ -33,7 +33,8 @@ HEADER
            "$HERE"/migrations/0002_functions.sql \
            "$HERE"/migrations/0003_rls.sql \
            "$HERE"/migrations/0004_seed.sql \
-           "$HERE"/migrations/0005_categories.sql; do
+           "$HERE"/migrations/0005_categories.sql \
+           "$HERE"/migrations/0006_application_fields.sql; do
     printf '\n\n-- ###########################################################################\n'
     printf -- '-- %s\n' "$(basename "$f")"
     printf -- '-- ###########################################################################\n\n'

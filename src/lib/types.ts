@@ -80,9 +80,13 @@ export interface OrderEvent {
 }
 
 export interface AccountRequest {
-  id: string; company_name: string; contact_name: string; email: string; phone: string | null;
-  vat_no: string | null; address: string | null; business_type: string | null;
-  website: string | null; message: string | null; status: RequestStatus;
+  id: string; company_name: string; trading_name: string | null;
+  contact_name: string; email: string; phone: string | null;
+  vat_no: string | null; company_number: string | null; eori_no: string | null;
+  address: string | null; invoicing_address: string | null;
+  business_type: string | null;
+  website: string | null; social_media: string | null;
+  message: string | null; status: RequestStatus;
   created_at: string; review_note: string | null; client_id: string | null;
 }
 

@@ -100,12 +100,17 @@ function RequestCard({
       </div>
 
       <dl className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1.5 mt-3 text-[12px]">
+        <Detail label="Trading name" value={request.trading_name} />
         <Detail label="Contact" value={request.contact_name} />
         <Detail label="Email" value={request.email} />
         <Detail label="Phone" value={request.phone} />
         <Detail label="VAT number" value={request.vat_no} />
+        <Detail label="Company number" value={request.company_number} />
+        <Detail label="EORI number" value={request.eori_no} />
         <Detail label="Website" value={request.website} />
-        <Detail label="Address" value={request.address} />
+        <Detail label="Social media" value={request.social_media} />
+        <Detail label="Trading address" value={request.address} />
+        <Detail label="Invoicing address" value={request.invoicing_address} />
       </dl>
 
       {request.message && (
