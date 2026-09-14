@@ -44,7 +44,7 @@ export default async function Shipping() {
               {s.tracking_url && (
                 <a
                   href={s.tracking_url} target="_blank" rel="noreferrer"
-                  className="ml-auto text-[12px] font-semibold bg-cobalt text-white rounded px-[10px] py-[5px]"
+                  className="ml-auto text-[12px] font-semibold bg-ink text-white rounded px-[10px] py-[5px]"
                 >
                   Track {s.tracking_number}
                 </a>

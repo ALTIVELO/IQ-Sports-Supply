@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import type { Role } from '@/lib/types';
 import { Tag } from '@/components/ui';
+import { Wordmark } from '@/components/Logo';
 
 export interface NavBadges {
   backorderUnits: number;
@@ -40,9 +41,8 @@ export default function StaffNav({
     <>
       {/* Mobile bar */}
       <div className="lg:hidden fixed top-0 inset-x-0 z-40 bg-ink text-parch flex items-center justify-between px-4 h-14">
-        <Link href="/staff" className="flex items-center gap-2">
-          <span className="bg-cobalt text-white font-extrabold text-sm rounded px-1.5 py-0.5">IQ</span>
-          <span className="font-bold text-[15px] text-white">Sports Supply</span>
+        <Link href="/staff" aria-label="IQ Sports Supply">
+          <Wordmark tone="light" size="sm" />
         </Link>
         <button onClick={() => setOpen(!open)} className="text-[13px] font-semibold px-2 py-1">
           {open ? 'Close' : 'Menu'}
@@ -54,9 +54,8 @@ export default function StaffNav({
           fixed lg:static inset-y-0 left-0 z-30 overflow-y-auto
           ${open ? 'flex' : 'hidden lg:flex'}`}
       >
-        <Link href="/staff" className="flex items-center gap-2.5 px-5 pb-1">
-          <span className="bg-cobalt text-white font-extrabold text-base rounded px-[7px] py-[3px] tracking-[0.02em]">IQ</span>
-          <span className="font-bold text-[17px] text-white leading-tight tracking-[-0.02em]">Sports Supply</span>
+        <Link href="/staff" className="px-5 pb-1 block" aria-label="IQ Sports Supply">
+          <Wordmark tone="light" size="md" />
         </Link>
         <div className="text-[11px] text-[#8DA0B0] px-5 pt-1.5 pb-5">Trade order book</div>
 
@@ -70,11 +69,11 @@ export default function StaffNav({
               onClick={() => setOpen(false)}
               className={`flex justify-between items-center px-[17px] py-2.5 text-[13px] font-medium border-l-[3px]
                 ${active
-                  ? 'bg-cobalt/[0.28] border-cobalt text-white'
+                  ? 'bg-flame/[0.14] border-flame text-white'
                   : 'border-transparent text-[#AEBDC9] hover:text-white'}`}
             >
               {item.label}
-              {count > 0 && <Tag tone="cobalt">{count}</Tag>}
+              {count > 0 && <Tag tone="accent">{count}</Tag>}
             </Link>
           );
         })}

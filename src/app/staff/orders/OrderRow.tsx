@@ -52,7 +52,7 @@ export default function OrderRow({ order }: { order: OrderData }) {
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => setOpen(!open)}
-          className="num text-[14px] font-bold hover:text-cobalt"
+          className="num text-[14px] font-bold hover:text-flame-text"
           aria-expanded={open}
         >
           {order.number}
@@ -64,7 +64,7 @@ export default function OrderRow({ order }: { order: OrderData }) {
           ? <Tag tone="red">{backordered} on back order</Tag>
           : <Tag tone="green">Fully allocated</Tag>}
         {live.map((i) => (
-          <Tag key={i.id} tone={i.shipped ? 'green' : i.paid ? 'cobalt' : 'line'}>
+          <Tag key={i.id} tone={i.shipped ? 'green' : i.paid ? 'accent' : 'line'}>
             {i.number}
             {i.shipped ? ' shipped' : i.packed ? ' packed' : i.paid ? ' paid' : ' unpaid'}
           </Tag>
@@ -131,7 +131,7 @@ export default function OrderRow({ order }: { order: OrderData }) {
             </div>
 
             {splitting && (
-              <div className="mt-3 border border-cobalt rounded p-3 space-y-2">
+              <div className="mt-3 border border-flame rounded p-3 space-y-2">
                 <p className="text-[12px] text-mute">
                   The allocated items are invoiced now; the back order is invoiced separately,
                   dated to the day the stock becomes available.
@@ -145,7 +145,7 @@ export default function OrderRow({ order }: { order: OrderData }) {
                       className="w-[170px]"
                     />
                   </label>
-                  <Button small kind="cobalt" onClick={doSplit} disabled={pending}>
+                  <Button small kind="accent" onClick={doSplit} disabled={pending}>
                     {pending ? 'Splitting…' : 'Split invoice'}
                   </Button>
                   <Button small kind="ghost" onClick={() => setSplitting(false)}>Cancel</Button>

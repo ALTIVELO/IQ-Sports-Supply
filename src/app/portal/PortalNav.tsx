@@ -25,7 +25,7 @@ export default function PortalNav() {
               key={href}
               href={href}
               className={`text-[13px] font-medium px-3 py-2.5 whitespace-nowrap border-b-2
-                ${active ? 'border-cobalt text-white' : 'border-transparent text-[#AEBDC9] hover:text-white'}`}
+                ${active ? 'border-flame text-white' : 'border-transparent text-[#AEBDC9] hover:text-white'}`}
             >
               {label}
             </Link>

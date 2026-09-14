@@ -107,7 +107,7 @@ export default function SettingsScreen({
           </div>
         </Card>
 
-        <Button type="submit" kind="cobalt" disabled={pending}>
+        <Button type="submit" kind="accent" disabled={pending}>
           {pending ? 'Saving…' : 'Save settings'}
         </Button>
       </form>
@@ -139,7 +139,7 @@ export default function SettingsScreen({
             <Tag tone="line">Not connected</Tag>
             <a
               href="/api/xero/connect"
-              className="text-[12px] font-semibold border border-transparent bg-cobalt text-white rounded px-[10px] py-[5px] hover:bg-[#1c37a8]"
+              className="text-[12px] font-semibold border border-transparent bg-ink text-white rounded px-[10px] py-[5px] hover:bg-ink-soft"
             >
               Connect to Xero
             </a>

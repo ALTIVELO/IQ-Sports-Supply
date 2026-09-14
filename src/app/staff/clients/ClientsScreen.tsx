@@ -125,7 +125,7 @@ export default function ClientsScreen({
                 {clients.map((c) => (
                   <tr key={c.id} className={c.active ? '' : 'opacity-50'}>
                     <td className="font-semibold">{c.name}</td>
-                    <td><Tag tone="cobalt">{tierName(c.tier_id)}</Tag></td>
+                    <td><Tag tone="accent">{tierName(c.tier_id)}</Tag></td>
                     <td className="text-mute">{locationName(c.default_location_id)}</td>
                     <td className="text-mute">{c.email ?? '—'}</td>
                     <td className="num">{c.vat_exempt ? 'Zero-rated' : c.vat_no || '—'}</td>

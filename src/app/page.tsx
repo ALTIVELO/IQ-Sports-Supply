@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Wordmark } from '@/components/Logo';
 import { redirect } from 'next/navigation';
 import { getSessionUser, isStaff } from '@/lib/auth';
 
@@ -15,8 +16,7 @@ export default async function Home() {
       <div className="flex-1 flex items-center justify-center px-6 py-16">
         <div className="w-full max-w-lg">
           <div className="flex items-center gap-2.5 mb-8">
-            <span className="bg-cobalt text-white font-extrabold text-base rounded px-[7px] py-[3px] tracking-[0.02em]">IQ</span>
-            <span className="font-bold text-[17px] tracking-[-0.02em]">Sports Supply</span>
+            <Wordmark size="lg" />
           </div>
 
           <h1 className="text-[34px] font-semibold leading-[1.1] tracking-[-0.02em]">
@@ -31,7 +31,7 @@ export default async function Home() {
           <div className="flex flex-wrap gap-3 mt-8">
             <Link
               href="/apply"
-              className="bg-cobalt text-white text-[13px] font-semibold rounded px-5 py-2.5 hover:bg-[#1c37a8]"
+              className="bg-ink text-white text-[13px] font-semibold rounded px-5 py-2.5 hover:bg-ink-soft"
             >
               Apply for a trade account
             </Link>

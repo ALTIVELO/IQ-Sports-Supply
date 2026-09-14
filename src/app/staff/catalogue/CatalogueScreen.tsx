@@ -171,7 +171,7 @@ function StockMatrix({
             {uncategorised === 1 ? ' it does' : ' they do'} not appear under any customer filter.
           </span>
           <Button
-            small kind="cobalt" disabled={pending}
+            small kind="accent" disabled={pending}
             onClick={() =>
               startTransition(async () => {
                 const r = await categoriseUncategorised();
@@ -239,7 +239,7 @@ function StockMatrix({
                           />
                         ) : (
                           <button
-                            className="hover:text-cobalt hover:underline"
+                            className="hover:text-flame-text hover:underline"
                             onClick={() => { setEditing({ productId: p.id, locationId: l.id }); setValue(String(byLoc[l.id] ?? 0)); }}
                           >
                             {byLoc[l.id] ?? 0}
@@ -348,7 +348,7 @@ function Transfers({
           <Button small kind="ghost" onClick={() => setLines((ls) => [...ls, { product_id: '', qty: 1 }])}>
             Add line
           </Button>
-          <Button small kind="cobalt" onClick={submit} disabled={pending || !lines.length}>
+          <Button small kind="accent" onClick={submit} disabled={pending || !lines.length}>
             {pending ? 'Raising…' : 'Raise transfer'}
           </Button>
         </div>
@@ -369,7 +369,7 @@ function Transfers({
               </span>
               {t.status !== 'received' && (
                 <Button
-                  small kind="cobalt" className="ml-auto" disabled={pending}
+                  small kind="accent" className="ml-auto" disabled={pending}
                   onClick={() =>
                     startTransition(async () => {
                       const r = await receiveTransfer(t.id);

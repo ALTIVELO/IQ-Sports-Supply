@@ -50,7 +50,7 @@ export default function LoginForm({ next, initialError }: { next?: string; initi
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
-      <Button type="submit" kind="cobalt" className="w-full" disabled={state === 'sending'}>
+      <Button type="submit" kind="accent" className="w-full" disabled={state === 'sending'}>
         {state === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
       </Button>
     </form>

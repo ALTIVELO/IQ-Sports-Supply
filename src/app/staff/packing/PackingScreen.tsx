@@ -143,7 +143,7 @@ function PackRow({
             </Button>
           )}
           {inv.packed && !inv.shipped && (
-            <Button small kind="cobalt" onClick={() => setShipping(!shipping)}>
+            <Button small kind="accent" onClick={() => setShipping(!shipping)}>
               {shipping ? 'Cancel' : 'Mark shipped'}
             </Button>
           )}
@@ -153,7 +153,7 @@ function PackRow({
       {inv.shipped && inv.tracking_url && (
         <p className="text-[12px] text-mute mt-2 num">
           {inv.carrier} · {inv.tracking_number} ·{' '}
-          <a href={inv.tracking_url} target="_blank" rel="noreferrer" className="text-cobalt font-semibold">
+          <a href={inv.tracking_url} target="_blank" rel="noreferrer" className="text-flame-text font-semibold">
             Track
           </a>
         </p>
@@ -176,7 +176,7 @@ function PackRow({
             />
           </label>
           <Button
-            small kind="cobalt" disabled={pending || !carrier.trim() || !tracking.trim()}
+            small kind="accent" disabled={pending || !carrier.trim() || !tracking.trim()}
             onClick={() => run(() => markShipped({ invoiceId: inv.id, carrier, tracking }))}
           >
             {pending ? 'Sending…' : 'Ship & notify client'}

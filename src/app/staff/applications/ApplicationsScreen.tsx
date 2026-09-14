@@ -129,7 +129,7 @@ function RequestCard({
             </select>
           </label>
           <Button
-            small kind="cobalt" disabled={pending || !tierId || !locationId}
+            small kind="accent" disabled={pending || !tierId || !locationId}
             onClick={() => run(() => approveApplication({ requestId: request.id, tierId, locationId }))}
           >
             {pending ? 'Approving…' : 'Approve & send welcome'}

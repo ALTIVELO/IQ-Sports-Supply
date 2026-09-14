@@ -70,7 +70,7 @@ export default function InvoicesScreen({
               >
                 Push {unsynced.length} to Xero
               </Button>
-              <Button small kind="cobalt" disabled={pending} onClick={() => run(pullPaymentStatus)}>
+              <Button small kind="accent" disabled={pending} onClick={() => run(pullPaymentStatus)}>
                 Check payments
               </Button>
             </>

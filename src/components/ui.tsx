@@ -7,7 +7,7 @@ export function Card({ children, className = '', accent = false }: {
   children: React.ReactNode; className?: string; accent?: boolean;
 }) {
   return (
-    <div className={`bg-white border rounded-card p-4 ${accent ? 'border-cobalt' : 'border-line'} ${className}`}>
+    <div className={`bg-white border rounded-card p-4 ${accent ? 'border-flame' : 'border-line'} ${className}`}>
       {children}
     </div>
   );
@@ -22,10 +22,10 @@ export function PageHeading({ children, sub }: { children: React.ReactNode; sub?
   );
 }
 
-type Tone = 'ink' | 'cobalt' | 'line' | 'red' | 'green' | 'amber';
+type Tone = 'ink' | 'accent' | 'line' | 'red' | 'green' | 'amber';
 const TONES: Record<Tone, string> = {
   ink: 'bg-ink text-white',
-  cobalt: 'bg-cobalt text-white',
+  accent: 'bg-flame text-ink',
   line: 'bg-[#E4E9EE] text-ink',
   red: 'bg-danger text-white',
   green: 'bg-success text-white',
@@ -40,10 +40,10 @@ export function Tag({ children, tone = 'ink' }: { children: React.ReactNode; ton
   );
 }
 
-type BtnKind = 'solid' | 'cobalt' | 'ghost' | 'danger';
+type BtnKind = 'solid' | 'accent' | 'ghost' | 'danger';
 const KINDS: Record<BtnKind, string> = {
   solid: 'bg-ink text-white border-transparent hover:bg-[#22323f]',
-  cobalt: 'bg-cobalt text-white border-transparent hover:bg-[#1c37a8]',
+  accent: 'bg-flame text-ink border-transparent hover:bg-[#FF5C2E]',
   ghost: 'bg-transparent text-ink border-line hover:bg-parch',
   danger: 'bg-danger text-white border-transparent hover:bg-[#932c19]',
 };
@@ -111,7 +111,7 @@ export function Notice({ tone = 'error', children }: {
   const styles = {
     error: 'border-danger/40 bg-[#FDF2F0] text-danger',
     success: 'border-success/40 bg-[#F0F7F2] text-success',
-    info: 'border-cobalt/40 bg-[#F0F3FD] text-cobalt',
+    info: 'border-line bg-parch text-ink',
   }[tone];
   return <div className={`border rounded px-3 py-2 text-[13px] ${styles}`}>{children}</div>;
 }

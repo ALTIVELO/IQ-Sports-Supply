@@ -6,6 +6,27 @@ supplier orders go out carrying SKUs and quantities only.
 
 Next.js (App Router) · Supabase (Postgres, Auth, RLS) · Xero · Resend
 
+## Brand
+
+Palette and mark come from the IQ Sports Supply logo, defined once in
+`tailwind.config.ts` and drawn in `src/components/Logo.tsx`.
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `ink` | `#121619` | Text, the navigation rail, primary buttons |
+| `flame` | `#FF4A1A` | The mark, active indicators, rules, focus, accent buttons |
+| `flame-text` | `#C2340C` | Links and labels on a light ground |
+| `parch` / `line` / `mute` | `#F4F5F7` / `#E1E4E8` / `#5A6470` | Surfaces, rules, secondary text |
+
+`flame` measures **3.36:1** against white, which fails WCAG AA for normal text
+both as text on white and as a fill behind white text. So it never carries small
+white text: primary buttons use `ink` (18.19:1), accent buttons and count chips
+use ink *on* flame (5.41:1), and links on light use `flame-text` (5.54:1).
+
+The mark is SVG rather than a bitmap, so it stays sharp at every size and takes
+`currentColor` for the letterforms while the orange stays fixed — one component
+serves the dark rail and the white public pages.
+
 ## Getting started
 
 ```bash

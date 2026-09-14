@@ -134,7 +134,7 @@ export default function SupplierScreen({
             Add stock line
           </Button>
           <Button
-            small kind="cobalt" onClick={build}
+            small kind="accent" onClick={build}
             disabled={pendingTx || (chosen.length === 0 && extras.every((e) => !e.sku.trim()))}
           >
             {pendingTx ? 'Creating…' : 'Create supplier order'}
@@ -217,7 +217,7 @@ function PoCard({
           </a>
           <Button small kind="ghost" onClick={resend} disabled={pending}>Send to James</Button>
           {!po.received && (
-            <Button small kind="cobalt" onClick={receiving ? onClose : onReceive}>
+            <Button small kind="accent" onClick={receiving ? onClose : onReceive}>
               {receiving ? 'Cancel' : 'Receive stock'}
             </Button>
           )}
@@ -270,7 +270,7 @@ function PoCard({
             </table>
           </div>
           <div className="flex gap-2 mt-3">
-            <Button small kind="cobalt" onClick={confirm} disabled={pending}>
+            <Button small kind="accent" onClick={confirm} disabled={pending}>
               {pending ? 'Booking in…' : 'Confirm receipt'}
             </Button>
             <Button small kind="ghost" onClick={onClose}>Cancel</Button>

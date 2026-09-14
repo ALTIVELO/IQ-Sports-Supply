@@ -111,7 +111,7 @@ export default function CatalogueBrowser({
         <div className="flex flex-wrap gap-2 mt-4">
           <Link
             href="/portal/orders"
-            className="text-[13px] font-semibold bg-cobalt text-white rounded px-4 py-2"
+            className="text-[13px] font-semibold bg-ink text-white rounded px-4 py-2"
           >
             Track this order
           </Link>
@@ -232,7 +232,7 @@ export default function CatalogueBrowser({
             <div className="num text-[20px] font-semibold ml-auto">
               <Money value={net + vat} />
             </div>
-            <Button kind="cobalt" onClick={checkout} disabled={pending}>
+            <Button kind="accent" onClick={checkout} disabled={pending}>
               {pending ? 'Placing…' : 'Place order'}
             </Button>
           </div>

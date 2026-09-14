@@ -54,7 +54,7 @@ export default async function ImportPage() {
                       <td className="num whitespace-nowrap">{fmtDateTime(h.date)}</td>
                       <td>{h.filename ?? '—'}</td>
                       <td>
-                        <Tag tone="cobalt">
+                        <Tag tone="accent">
                           {(h.tiers as unknown as { name: string } | null)?.name ?? '—'}
                         </Tag>
                       </td>

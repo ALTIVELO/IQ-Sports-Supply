@@ -2,10 +2,10 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { fmtDate, money, totals } from '@/lib/format';
 
-const INK = '#16222E';
-const COBALT = '#2242C8';
-const LINE = '#DCE2E8';
-const MUTE = '#5B6B79';
+const INK = '#121619';
+const FLAME = '#C2340C';  // the darkened brand orange, legible on paper
+const LINE = '#E1E4E8';
+const MUTE = '#5A6470';
 
 const s = StyleSheet.create({
   page: { padding: 40, fontSize: 9, color: INK, fontFamily: 'Helvetica' },
@@ -19,7 +19,7 @@ const s = StyleSheet.create({
   strong: { fontFamily: 'Helvetica-Bold' },
   addr: { maxWidth: 220 },
   tHead: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: LINE, paddingBottom: 4, marginBottom: 2 },
-  tRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#EAEEF2', paddingVertical: 5 },
+  tRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#EDEFF2', paddingVertical: 5 },
   th: { fontSize: 7, color: MUTE, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' },
   cSku: { width: 90 }, cName: { flex: 1, paddingRight: 8 },
   cQty: { width: 40, textAlign: 'right', paddingRight: 8 },
@@ -33,7 +33,7 @@ const s = StyleSheet.create({
   grandText: { fontSize: 14, fontFamily: 'Helvetica-Bold' },
   footer: { position: 'absolute', bottom: 30, left: 40, right: 40, fontSize: 7,
             color: MUTE, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 8 },
-  badge: { color: COBALT, fontFamily: 'Helvetica-Bold', fontSize: 8 },
+  badge: { color: FLAME, fontFamily: 'Helvetica-Bold', fontSize: 8 },
   box: { width: 10, height: 10, borderWidth: 1, borderColor: '#B9C4CE' },
 });
 

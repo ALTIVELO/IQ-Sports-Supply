@@ -229,7 +229,7 @@ export default function ImportScreen({
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
       <Card
-        className={dragging ? 'border-cobalt bg-[#F0F3FD]' : ''}
+        className={dragging ? 'border-flame bg-flame-tint' : ''}
       >
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -400,13 +400,13 @@ export default function ImportScreen({
                 <Button small kind="ghost" onClick={doPreview} disabled={pending}>
                   {pending ? 'Checking…' : 'Preview changes'}
                 </Button>
-                <Button small kind="cobalt" onClick={doApply} disabled={pending || !previews}>
+                <Button small kind="accent" onClick={doApply} disabled={pending || !previews}>
                   Apply
                 </Button>
               </>
             )}
             {scope !== 'prices' && (
-              <Button small kind="cobalt" onClick={doApplyOther} disabled={pending || !included.length}>
+              <Button small kind="accent" onClick={doApplyOther} disabled={pending || !included.length}>
                 {pending ? 'Importing…' : `Import ${scope === 'clients' ? 'clients' : 'stock'}`}
               </Button>
             )}
@@ -425,7 +425,7 @@ function PreviewCard({ preview }: { preview: PricePreview }) {
   return (
     <Card>
       <div className="flex flex-wrap items-center gap-3 mb-3">
-        <Tag tone="cobalt">{preview.tierName}</Tag>
+        <Tag tone="accent">{preview.tierName}</Tag>
         <span className="text-[12px]">
           <strong>{preview.created.length}</strong> new ·{' '}
           <strong>{preview.changed.length}</strong> changed ·{' '}

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Wordmark } from '@/components/Logo';
 import { redirect } from 'next/navigation';
 import { getSessionUser, isStaff } from '@/lib/auth';
 import LoginForm from './LoginForm';
@@ -16,8 +17,7 @@ export default async function LoginPage({
     <main className="min-h-screen flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
         <Link href="/" className="flex items-center gap-2.5 mb-8">
-          <span className="bg-cobalt text-white font-extrabold text-base rounded px-[7px] py-[3px]">IQ</span>
-          <span className="font-bold text-[17px] tracking-[-0.02em]">Sports Supply</span>
+          <Wordmark size="lg" />
         </Link>
 
         <h1 className="text-[26px] font-semibold tracking-[-0.02em]">Sign in</h1>
@@ -29,7 +29,7 @@ export default async function LoginPage({
 
         <p className="text-[12px] text-mute mt-8">
           No account yet?{' '}
-          <Link href="/apply" className="text-cobalt font-semibold">Apply for a trade account</Link>
+          <Link href="/apply" className="text-flame-text font-semibold">Apply for a trade account</Link>
         </p>
       </div>
     </main>

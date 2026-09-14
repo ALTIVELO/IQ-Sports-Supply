@@ -33,7 +33,7 @@ export default function Timeline({
           return (
             <li key={stage.type} className="flex items-center gap-1">
               <span
-                className={`w-2 h-2 rounded-full ${done ? (current ? 'bg-cobalt' : 'bg-success') : 'bg-line'}`}
+                className={`w-2 h-2 rounded-full ${done ? (current ? 'bg-flame' : 'bg-success') : 'bg-line'}`}
                 aria-hidden
               />
               <span className={`text-[11px] ${done ? 'text-ink font-medium' : 'text-mute'}`}>
@@ -55,7 +55,7 @@ export default function Timeline({
             )}
             <span
               className={`w-[11px] h-[11px] rounded-full mt-1 flex-shrink-0 z-10
-                ${done ? (current ? 'bg-cobalt ring-4 ring-cobalt/15' : 'bg-success') : 'bg-white border-2 border-line'}`}
+                ${done ? (current ? 'bg-flame ring-4 ring-flame/20' : 'bg-success') : 'bg-white border-2 border-line'}`}
               aria-hidden
             />
             <div className="min-w-0">

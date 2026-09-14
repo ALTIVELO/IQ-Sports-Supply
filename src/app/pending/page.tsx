@@ -19,7 +19,7 @@ export default async function Pending() {
           as yours is open.
         </p>
         <p className="text-[13px] mt-6">
-          <Link href="/apply" className="text-cobalt font-semibold">Apply for a trade account</Link>
+          <Link href="/apply" className="text-flame-text font-semibold">Apply for a trade account</Link>
         </p>
       </div>
     </main>

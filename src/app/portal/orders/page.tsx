@@ -98,7 +98,7 @@ export default async function CurrentOrders() {
                         key={`t${i.id}`}
                         href={i.tracking_url!}
                         target="_blank" rel="noreferrer"
-                        className="text-[12px] font-semibold border border-transparent bg-cobalt text-white rounded px-[10px] py-[5px]"
+                        className="text-[12px] font-semibold border border-transparent bg-ink text-white rounded px-[10px] py-[5px]"
                       >
                         Track {i.carrier} {i.tracking_number}
                       </a>

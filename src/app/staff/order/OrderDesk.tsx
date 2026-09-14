@@ -150,7 +150,7 @@ export default function OrderDesk({
           {client && (
             <>
               <div className="flex flex-wrap gap-1.5">
-                <Tag tone="cobalt">{tier?.name} pricing</Tag>
+                <Tag tone="accent">{tier?.name} pricing</Tag>
                 {client.vat_exempt && <Tag tone="line">Zero-rated / export</Tag>}
               </div>
               <p className="text-[12px] text-mute leading-relaxed">{client.address}</p>
@@ -245,7 +245,7 @@ export default function OrderDesk({
                           onChange={(e) => patch(i, { unitPrice: Number(e.target.value) || 0 })}
                         />
                         {l.unitPrice !== l.tierPrice && (
-                          <span className="text-[10px] text-cobalt font-semibold">
+                          <span className="text-[10px] text-flame-text font-semibold">
                             override · tier <Money value={l.tierPrice} />
                           </span>
                         )}
@@ -281,7 +281,7 @@ export default function OrderDesk({
                     <li key={r.line.productId} className="num">
                       {r.line.sku} — {r.short} short
                       {others.length > 0 && (
-                        <span className="text-cobalt">
+                        <span className="text-flame-text">
                           {' '}· in stock at {others.join(', ')} — switch site or raise a transfer
                         </span>
                       )}
@@ -300,7 +300,7 @@ export default function OrderDesk({
               <div className="num text-[24px] font-semibold tracking-[-0.02em]">
                 <Money value={net + vat} />
               </div>
-              <Button kind="cobalt" onClick={submit} disabled={pending || !locationId}>
+              <Button kind="accent" onClick={submit} disabled={pending || !locationId}>
                 {pending ? 'Placing…' : 'Place order'}
               </Button>
             </div>

@@ -72,13 +72,13 @@ function configurationNeeded(missing: string[]) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Configuration needed</title>
 <style>
-  body{font-family:system-ui,sans-serif;background:#F2F4F6;color:#16222E;
+  body{font-family:system-ui,sans-serif;background:#F4F5F7;color:#121619;
        margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-  .card{background:#fff;border:1px solid #DCE2E8;border-radius:6px;padding:28px;max-width:560px}
+  .card{background:#fff;border:1px solid #E1E4E8;border-radius:6px;padding:28px;max-width:560px}
   h1{font-size:20px;margin:0 0 12px}
-  p{font-size:14px;line-height:1.6;color:#5B6B79;margin:0 0 12px}
-  code{background:#F2F4F6;border:1px solid #DCE2E8;border-radius:3px;padding:1px 5px;font-size:13px}
-  li{font-size:14px;line-height:1.8;color:#5B6B79}
+  p{font-size:14px;line-height:1.6;color:#5A6470;margin:0 0 12px}
+  code{background:#F4F5F7;border:1px solid #E1E4E8;border-radius:3px;padding:1px 5px;font-size:13px}
+  li{font-size:14px;line-height:1.8;color:#5A6470}
 </style></head><body><div class="card">
 <h1>Configuration needed</h1>
 <p>This deployment is missing ${missing.length === 1 ? 'an environment variable' : 'environment variables'}:</p>

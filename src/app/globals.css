@@ -16,7 +16,7 @@
   }
   input[type='checkbox'], input[type='radio'] { @apply w-auto; }
   input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
-    @apply outline outline-2 outline-cobalt outline-offset-1;
+    @apply outline outline-2 outline-flame outline-offset-1;
   }
   input:disabled, select:disabled { @apply bg-parch text-mute; }
 

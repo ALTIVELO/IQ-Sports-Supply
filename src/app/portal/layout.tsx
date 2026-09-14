@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Wordmark } from '@/components/Logo';
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
 import PortalNav from './PortalNav';
@@ -14,9 +15,8 @@ export default async function PortalLayout({ children }: { children: React.React
     <div className="min-h-screen flex flex-col">
       <header className="bg-ink text-parch">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
-          <Link href="/portal" className="flex items-center gap-2">
-            <span className="bg-cobalt text-white font-extrabold text-sm rounded px-1.5 py-0.5">IQ</span>
-            <span className="font-bold text-[15px] text-white tracking-[-0.02em]">Sports Supply</span>
+          <Link href="/portal" aria-label="IQ Sports Supply">
+            <Wordmark tone="light" size="sm" />
           </Link>
           <div className="ml-auto text-right leading-tight">
             <div className="text-[12px] text-white font-semibold">{client?.name}</div>

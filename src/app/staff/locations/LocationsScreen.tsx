@@ -166,7 +166,7 @@ function StaffRow({
             ))}
             {dirty && (
               <Button
-                small kind="cobalt" disabled={pending}
+                small kind="accent" disabled={pending}
                 onClick={() =>
                   startTransition(async () => {
                     const r = await setOpsLocations(profile.id, selected);

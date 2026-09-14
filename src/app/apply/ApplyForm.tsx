@@ -73,7 +73,7 @@ export default function ApplyForm() {
         </Field>
       </Card>
 
-      <Button type="submit" kind="cobalt" disabled={pending}>
+      <Button type="submit" kind="accent" disabled={pending}>
         {pending ? 'Sending…' : 'Submit application'}
       </Button>
     </form>
