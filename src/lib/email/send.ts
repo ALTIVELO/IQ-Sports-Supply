@@ -34,7 +34,7 @@ export async function sendEmail(msg: OutboundEmail): Promise<{ sent: boolean; er
     status = 'failed';
   } else if (emailEnabled()) {
     try {
-      const from = process.env.EMAIL_FROM || 'IQ Sports Supply <orders@iqsportssupply.com>';
+      const from = process.env.EMAIL_FROM || 'IQ Sports Supply <orders@iqsportsupply.com>';
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {

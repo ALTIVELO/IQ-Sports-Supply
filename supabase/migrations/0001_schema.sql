@@ -340,7 +340,7 @@ create table if not exists settings (
   confirmation_cc    text[] not null default '{}',   -- Rohail, James
   supplier_recipient text not null default '',       -- James
   application_recipient text not null default '',    -- James only
-  email_from         text not null default 'IQ Sports Supply <orders@iqsportssupply.com>'
+  email_from         text not null default 'IQ Sports Supply <orders@iqsportsupply.com>'
 );
 
 -- ── outbox ──────────────────────────────────────────────────────────────────

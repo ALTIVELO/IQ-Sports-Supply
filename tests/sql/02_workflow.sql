@@ -3,7 +3,7 @@
 \set QUIET on
 
 insert into auth.users (id, email) values
-  ('11111111-1111-1111-1111-111111111111', 'james@iqsportssupply.com');
+  ('11111111-1111-1111-1111-111111111111', 'james@iqsportsupply.com');
 update profiles set role='admin' where id='11111111-1111-1111-1111-111111111111';
 set session "test.user_id" = '11111111-1111-1111-1111-111111111111';
 \set QUIET off

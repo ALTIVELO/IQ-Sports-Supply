@@ -181,6 +181,26 @@ tests/              SQL test suites and their runner
 
 ## Deploying
 
-Vercel, with the environment variables above set in the project. Point
-`NEXT_PUBLIC_APP_URL` and `XERO_REDIRECT_URI` at the production domain, and add
-that domain to Supabase's allowed redirect URLs so magic links land correctly.
+Vercel, with the environment variables above set in the project.
+
+Production is **https://orders.iqsportsupply.com**, with the root domain and
+`www` redirecting to it.
+
+Four places have to name the same host, or sign-in breaks in ways that are
+quiet rather than loud:
+
+| Where | Value |
+| --- | --- |
+| Vercel → Domains | `orders.iqsportsupply.com` (plus root and `www` redirecting to it) |
+| Vercel → env | `NEXT_PUBLIC_APP_URL=https://orders.iqsportsupply.com` |
+| Supabase → Auth → URL Configuration | Site URL, and `https://orders.iqsportsupply.com/**` in Redirect URLs |
+| Xero app (phase 4) | `XERO_REDIRECT_URI=https://orders.iqsportsupply.com/api/xero/callback` |
+
+A magic link whose host is not in Supabase's redirect list fails silently — the
+link opens and drops the visitor back at login with nothing said. If
+`NEXT_PUBLIC_APP_URL` is unset the app falls back to Vercel's own URL variables
+(see `src/lib/app-url.ts`), so emails still carry a working link, just not the
+branded one.
+
+For an existing database, `supabase/set-domain.sql` updates the stored email
+sender identity — the migration default only applies to a fresh install.
