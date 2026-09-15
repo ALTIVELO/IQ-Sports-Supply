@@ -30,7 +30,7 @@ export async function saveSettings(formData: FormData): Promise<ActionResult> {
     tax_type_zero: str('tax_type_zero'),
     confirmation_cc: emails(str('confirmation_cc')),
     supplier_recipient: str('supplier_recipient'),
-    application_recipient: str('application_recipient'),
+    application_recipients: emails(str('application_recipients')),
     email_from: str('email_from'),
   }).eq('id', 1);
 

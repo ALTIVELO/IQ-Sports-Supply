@@ -25,7 +25,7 @@ export interface Settings {
   tax_type_zero: string;
   confirmation_cc: string[];
   supplier_recipient: string;
-  application_recipient: string;
+  application_recipients: string[];
   email_from: string;
 }
 

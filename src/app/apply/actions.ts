@@ -88,7 +88,7 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
   if (error) return { ok: false, error: 'We could not record your application. Please try again.' };
 
   const { data: settings } = await db
-    .from('settings').select('company, application_recipient').eq('id', 1).single();
+    .from('settings').select('company, application_recipients').eq('id', 1).single();
 
   const notice = applicationNotice({
     company: settings?.company ?? 'IQ Sports Supply Ltd',
@@ -109,10 +109,9 @@ export async function submitApplication(_prev: ApplyState, formData: FormData): 
     reviewUrl: `${appUrl()}/staff/applications`,
   });
 
-  // Notification goes to James only.
   await sendEmail({
     kind: 'application',
-    to: settings?.application_recipient ? [settings.application_recipient] : [],
+    to: settings?.application_recipients ?? [],
     subject: notice.subject,
     body: notice.body,
   });

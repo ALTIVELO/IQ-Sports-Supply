@@ -7,7 +7,7 @@ with checks as (
   select 'tables created' as item,
          (select count(*) from information_schema.tables
            where table_schema='public' and table_type='BASE TABLE')::text as found,
-         '26' as expected
+         '27' as expected
 
   union all
   select 'RLS enabled on every table',

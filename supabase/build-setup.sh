@@ -29,15 +29,9 @@ OUT="$HERE/setup.sql"
 
 HEADER
 
-  for f in "$HERE"/migrations/0001_schema.sql \
-           "$HERE"/migrations/0002_functions.sql \
-           "$HERE"/migrations/0003_rls.sql \
-           "$HERE"/migrations/0004_seed.sql \
-           "$HERE"/migrations/0005_categories.sql \
-           "$HERE"/migrations/0006_application_fields.sql \
-           "$HERE"/migrations/0007_product_images.sql \
-           "$HERE"/migrations/0008_category_tree.sql \
-           "$HERE"/migrations/0009_client_account.sql; do
+  # Globbed, and so in numeric order: a hardcoded list quietly leaves a new
+  # migration out of the file people actually paste into Supabase.
+  for f in "$HERE"/migrations/*.sql; do
     printf '\n\n-- ###########################################################################\n'
     printf -- '-- %s\n' "$(basename "$f")"
     printf -- '-- ###########################################################################\n\n'

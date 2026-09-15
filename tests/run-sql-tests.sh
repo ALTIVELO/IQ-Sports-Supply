@@ -18,23 +18,19 @@ DB="${TEST_DB:-iq_test}"
 rebuild() {
   psql -v ON_ERROR_STOP=1 -q -d postgres \
     -c "drop database if exists $DB;" -c "create database $DB;"
+  # Globbed rather than listed: a hardcoded list silently skips a new
+  # migration, and the suites then pass against a schema nobody ships.
   for f in "$HERE/sql/00_supabase_shim.sql" \
-           "$ROOT"/supabase/migrations/0001_schema.sql \
-           "$ROOT"/supabase/migrations/0002_functions.sql \
-           "$ROOT"/supabase/migrations/0003_rls.sql \
-           "$ROOT"/supabase/migrations/0004_seed.sql \
-           "$ROOT"/supabase/migrations/0005_categories.sql \
-           "$ROOT"/supabase/migrations/0006_application_fields.sql \
-           "$ROOT"/supabase/migrations/0007_product_images.sql \
-           "$ROOT"/supabase/migrations/0008_category_tree.sql \
-           "$ROOT"/supabase/migrations/0009_client_account.sql \
+           "$ROOT"/supabase/migrations/*.sql \
            "$HERE/sql/01_assertions.sql"; do
     psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$f" 2>&1 | grep -v "^NOTICE" || true
   done
 }
 
 failed=0
-for suite in "$HERE"/sql/0[2-9]_*.sql; do
+# 00 and 01 are fixtures, not suites; everything numbered above them is a suite.
+for suite in "$HERE"/sql/[0-9][0-9]_*.sql; do
+  case "$(basename "$suite")" in 00_*|01_*) continue ;; esac
   name="$(basename "$suite")"
   echo ""
   echo "══ $name"

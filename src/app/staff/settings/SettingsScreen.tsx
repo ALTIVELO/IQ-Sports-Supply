@@ -80,14 +80,18 @@ export default function SettingsScreen({
             </Notice>
           )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Field label="Order confirmation CC" hint="Comma separated — Rohail and James">
+            <Field label="Order confirmation CC"
+                   hint="Comma separated. Copied on every order confirmation.">
               <input name="confirmation_cc" defaultValue={settings.confirmation_cc?.join(', ') ?? ''} />
             </Field>
-            <Field label="Supplier order recipient" hint="James, to forward to the supplier">
+            <Field label="Supplier order recipient"
+                   hint="One address, to forward to the supplier">
               <input name="supplier_recipient" type="email" defaultValue={settings.supplier_recipient} />
             </Field>
-            <Field label="Application notifications" hint="James only">
-              <input name="application_recipient" type="email" defaultValue={settings.application_recipient} />
+            <Field label="Trade application notifications"
+                   hint="Comma separated. Told about every new trade account application.">
+              <input name="application_recipients"
+                     defaultValue={settings.application_recipients?.join(', ') ?? ''} />
             </Field>
           </div>
         </Card>

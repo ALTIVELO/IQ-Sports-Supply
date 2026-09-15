@@ -92,13 +92,26 @@ async function ensureProfile(
   try {
     const admin = supabaseAdmin();
 
+    // Read it as the service role first. An earlier version went straight to
+    // an upsert with role 'client', which would quietly demote an existing
+    // admin any time their own RLS read came back empty.
+    const { data: existing } = await admin
+      .from('profiles').select('role, full_name, email').eq('id', userId).maybeSingle();
+    if (existing) return existing;
+
+    // An allowlisted address is staff from its first sign-in. This mirrors
+    // handle_new_user(); it is repeated here because some hosted setups will
+    // not let that trigger be installed on auth.users at all.
+    const role = (email && await invitedRole(admin, email)) || 'client';
+
     const { data: created } = await admin
       .from('profiles')
-      .upsert({ id: userId, email, role: 'client' }, { onConflict: 'id' })
+      .upsert({ id: userId, email, role }, { onConflict: 'id' })
       .select('role, full_name, email')
       .single();
 
-    if (email) {
+    // Staff are never linked to a trade account, whatever the address.
+    if (email && role === 'client') {
       // Matched exactly, case-insensitively — not with ilike, whose _ and %
       // wildcards would let john_smith@x.com claim johnXsmith@x.com's account.
       // And only ever claims a record that has no user yet, so it cannot take
@@ -121,4 +134,22 @@ async function ensureProfile(
     // No service-role key configured, or the insert was refused.
     return null;
   }
+}
+
+/**
+ * The role an address has been allowlisted for in `staff_invites`, or null.
+ *
+ * Compared exactly and case-insensitively, never with ilike: `_` and `%` are
+ * wildcards there, and an email is full of underscores, so a lookup by pattern
+ * would let one address match an invitation issued to another.
+ */
+async function invitedRole(
+  admin: ReturnType<typeof supabaseAdmin>,
+  email: string,
+): Promise<Role | null> {
+  const { data } = await admin
+    .from('staff_invites').select('email, role');
+  const wanted = email.trim().toLowerCase();
+  const hit = (data ?? []).find((r) => r.email?.trim().toLowerCase() === wanted);
+  return (hit?.role as Role) ?? null;
 }
