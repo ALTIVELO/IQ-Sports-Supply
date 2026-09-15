@@ -14,6 +14,9 @@ interface Product {
   active: boolean; category_id: string | null; image_url: string | null;
 }
 interface Named { id: string; name: string }
+interface CategoryOption {
+  id: string; name: string; slug: string; sort: number; parent_id: string | null;
+}
 interface Transfer {
   id: string; number: string; date: string; status: string;
   from_location_id: string; to_location_id: string;
@@ -28,7 +31,7 @@ export default function CatalogueScreen({
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
   stock: Record<string, Record<string, number>>;
-  transfers: Transfer[]; categories: Named[];
+  transfers: Transfer[]; categories: CategoryOption[];
   query: string; tab: 'catalogue' | 'transfers';
 }) {
   const router = useRouter();
@@ -135,7 +138,7 @@ function StockMatrix({
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
   stock: Record<string, Record<string, number>>;
-  categories: Named[];
+  categories: CategoryOption[];
   onMessage: (m: Msg) => void;
 }) {
   const [editing, setEditing] = useState<{ productId: string; locationId: string } | null>(null);
@@ -158,6 +161,18 @@ function StockMatrix({
   }
 
   const uncategorised = products.filter((p) => !p.category_id).length;
+
+  // Categories are a two-level tree now, so the picker mirrors it — seventy
+  // options in one flat list is not a choice anyone can make quickly.
+  const groupedCategories = categories
+    .filter((c) => c.parent_id === null)
+    .sort((a, b) => a.sort - b.sort)
+    .map((group) => ({
+      group,
+      children: categories
+        .filter((c) => c.parent_id === group.id)
+        .sort((a, b) => a.sort - b.sort),
+    }));
 
   if (!products.length) {
     return <Card><Empty>No products match. Add SKUs above, or bulk-load them on the Import screen.</Empty></Card>;
@@ -215,7 +230,7 @@ function StockMatrix({
                   <td className="text-mute">{p.brand}</td>
                   <td>
                     <select
-                      className="text-[12px] min-w-[130px]"
+                      className="text-[12px] min-w-[150px]"
                       value={p.category_id ?? ''}
                       onChange={(e) =>
                         startTransition(async () => {
@@ -225,8 +240,13 @@ function StockMatrix({
                       }
                     >
                       <option value="">— none —</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
+                      {groupedCategories.map(({ group, children }) => (
+                        <optgroup key={group.id} label={group.name}>
+                          <option value={group.id}>{group.name} (whole department)</option>
+                          {children.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </td>

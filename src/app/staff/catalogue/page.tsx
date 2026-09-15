@@ -15,7 +15,7 @@ export default async function CataloguePage({
   const [{ data: tiers }, { data: locations }, { data: categories }] = await Promise.all([
     sb.from('tiers').select('id, name').order('sort'),
     sb.from('locations').select('id, name').eq('active', true).order('name'),
-    sb.from('categories').select('id, name, slug').order('sort'),
+    sb.from('categories').select('id, name, slug, sort, parent_id').order('sort'),
   ]);
 
   let productQuery = sb.from('products')

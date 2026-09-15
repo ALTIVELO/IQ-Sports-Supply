@@ -56,12 +56,19 @@ with checks as (
 
   union all
   select 'product categories seeded',
-         (select count(*)::text from categories), '29'
+         (select count(*)::text from categories), '70'
 
   union all
   select 'products carry a category column',
          (select count(*)::text from information_schema.columns
            where table_name='products' and column_name='category_id'), '1'
+
+  union all
+  select 'every collection sits under a group',
+         (select count(*)::text from categories c
+           where c.parent_id is null
+             and c.slug not in ('bicycles','frames','components','wheelsets',
+                                'clothing','helmets','accessories','tools')), '0'
 
   union all
   select 'fulfilment locations seeded',

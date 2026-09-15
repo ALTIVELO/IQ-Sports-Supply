@@ -161,10 +161,31 @@ lives on, and `next/image` would need every one declared up front.
 
 ## Collections
 
-The portal catalogue opens on a grid of collections — one per category that
-actually holds something, with counts — and `/portal/c/[slug]` lists that
-collection. `/portal/c/other` gathers anything not yet categorised. Searching
-from the landing page skips the collections and goes straight to matching
+Two levels: a **group** holds collections, a collection holds products.
+
+```
+Complete bicycles   road · gravel · mountain · electric · hybrid · kids · track
+Frames & forks      road · gravel · mountain frames · forks
+Bike parts          brake pads · chains · chainsets · cassettes · derailleurs · …
+Wheels & tyres      wheels · spokes · tyres · tubes
+Clothing            jerseys · shorts · jackets · base layers · gloves · socks · shoes · eyewear
+Helmets             road · mountain · aero · kids
+Accessories         bottles · lights · computers · pumps · locks · luggage · mudguards
+Tools & workshop    workshop · torque · bleed kits · wheel tools · lubricants
+```
+
+The portal opens on the groups; `/portal/c/[slug]` shows a group's collections
+or a collection's products, with `?all=1` to list everything under a group.
+`/portal/c/other` gathers anything not yet categorised.
+
+Counts roll up, so a group shows everything beneath it. **Anything holding no
+products is hidden** — the taxonomy is deliberately wider than any one
+catalogue will fill, and an empty collection is worse than no collection
+because it invites a click that leads nowhere.
+
+A product may attach to a group directly: "Helmet" with no further detail is a
+real description, and Helmets is a better answer than a sub-type the text does
+not support. Searching from the landing page skips straight to matching
 products, because someone who knows the SKU should not have to guess where it
 is filed.
 

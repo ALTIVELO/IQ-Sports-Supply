@@ -26,6 +26,7 @@ rebuild() {
            "$ROOT"/supabase/migrations/0005_categories.sql \
            "$ROOT"/supabase/migrations/0006_application_fields.sql \
            "$ROOT"/supabase/migrations/0007_product_images.sql \
+           "$ROOT"/supabase/migrations/0008_category_tree.sql \
            "$HERE/sql/01_assertions.sql"; do
     psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$f" 2>&1 | grep -v "^NOTICE" || true
   done
