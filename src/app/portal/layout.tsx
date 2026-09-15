@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Wordmark } from '@/components/Logo';
+import { CartProvider } from './CartContext';
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
 import PortalNav from './PortalNav';
@@ -12,6 +13,7 @@ export default async function PortalLayout({ children }: { children: React.React
     .from('clients').select('name, tiers(name)').eq('id', user.clientId).single();
 
   return (
+    <CartProvider>
     <div className="min-h-screen flex flex-col">
       <header className="bg-ink text-parch">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
@@ -39,5 +41,6 @@ export default async function PortalLayout({ children }: { children: React.React
         IQ Sports Supply Ltd
       </footer>
     </div>
+    </CartProvider>
   );
 }

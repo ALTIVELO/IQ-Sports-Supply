@@ -7,10 +7,11 @@ import { fmtDate, today } from '@/lib/format';
 import { saveProduct, setProductActive } from './actions';
 import { setStock, createTransfer, receiveTransfer } from '../actions';
 import { categoriseUncategorised, setProductCategory } from '../import/actions';
+import ImageCell from './ImageCell';
 
 interface Product {
   id: string; sku: string; name: string; brand: string | null;
-  active: boolean; category_id: string | null;
+  active: boolean; category_id: string | null; image_url: string | null;
 }
 interface Named { id: string; name: string }
 interface Transfer {
@@ -189,6 +190,7 @@ function StockMatrix({
         <table>
           <thead>
             <tr>
+              <th className="w-[60px]">Image</th>
               <th>SKU</th><th>Product</th><th>Brand</th><th>Category</th>
               {locations.map((l) => <th key={l.id} className="text-right">{l.name}</th>)}
               <th className="text-right">Total</th>
@@ -202,6 +204,12 @@ function StockMatrix({
               const total = Object.values(byLoc).reduce((a, b) => a + b, 0);
               return (
                 <tr key={p.id} className={p.active ? '' : 'opacity-50'}>
+                  <td>
+                    <ImageCell
+                      productId={p.id} sku={p.sku} imageUrl={p.image_url}
+                      onMessage={onMessage}
+                    />
+                  </td>
                   <td className="num font-semibold">{p.sku}</td>
                   <td className="min-w-[200px]">{p.name}</td>
                   <td className="text-mute">{p.brand}</td>
@@ -273,7 +281,9 @@ function StockMatrix({
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-mute mt-2">Click a stock figure to correct it.</p>
+      <p className="text-[11px] text-mute mt-2">
+        Click a stock figure to correct it, or a thumbnail to set the product image.
+      </p>
     </Card>
   );
 }

@@ -54,3 +54,17 @@ export async function setProductActive(id: string, active: boolean): Promise<Act
   revalidatePath('/staff/catalogue');
   return { ok: true };
 }
+
+/** Points a product at an image, or clears it. The upload itself happens in
+ *  the browser; this only records the resulting URL. */
+export async function setProductImage(
+  productId: string,
+  imageUrl: string | null,
+): Promise<ActionResult> {
+  await requireStaff();
+  const sb = await supabaseServer();
+  const { error } = await sb.from('products').update({ image_url: imageUrl }).eq('id', productId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/staff/catalogue');
+  return { ok: true };
+}

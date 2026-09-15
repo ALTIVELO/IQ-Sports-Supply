@@ -21,6 +21,7 @@ const FIELDS: Record<ImportScope, { key: keyof ColumnMapping; label: string; req
     { key: 'name', label: 'Product name', required: false },
     { key: 'brand', label: 'Brand', required: false },
     { key: 'price', label: 'Price', required: true },
+    { key: 'image_url', label: 'Image URL', required: false },
   ],
   clients: [
     { key: 'name', label: 'Client name', required: true },
@@ -139,6 +140,7 @@ export default function ImportScreen({
             name: r.name ?? '',
             brand: r.brand ?? '',
             price: toNumber(r.price ?? ''),
+            image_url: r.image_url ?? '',
           })),
         };
       });

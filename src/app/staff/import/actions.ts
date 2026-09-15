@@ -166,11 +166,15 @@ export async function applyPrices(input: {
       const { data: inserted, error } = await sb.from('products')
         .insert([...unique.values()].map((r) => {
           const slug = classifyProduct({ name: r.name, brand: r.brand, sku: r.sku });
+          const image = r.image_url?.trim();
           return {
             sku: r.sku.trim(),
             name: r.name?.trim() || r.sku.trim(),
             brand: r.brand?.trim() || null,
             category_id: slug ? categoryId.get(slug) ?? null : null,
+            // Only accept a real URL; a sheet often carries a filename here,
+            // which would render as a broken image.
+            image_url: image && /^https?:\/\//i.test(image) ? image : null,
           };
         }))
         .select('id, sku');

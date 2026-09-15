@@ -47,6 +47,7 @@ export function guessMapping(header: string[], fields: (keyof ColumnMapping)[]):
     phone: /\b(phone|tel|mobile|contact\s*number)\b/i,
     location: /\b(location|site|warehouse|depot|branch)\b/i,
     qty: /\b(qty|quantity|stock|on\s*hand|units)\b/i,
+    image_url: /\b(image|photo|picture|img)\s*(url|link)?\b/i,
   };
 
   const mapping: ColumnMapping = {};

@@ -142,6 +142,38 @@ chip when anything is unfiled.
 45 assertions in `tests/unit/categories.test.mjs` cover the real catalogue rows,
 the ordering traps, and the cases that must stay uncategorised.
 
+## Product images
+
+Supplier price sheets carry no images, so `products.image_url` holds a full URL
+and is filled in afterwards — either by uploading on the Catalogue screen
+(straight from the browser to the `product-images` bucket, public read, staff
+write) or from an optional Image URL column on import. Holding a URL rather
+than a storage path means a supplier's own CDN works without the app having to
+know the difference.
+
+Most of the catalogue has no photo and will not for some time, so the
+placeholder is the common case rather than the exception and is drawn to look
+deliberate. A URL that fails to load falls back to the same placeholder, since
+a supplier's image can disappear without warning.
+
+Plain `<img>`, not `next/image`: these URLs point at whatever host the image
+lives on, and `next/image` would need every one declared up front.
+
+## Collections
+
+The portal catalogue opens on a grid of collections — one per category that
+actually holds something, with counts — and `/portal/c/[slug]` lists that
+collection. `/portal/c/other` gathers anything not yet categorised. Searching
+from the landing page skips the collections and goes straight to matching
+products, because someone who knows the SKU should not have to guess where it
+is filed.
+
+Splitting the catalogue across pages means the basket has to outlive
+navigation, so it lives in `CartContext` above the page tree and is mirrored to
+`localStorage` — a trade order runs to dozens of lines and should not be lost to
+a refresh or a phone locking. Only quantities are stored; prices are always read
+fresh from the server, so a stale basket can never carry a stale price.
+
 ## Numbering
 
 `next_order_number()`, `next_invoice_number()`, `next_po_number()` and
