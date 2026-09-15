@@ -197,6 +197,12 @@ navigation, so it lives in `CartContext` above the page tree and is mirrored to
 a refresh or a phone locking. Only quantities are stored; prices are always read
 fresh from the server, so a stale basket can never carry a stale price.
 
+The header carries the basket and its count on every page of the portal, and
+`/portal/basket` reviews it line by line before committing: quantities editable,
+back-ordered lines called out before the order is placed rather than after, and
+anything withdrawn from the catalogue since it went in the basket reported and
+left out.
+
 ## Numbering
 
 `next_order_number()`, `next_invoice_number()`, `next_po_number()` and
