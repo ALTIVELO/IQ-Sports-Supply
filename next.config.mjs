@@ -9,9 +9,17 @@ const nextConfig = {
   // it tries to draw a character. Naming the files here is the fix: it
   // forces them into every route that renders a PDF, regardless of what the
   // trace could statically discover.
+  //
+  // Applied to every route rather than just the two PDF endpoints, because the
+  // order confirmation email attaches the invoice — so notifications.ts
+  // renders a PDF from inside a Server Action, and those are bundled into
+  // whichever page imports them, not into /api/invoices/*. Naming those pages
+  // instead would mean listing nearly every staff and portal route and
+  // remembering to extend the list forever, and getting it wrong is invisible:
+  // the render failure is caught so the confirmation still sends, just with no
+  // invoice attached. A few MB on each function is the cheaper mistake.
   outputFileTracingIncludes: {
-    '/api/invoices/*/pdf': ['./node_modules/pdfkit/js/**/*'],
-    '/api/invoices/*/packing-list': ['./node_modules/pdfkit/js/**/*'],
+    '/**': ['./node_modules/pdfkit/js/**/*'],
   },
   experimental: {
     serverActions: {
