@@ -22,10 +22,12 @@ export interface Node {
  *
  * Counts roll up, so a group shows everything beneath it rather than only what
  * happens to be filed at its own level — a customer opening "Clothing" expects
- * the count to mean all the clothing. Nodes holding nothing are dropped: an
- * empty collection is worse than no collection, because it invites a click
- * that leads nowhere, and the taxonomy is deliberately wider than any one
- * catalogue will fill.
+ * the count to mean all the clothing.
+ *
+ * Every collection is returned, stocked or not: the full list tells a customer
+ * what IQ supplies, which is worth more than hiding the gaps. Empty ones are
+ * marked rather than removed, so the page can show them as clearly not-yet-
+ * stocked instead of looking broken when clicked.
  */
 export function buildTree(categories: CategoryRow[], products: CatalogueItem[]): Node[] {
   const bySlug = new Map(categories.map((c) => [c.slug, c]));
@@ -52,8 +54,7 @@ export function buildTree(categories: CategoryRow[], products: CatalogueItem[]):
   const build = (row: CategoryRow): Node => {
     const kids = (childrenOf.get(row.slug) ?? [])
       .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
-      .map(build)
-      .filter((n) => n.total > 0);
+      .map(build);
 
     const own = direct.get(row.slug) ?? { own: 0, inStock: 0, cover: null };
     return {
@@ -70,8 +71,7 @@ export function buildTree(categories: CategoryRow[], products: CatalogueItem[]):
   void bySlug;
   return (childrenOf.get(null) ?? [])
     .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
-    .map(build)
-    .filter((n) => n.total > 0);
+    .map(build);
 }
 
 /** Finds a node anywhere in the tree, and the groups above it. */

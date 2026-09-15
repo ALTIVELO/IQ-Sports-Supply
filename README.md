@@ -178,10 +178,12 @@ The portal opens on the groups; `/portal/c/[slug]` shows a group's collections
 or a collection's products, with `?all=1` to list everything under a group.
 `/portal/c/other` gathers anything not yet categorised.
 
-Counts roll up, so a group shows everything beneath it. **Anything holding no
-products is hidden** — the taxonomy is deliberately wider than any one
-catalogue will fill, and an empty collection is worse than no collection
-because it invites a click that leads nowhere.
+Counts roll up, so a group shows everything beneath it. **Every collection is
+shown whether or not it holds stock** — the full list tells a customer what IQ
+supplies, which is worth more than hiding the gaps while the catalogue is
+still being loaded. An empty one reads "Coming soon" in muted type rather than
+carrying a count, and its page says so plainly instead of 404ing, so it is
+clearly not-yet-stocked rather than broken.
 
 A product may attach to a group directly: "Helmet" with no further detail is a
 real description, and Helmets is a better answer than a sub-type the text does

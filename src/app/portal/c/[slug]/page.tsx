@@ -18,6 +18,10 @@ export const dynamic = 'force-dynamic';
  * but a group may also hold products filed directly against it, because a
  * description like "Helmet" supports the group and no sub-type. `?all=1` lists
  * everything beneath a group for someone who would rather scroll than drill.
+ *
+ * A collection with nothing in it is a real page, not a 404: the catalogue
+ * shows its full range whether or not every shelf is stocked, so landing here
+ * should say so plainly rather than look like a broken link.
  */
 export default async function CollectionPage({
   params, searchParams,
@@ -70,13 +74,21 @@ export default async function CollectionPage({
       {node.children.length > 0 && !showAll && (
         <>
           <CollectionGrid nodes={node.children} />
+          {node.total === 0 && (
+            <Card>
+              <Empty>
+                Nothing listed in {node.name.toLowerCase()} yet — these collections are
+                here so you can see what we supply. Ask us what we can get.
+              </Empty>
+            </Card>
+          )}
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Link
+            {node.total > 0 && <Link
               href={`/portal/c/${node.slug}?all=1`}
               className="text-[12px] font-semibold border border-line rounded px-[10px] py-[5px] bg-white hover:bg-parch"
             >
               Browse all {node.total} in {node.name}
-            </Link>
+            </Link>}
             {node.own > 0 && (
               <span className="text-[12px] text-mute">
                 {node.own} not in a sub-collection, shown below
@@ -87,9 +99,17 @@ export default async function CollectionPage({
       )}
 
       {shown.length === 0 ? (
-        node.children.length === 0
-          ? <Card><Empty>Nothing in this collection yet.</Empty></Card>
-          : null
+        node.children.length === 0 ? (
+          <Card>
+            <Empty>
+              We supply {node.name.toLowerCase()}, but none are listed here yet. Ask us
+              what we can get — or{' '}
+              <Link href="/portal" className="text-flame-text font-semibold">
+                browse the rest of the catalogue
+              </Link>.
+            </Empty>
+          </Card>
+        ) : null
       ) : (
         <CollectionSearch products={shown} />
       )}
