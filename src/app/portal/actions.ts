@@ -16,6 +16,7 @@ export interface PortalResult {
  */
 export async function placeClientOrder(
   lines: { product_id: string; qty: number }[],
+  addressId?: string | null,
 ): Promise<PortalResult> {
   const user = await requireClient();
   const sb = await supabaseServer();
@@ -31,6 +32,9 @@ export async function placeClientOrder(
     p_location_id: client?.default_location_id ?? null,
     p_lines: clean.map((l) => ({ product_id: l.product_id, qty: l.qty, unit_price: null })),
     p_notes: null,
+    // place_order checks this belongs to the ordering client and falls back to
+    // their default, so an id from the browser can only ever be their own.
+    p_address_id: addressId || null,
   });
 
   if (error) return { ok: false, error: error.message };

@@ -23,7 +23,7 @@ is('SRAM Red Crank Arm 172.5mm',                        'chainsets');
 is('KMC Quick Link 11-speed',                           'chains');
 is('Shimano BR-R7070 Hydraulic Disc Brake Caliper',     'brakes');
 is('Shimano SM-RT800 Centre Lock Disc Rotor 160mm',     'rotors');
-is('Park Tool Chain Whip SR-12.2',                      'tools');
+is('Park Tool Chain Whip SR-12.2',                      'workshop-tools');
 
 console.log('\n── rim brake vs rim, tube vs tubeless');
 is('Shimano BR-6810 Rim Brake Caliper',                 'brakes');
@@ -48,10 +48,10 @@ is('Miscellaneous item',                                 null);
 is('',                                                   null);
 
 console.log('\n── compound terms where the LAST word decides the category');
-is('Park Tool Chain Whip SR-12.2',                      'tools');
-is('Shimano TL-CN10 Chain Tool',                        'tools');
-is('Park Tool SW-42 Spoke Wrench',                      'tools');
-is('Shimano TL-FC16 Bottom Bracket Tool',               'tools');
+is('Park Tool Chain Whip SR-12.2',                      'workshop-tools');
+is('Shimano TL-CN10 Chain Tool',                        'workshop-tools');
+is('Park Tool SW-42 Spoke Wrench',                      'wheel-tools');
+is('Shimano TL-FC16 Bottom Bracket Tool',               'workshop-tools');
 is('Jagwire Road Pro Brake Cable Kit',                  'cables');
 is('Shimano Optislick Gear Cable Set',                  'cables');
 is('Muc-Off C3 Dry Chain Lube 50ml',                    'lubricants');

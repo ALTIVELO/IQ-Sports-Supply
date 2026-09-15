@@ -36,7 +36,8 @@ HEADER
            "$HERE"/migrations/0005_categories.sql \
            "$HERE"/migrations/0006_application_fields.sql \
            "$HERE"/migrations/0007_product_images.sql \
-           "$HERE"/migrations/0008_category_tree.sql; do
+           "$HERE"/migrations/0008_category_tree.sql \
+           "$HERE"/migrations/0009_client_account.sql; do
     printf '\n\n-- ###########################################################################\n'
     printf -- '-- %s\n' "$(basename "$f")"
     printf -- '-- ###########################################################################\n\n'

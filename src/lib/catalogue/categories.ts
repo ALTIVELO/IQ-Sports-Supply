@@ -176,6 +176,14 @@ const COMPOUND_RULES: { slug: string; patterns: RegExp[] }[] = [
   { slug: 'brake-pads', patterns: [
       /\bdis[ck]\s*brake\s*pads?\b/i,
   ]},
+  // "Centre Lock" is the rotor fitting standard, not a bike lock. Without this
+  // the accessories rule for /\block\b/ claims every Centre Lock disc rotor,
+  // and they end up filed under Locks. Placed after the tool rules so a
+  // "Rotor Truing Tool" is still a tool.
+  { slug: 'rotors', patterns: [
+      /\bcent(re|er)\s*lock\b/i,
+      /\block\b.*\brotors?\b/i,
+  ]},
 ];
 
 /**

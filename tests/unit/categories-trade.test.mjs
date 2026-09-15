@@ -28,7 +28,7 @@ is('B05S disc pads and spring - steel back - resin - box', 'brake-pads');
 
 console.log('\n── and the earlier rules are untouched');
 is('Shimano Dura-Ace BB-R9100 Bottom Bracket BSA',  'bottom-brackets');
-is('Park Tool Chain Whip SR-12.2',                  'tools');
+is('Park Tool Chain Whip SR-12.2',                  'workshop-tools');
 is('Jagwire Road Pro Brake Cable Kit',              'cables');
 is('Muc-Off C3 Dry Chain Lube 50ml',                'lubricants');
 is('Shimano Ultegra CN-HG701 Chain 11-speed',       'chains');

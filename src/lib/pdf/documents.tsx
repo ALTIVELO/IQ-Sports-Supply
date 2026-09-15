@@ -48,7 +48,10 @@ export interface DocData {
   vatRate: number;
   lines: DocLine[];
   clientName: string;
+  /** Billing address: the legal invoicing address where one is given. */
   clientAddress: string | null;
+  /** Where this order is actually going, as it was when the order was placed. */
+  shipTo: string | null;
   clientVatNo: string | null;
   company: string;
   companyAddress: string;
@@ -147,7 +150,7 @@ export function PackingListDocument({ d }: { d: DocData }) {
           <View>
             <Text style={s.label}>Deliver to</Text>
             <Text style={s.strong}>{d.clientName}</Text>
-            {d.clientAddress ? <Text style={s.addr}>{d.clientAddress}</Text> : null}
+            {d.shipTo ? <Text style={s.addr}>{d.shipTo}</Text> : null}
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={s.label}>Pack at</Text>

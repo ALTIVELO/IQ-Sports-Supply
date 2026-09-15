@@ -10,6 +10,7 @@ const ITEMS = [
   ['/portal/invoices', 'Invoices'],
   ['/portal/backorders', 'Back order'],
   ['/portal/shipping', 'Shipping'],
+  ['/portal/account', 'Your account'],
 ] as const;
 
 export default function PortalNav() {

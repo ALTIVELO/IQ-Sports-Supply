@@ -21,12 +21,20 @@ export default async function PortalLayout({ children }: { children: React.React
           <Link href="/portal" aria-label="IQ Sports Supply">
             <Wordmark tone="light" size="sm" />
           </Link>
-          <div className="ml-auto text-right leading-tight hidden sm:block">
-            <div className="text-[12px] text-white font-semibold">{client?.name}</div>
+          <Link
+            href="/portal/account"
+            title="Your account details and delivery addresses"
+            className="ml-auto text-right leading-tight hidden sm:block rounded px-2 py-1
+                       -mr-2 hover:bg-white/10 transition-colors"
+          >
+            <div className="text-[12px] text-white font-semibold underline decoration-white/30
+                            underline-offset-2">
+              {client?.name}
+            </div>
             <div className="text-[11px] text-[#8DA0B0]">
               {(client?.tiers as unknown as { name: string } | null)?.name} pricing
             </div>
-          </div>
+          </Link>
           <BasketButton />
           <form action="/api/signout" method="post">
             <button className="text-[11px] text-[#8DA0B0] hover:text-white underline">
