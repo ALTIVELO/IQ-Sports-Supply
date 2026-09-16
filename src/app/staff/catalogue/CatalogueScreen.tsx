@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
 import { fmtDate, today } from '@/lib/format';
-import { saveProduct, setProductActive } from './actions';
+import { saveProduct, setProductActive, deleteProducts } from './actions';
 import { setStock, createTransfer, receiveTransfer } from '../actions';
 import { categoriseUncategorised, setProductCategory } from '../import/actions';
 import ImageCell from './ImageCell';
@@ -26,13 +26,13 @@ interface Transfer {
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
 
 export default function CatalogueScreen({
-  products, tiers, locations, prices, stock, transfers, categories, query, tab,
+  products, tiers, locations, prices, stock, transfers, categories, canDelete, query, tab,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
   stock: Record<string, Record<string, number>>;
   transfers: Transfer[]; categories: CategoryOption[];
-  query: string; tab: 'catalogue' | 'transfers';
+  canDelete: boolean; query: string; tab: 'catalogue' | 'transfers';
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<Msg>(null);
@@ -68,7 +68,8 @@ export default function CatalogueScreen({
           </form>
           <StockMatrix
             products={products} tiers={tiers} locations={locations}
-            prices={prices} stock={stock} categories={categories} onMessage={setMessage}
+            prices={prices} stock={stock} categories={categories}
+            canDelete={canDelete} onMessage={setMessage}
           />
         </>
       ) : (
@@ -133,17 +134,61 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
 }
 
 function StockMatrix({
-  products, tiers, locations, prices, stock, categories, onMessage,
+  products, tiers, locations, prices, stock, categories, canDelete, onMessage,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
   stock: Record<string, Record<string, number>>;
   categories: CategoryOption[];
+  canDelete: boolean;
   onMessage: (m: Msg) => void;
 }) {
   const [editing, setEditing] = useState<{ productId: string; locationId: string } | null>(null);
   const [value, setValue] = useState('0');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  const visibleIds = useMemo(() => products.map((p) => p.id), [products]);
+  // A selection is only meaningful for rows still on screen: searching, or a
+  // delete, can take a chosen row away, and deleting something the person can
+  // no longer see is exactly the surprise to avoid.
+  const chosen = useMemo(
+    () => visibleIds.filter((id) => selected.has(id)),
+    [visibleIds, selected],
+  );
+  const allShown = chosen.length > 0 && chosen.length === visibleIds.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = chosen.length > 0 && !allShown;
+    }
+  }, [chosen.length, allShown]);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+    setConfirming(false);
+  }
+
+  function toggleAll() {
+    setSelected(allShown ? new Set() : new Set(visibleIds));
+    setConfirming(false);
+  }
+
+  function removeChosen() {
+    startTransition(async () => {
+      const r = await deleteProducts(chosen);
+      onMessage(r.ok
+        ? { tone: r.withdrawn?.length ? 'info' : 'success', text: r.message ?? 'Done' }
+        : { tone: 'error', text: r.error ?? 'Could not delete those products' });
+      if (r.ok) { setSelected(new Set()); setConfirming(false); }
+    });
+  }
 
   function save() {
     if (!editing) return;
@@ -201,10 +246,54 @@ function StockMatrix({
           </Button>
         </div>
       )}
+      {canDelete && chosen.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-3 pb-3 border-b border-line">
+          <span className="text-[13px] font-semibold">
+            {chosen.length} selected
+          </span>
+          <button onClick={() => { setSelected(new Set()); setConfirming(false); }}
+                  className="text-[12px] text-mute hover:text-ink underline">
+            Clear
+          </button>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {confirming ? (
+              <>
+                <span className="text-[12px]">
+                  Delete {chosen.length} product{chosen.length === 1 ? '' : 's'}? Any that
+                  appear on a past order are withdrawn instead, not destroyed.
+                </span>
+                <Button small kind="danger" disabled={pending} onClick={removeChosen}>
+                  {pending ? 'Deleting…' : 'Yes, delete'}
+                </Button>
+                <Button small kind="ghost" disabled={pending}
+                        onClick={() => setConfirming(false)}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button small kind="danger" disabled={pending}
+                      onClick={() => { setConfirming(true); onMessage(null); }}>
+                Delete selected
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table>
           <thead>
             <tr>
+              {canDelete && (
+                <th className="w-[34px]">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={allShown}
+                    onChange={toggleAll}
+                    aria-label="Select every product shown"
+                  />
+                </th>
+              )}
               <th className="w-[60px]">Image</th>
               <th>SKU</th><th>Product</th><th>Brand</th><th>Category</th>
               {locations.map((l) => <th key={l.id} className="text-right">{l.name}</th>)}
@@ -218,14 +307,25 @@ function StockMatrix({
               const byLoc = stock[p.id] ?? {};
               const total = Object.values(byLoc).reduce((a, b) => a + b, 0);
               return (
-                <tr key={p.id} className={p.active ? '' : 'opacity-50'}>
+                <tr key={p.id}
+                    className={`${p.active ? '' : 'opacity-50'} ${selected.has(p.id) ? 'bg-parch' : ''}`}>
+                  {canDelete && (
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(p.id)}
+                        onChange={() => toggle(p.id)}
+                        aria-label={`Select ${p.sku}`}
+                      />
+                    </td>
+                  )}
                   <td>
                     <ImageCell
                       productId={p.id} sku={p.sku} imageUrl={p.image_url}
                       onMessage={onMessage}
                     />
                   </td>
-                  <td className="num font-semibold">{p.sku}</td>
+                  <td className="num font-semibold whitespace-nowrap">{p.sku}</td>
                   <td className="min-w-[200px]">{p.name}</td>
                   <td className="text-mute">{p.brand}</td>
                   <td>
@@ -303,6 +403,9 @@ function StockMatrix({
       </div>
       <p className="text-[11px] text-mute mt-2">
         Click a stock figure to correct it, or a thumbnail to set the product image.
+        {canDelete && ' Tick the boxes to remove several products at once — anything that has '
+          + 'been sold is withdrawn from the catalogue rather than deleted, so past invoices '
+          + 'still read correctly.'}
       </p>
     </Card>
   );

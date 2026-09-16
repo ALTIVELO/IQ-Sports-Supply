@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function CataloguePage({
   searchParams,
 }: { searchParams: Promise<{ q?: string; tab?: string }> }) {
-  await requireStaff();
+  const user = await requireStaff();
   const { q, tab } = await searchParams;
   const sb = await supabaseServer();
 
@@ -62,6 +62,7 @@ export default async function CataloguePage({
         stock={stockMap}
         transfers={(transfers ?? []) as never}
         categories={categories ?? []}
+        canDelete={user.role === 'admin' || user.role === 'accounts'}
         query={q ?? ''}
         tab={tab === 'transfers' ? 'transfers' : 'catalogue'}
       />

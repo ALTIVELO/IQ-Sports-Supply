@@ -27,8 +27,8 @@ with checks as (
              'next_order_number','next_invoice_number','next_po_number','next_transfer_number',
              'current_tier_price','product_in_stock','my_role','is_staff','is_admin',
              'my_client_id','my_location_ids','handle_new_user',
-             'invite_staff','revoke_staff')),
-         '24'
+             'invite_staff','revoke_staff','delete_products')),
+         '25'
 
   union all
   select 'signup trigger on auth.users',

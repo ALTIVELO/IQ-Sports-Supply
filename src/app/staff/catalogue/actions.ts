@@ -68,3 +68,38 @@ export async function setProductImage(
   revalidatePath('/staff/catalogue');
   return { ok: true };
 }
+
+export interface DeleteResult extends ActionResult { deleted?: number; withdrawn?: string[] }
+
+/**
+ * Removes a batch of products from the catalogue.
+ *
+ * Products that have been sold or moved between sites are withdrawn rather
+ * than deleted — an invoice has to keep naming what was on it — so this can
+ * come back partly done, and says which SKUs stayed.
+ */
+export async function deleteProducts(ids: string[]): Promise<DeleteResult> {
+  await requireStaff(['admin', 'accounts']);
+  if (!ids.length) return { ok: false, error: 'Nothing was selected' };
+
+  const sb = await supabaseServer();
+  const { data, error } = await sb.rpc('delete_products', { p_ids: ids });
+  if (error) return { ok: false, error: error.message };
+
+  const { deleted = 0, withdrawn = [] } =
+    (data ?? {}) as { deleted?: number; withdrawn?: string[] };
+
+  revalidatePath('/staff/catalogue');
+  revalidatePath('/portal');
+
+  const parts: string[] = [];
+  if (deleted) parts.push(`${deleted} product${deleted === 1 ? '' : 's'} deleted`);
+  if (withdrawn.length) {
+    parts.push(
+      `${withdrawn.length} withdrawn instead because ${withdrawn.length === 1 ? 'it appears' : 'they appear'} `
+      + `on past orders: ${withdrawn.slice(0, 8).join(', ')}`
+      + (withdrawn.length > 8 ? ` and ${withdrawn.length - 8} more` : ''),
+    );
+  }
+  return { ok: true, message: parts.join('. ') || 'Nothing to do', deleted, withdrawn };
+}
