@@ -25,6 +25,7 @@ const ITEMS: Item[] = [
   { href: '/staff/clients', label: 'Clients' },
   { href: '/staff/applications', label: 'Applications', roles: ['admin', 'accounts'], badge: 'applications' },
   { href: '/staff/locations', label: 'Locations', roles: ['admin'] },
+  { href: '/staff/team', label: 'Team', roles: ['admin'] },
   { href: '/staff/import', label: 'Import', roles: ['admin', 'accounts'] },
   { href: '/staff/outbox', label: 'Outbox' },
   { href: '/staff/settings', label: 'Settings', roles: ['admin', 'accounts'] },
