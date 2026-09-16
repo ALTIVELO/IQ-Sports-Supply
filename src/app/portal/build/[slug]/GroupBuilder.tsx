@@ -62,7 +62,6 @@ export default function GroupBuilder({
   const missing = steps.filter((s) => s.required && !chosen[s.id]);
   const net = picked.reduce((a, p) => a + Number(p.option.price) * p.step.qty, 0) * qty;
   const vat = (net * vatRate) / 100;
-  const backordered = picked.filter((p) => !p.option.in_stock);
 
   function addAll() {
     for (const p of picked) add(p.option.product_id, p.step.qty * qty);
@@ -140,7 +139,7 @@ export default function GroupBuilder({
             // Nothing to decide. Say what is included and move on rather than
             // making someone confirm the only answer.
             <div className="flex flex-wrap items-center gap-2 text-[13px]">
-              <Tag tone="green">Included</Tag>
+              <Tag tone="ink">Included</Tag>
               <span className="font-medium">{step.options[0].label}</span>
               <span className="num text-[11px] text-mute">{step.options[0].sku}</span>
               <span className="num text-mute ml-auto">
@@ -169,9 +168,6 @@ export default function GroupBuilder({
                         <span className="num text-[13px] font-semibold">
                           <Money value={Number(o.price)} />
                         </span>
-                        {o.in_stock
-                          ? <Tag tone="green">In stock</Tag>
-                          : <Tag tone="line">Back order</Tag>}
                       </span>
                     </span>
                   </label>
@@ -232,13 +228,10 @@ export default function GroupBuilder({
             Still to choose: {missing.map((s) => s.name).join(', ')}.
           </Notice>
         )}
-        {backordered.length > 0 && (
-          <Notice tone="info">
-            {backordered.length} of your choices {backordered.length === 1 ? 'is' : 'are'} not in
-            stock. We order {backordered.length === 1 ? 'it' : 'them'} from our supplier as soon
-            as the order is placed.
-          </Notice>
-        )}
+        <Notice tone="info">
+          Every part is ordered from our supplier as soon as you place the order.
+          We will confirm dates with you once we have them.
+        </Notice>
 
         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-3 pt-1">
           <label className="flex items-center gap-2 text-[12px] font-semibold mr-auto">
@@ -343,7 +336,6 @@ function AxisPicker({ step, chosenId, onChoose }: {
                         bg-parch rounded p-3">
           <span className="font-semibold">{current.label}</span>
           <span className="num text-[11px] text-mute">{current.sku}</span>
-          {current.in_stock ? <Tag tone="green">In stock</Tag> : <Tag tone="line">Back order</Tag>}
           <span className="num font-semibold ml-auto">
             <Money value={Number(current.price)} />
           </span>

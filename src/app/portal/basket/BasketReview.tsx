@@ -14,8 +14,10 @@ import type { CatalogueItem } from '../page';
  *
  * A trade order runs to dozens of lines, so it needs reviewing properly rather
  * than trusting a running total in a sticky bar. Quantities are editable here,
- * and anything on back order is called out before the order is placed — not
- * after, in the confirmation email.
+ * Nothing here says whether a line is in stock: every order is placed with our
+ * supplier when it arrives, so the answer would be the same on every line and
+ * telling a customer "back order" against all of it reads as a warning rather
+ * than as how the business works.
  */
 export default function BasketReview({
   products, vatRate, paymentDays, addresses,
@@ -48,7 +50,6 @@ export default function BasketReview({
 
   const net = lines.reduce((a, l) => a + l.qty * Number(l.product.price), 0);
   const vat = (net * vatRate) / 100;
-  const backordered = lines.filter((l) => !l.product.in_stock);
 
   function checkout() {
     setError('');
@@ -69,9 +70,8 @@ export default function BasketReview({
           Order {placed.number} placed
         </h1>
         <p className="text-[13px] text-mute mt-2 leading-relaxed">
-          Your invoice has been raised, due {paymentDays} days from today. Anything we did
-          not have on the shelf has gone straight to our supplier. Nothing is dispatched
-          until payment reaches us.
+          Your invoice has been raised, due {paymentDays} days from today. Your order has
+          gone straight to our supplier. Nothing is dispatched until payment reaches us.
         </p>
         {placed.warning && <div className="mt-3"><Notice tone="info">{placed.warning}</Notice></div>}
         <div className="flex flex-wrap gap-2 mt-4">
@@ -128,14 +128,10 @@ export default function BasketReview({
           {missing === 1 ? ' has' : ' have'} been left out of this order.
         </Notice>
       )}
-      {backordered.length > 0 && (
-        <Notice tone="info">
-          {backordered.length} line{backordered.length === 1 ? '' : 's'} not currently in
-          stock. We will order {backordered.length === 1 ? 'it' : 'them'} from our supplier
-          as soon as you place this order, and you will see an expected date on your back
-          order list once we have one.
-        </Notice>
-      )}
+      <Notice tone="info">
+        Everything is ordered from our supplier as soon as you place this order.
+        We will confirm dates with you once we have them.
+      </Notice>
 
       <div className="space-y-2">
         {lines.map(({ product, qty }) => (
@@ -146,12 +142,11 @@ export default function BasketReview({
               <div className="min-w-0 flex-1 basis-[calc(100%-4.5rem)] sm:basis-0">
                 <div className="num text-[12px] font-semibold text-mute">{product.sku}</div>
                 <div className="text-[13px] font-medium">{product.name}</div>
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  {product.category_name && <Tag tone="line">{product.category_name}</Tag>}
-                  {product.in_stock
-                    ? <Tag tone="green">In stock</Tag>
-                    : <Tag tone="line">Back order</Tag>}
-                </div>
+                {product.category_name && (
+                  <div className="mt-1">
+                    <Tag tone="line">{product.category_name}</Tag>
+                  </div>
+                )}
               </div>
 
               <div className="num text-[12px] text-mute w-[80px] text-right">

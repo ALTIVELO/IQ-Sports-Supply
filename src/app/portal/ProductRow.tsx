@@ -26,7 +26,6 @@ export default function ProductRow({ product }: { product: CatalogueItem }) {
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {product.brand && <span className="text-[11px] text-mute">{product.brand}</span>}
             {product.category_name && <Tag tone="line">{product.category_name}</Tag>}
-            {product.in_stock ? <Tag tone="green">In stock</Tag> : <Tag tone="line">Back order</Tag>}
           </div>
         </div>
 

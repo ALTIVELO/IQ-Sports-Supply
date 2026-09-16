@@ -76,7 +76,6 @@ export default function CollectionsBrowser({
               slug: 'other',
               name: 'Other',
               total: unfiled.length,
-              inStock: unfiled.filter((p) => p.in_stock).length,
               cover: unfiled.find((p) => p.image_url)?.image_url ?? null,
               childCount: 0,
             } : null}

@@ -5,7 +5,7 @@ import ProductImage from '@/components/ProductImage';
 import type { Node } from '@/lib/catalogue/tree';
 
 interface Tile {
-  slug: string; name: string; total: number; inStock: number;
+  slug: string; name: string; total: number;
   cover: string | null; childCount: number;
 }
 
@@ -16,7 +16,7 @@ export default function CollectionGrid({
 }: { nodes: Node[]; extra?: Tile | null }) {
   const tiles: Tile[] = [
     ...nodes.map((n) => ({
-      slug: n.slug, name: n.name, total: n.total, inStock: n.inStock,
+      slug: n.slug, name: n.name, total: n.total,
       cover: n.cover, childCount: n.children.length,
     })),
     ...(extra ? [extra] : []),
@@ -56,7 +56,6 @@ export default function CollectionGrid({
                     <>{t.childCount} collection{t.childCount === 1 ? '' : 's'} · </>
                   )}
                   {t.total} item{t.total === 1 ? '' : 's'}
-                  {t.inStock > 0 && <span className="text-success"> · {t.inStock} in stock</span>}
                 </>
               )}
             </div>

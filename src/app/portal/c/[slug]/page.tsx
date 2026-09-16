@@ -57,8 +57,7 @@ export default async function CollectionPage({
     const unfiled = products.filter((p) => !p.category_slug);
     if (unfiled.length === 0) notFound();
     return (
-      <Shell title="Other" trail={[]} count={unfiled.length}
-             inStock={unfiled.filter((p) => p.in_stock).length}>
+      <Shell title="Other" trail={[]} count={unfiled.length}>
         <CollectionSearch products={unfiled} />
         <BasketBar products={products} vatRate={vatRate} />
       </Shell>
@@ -92,7 +91,7 @@ export default async function CollectionPage({
   const shownGroups = groupsIn(wanted);
 
   return (
-    <Shell title={node.name} trail={trail} count={node.total} inStock={node.inStock}>
+    <Shell title={node.name} trail={trail} count={node.total}>
       {node.children.length > 0 && !showAll && (
         <>
           <CollectionGrid nodes={node.children} />
@@ -144,11 +143,11 @@ export default async function CollectionPage({
 }
 
 function Shell({
-  title, trail, count, inStock, children,
+  title, trail, count, children,
 }: {
   title: string;
   trail: { slug: string; name: string }[];
-  count: number; inStock: number;
+  count: number;
   children: React.ReactNode;
 }) {
   return (
@@ -167,7 +166,7 @@ function Shell({
         </nav>
         <h1 className="text-[26px] font-semibold tracking-[-0.02em] mt-1.5">{title}</h1>
         <p className="text-[13px] text-mute mt-1 num">
-          {count} product{count === 1 ? '' : 's'} · {inStock} in stock
+          {count} product{count === 1 ? '' : 's'}
         </p>
       </div>
       {children}

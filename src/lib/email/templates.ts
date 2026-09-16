@@ -18,11 +18,10 @@ export function orderConfirmation(o: {
   portalUrl: string;
 }) {
   const { net, vat, gross } = totals(o.lines, o.vatRate);
-  const bo = o.backordered.length
-    ? `\nOn back order — we have ordered these from our supplier and will confirm the availability date:\n${o.backordered
-        .map((l) => `  ${l.sku.padEnd(14)} ${String(l.qty).padStart(4)}  ${l.name}`)
-        .join('\n')}\n`
-    : '';
+  // Every line goes to our supplier when the order arrives, so singling some
+  // out as "on back order" would name the whole order and read as a problem.
+  const bo = '\nWe have placed this with our supplier and will confirm dates with you '
+           + 'once we have them.\n';
 
   return {
     subject: `${o.company} — order ${o.orderNumber} confirmed, invoice ${o.invoiceNumber}`,

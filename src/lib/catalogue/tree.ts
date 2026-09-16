@@ -12,7 +12,6 @@ export interface Node {
   own: number;
   /** Products here and in everything beneath. */
   total: number;
-  inStock: number;
   cover: string | null;
   children: Node[];
 }
@@ -33,12 +32,11 @@ export function buildTree(categories: CategoryRow[], products: CatalogueItem[]):
   const bySlug = new Map(categories.map((c) => [c.slug, c]));
   const byId = new Map(categories.map((c) => [c.id, c]));
 
-  const direct = new Map<string, { own: number; inStock: number; cover: string | null }>();
+  const direct = new Map<string, { own: number; cover: string | null }>();
   for (const p of products) {
     if (!p.category_slug) continue;
-    const entry = direct.get(p.category_slug) ?? { own: 0, inStock: 0, cover: null };
+    const entry = direct.get(p.category_slug) ?? { own: 0, cover: null };
     entry.own += 1;
-    if (p.in_stock) entry.inStock += 1;
     if (!entry.cover && p.image_url) entry.cover = p.image_url;
     direct.set(p.category_slug, entry);
   }
@@ -56,13 +54,12 @@ export function buildTree(categories: CategoryRow[], products: CatalogueItem[]):
       .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
       .map(build);
 
-    const own = direct.get(row.slug) ?? { own: 0, inStock: 0, cover: null };
+    const own = direct.get(row.slug) ?? { own: 0, cover: null };
     return {
       slug: row.slug,
       name: row.name,
       own: own.own,
       total: own.own + kids.reduce((a, k) => a + k.total, 0),
-      inStock: own.inStock + kids.reduce((a, k) => a + k.inStock, 0),
       cover: own.cover ?? kids.find((k) => k.cover)?.cover ?? null,
       children: kids,
     };

@@ -42,7 +42,6 @@ export default async function CurrentOrders() {
       ) : (
         current.map((o) => {
           const total = o.order_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
-          const backordered = o.order_lines.reduce((a, l) => a + l.bo_qty, 0);
           const live = o.invoices.filter((i) => !i.superseded);
 
           return (
@@ -50,7 +49,6 @@ export default async function CurrentOrders() {
               <div className="flex flex-wrap items-center gap-3">
                 <span className="num font-bold text-[15px]">{o.number}</span>
                 <span className="text-[12px] text-mute num">{fmtDate(o.date)}</span>
-                {backordered > 0 && <Tag tone="line">{backordered} on back order</Tag>}
                 <span className="num ml-auto font-semibold text-[14px]">
                   <Money value={total} /> <span className="text-mute font-normal text-[12px]">net</span>
                 </span>

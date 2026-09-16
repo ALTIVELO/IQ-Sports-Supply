@@ -8,7 +8,6 @@ const ITEMS = [
   ['/portal/orders', 'Current orders'],
   ['/portal/history', 'Order history'],
   ['/portal/invoices', 'Invoices'],
-  ['/portal/backorders', 'Back order'],
   ['/portal/shipping', 'Shipping'],
   ['/portal/account', 'Your account'],
 ] as const;

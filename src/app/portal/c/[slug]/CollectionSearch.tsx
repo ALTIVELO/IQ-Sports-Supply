@@ -9,14 +9,12 @@ import type { CatalogueItem } from '../../page';
  *  alone runs to fifty-odd part codes. */
 export default function CollectionSearch({ products }: { products: CatalogueItem[] }) {
   const [query, setQuery] = useState('');
-  const [inStockOnly, setInStockOnly] = useState(false);
 
   const results = useMemo(() => {
     const s = query.trim().toLowerCase();
     return products
-      .filter((p) => (inStockOnly ? p.in_stock : true))
       .filter((p) => (s ? `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(s) : true));
-  }, [query, inStockOnly, products]);
+  }, [query, products]);
 
   return (
     <div className="space-y-3">
@@ -28,13 +26,6 @@ export default function CollectionSearch({ products }: { products: CatalogueItem
           className="max-w-xs"
           aria-label="Search within this collection"
         />
-        <label className="flex items-center gap-1.5 text-[12px] whitespace-nowrap">
-          <input
-            type="checkbox" checked={inStockOnly}
-            onChange={(e) => setInStockOnly(e.target.checked)}
-          />
-          In stock only
-        </label>
         {results.length !== products.length && (
           <span className="text-[12px] text-mute num">
             {results.length} of {products.length}
