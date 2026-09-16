@@ -10,6 +10,7 @@ rm -rf .test-build
 # tree.ts imports a type from a Next page; the emit is still correct.
 $TSC src/lib/catalogue/*.ts --outDir .test-build/catalogue >/dev/null 2>&1
 $TSC src/lib/app-url.ts     --outDir .test-build/lib       >/dev/null 2>&1
+$TSC src/lib/login/*.ts     --outDir .test-build/login     >/dev/null 2>&1
 
 fail=0
 for f in tests/unit/*.test.mjs; do

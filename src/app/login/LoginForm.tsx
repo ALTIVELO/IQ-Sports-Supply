@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { Button, Notice } from '@/components/ui';
+import { signInError } from '@/lib/login/signInError';
 
 export default function LoginForm({ next, initialError }: { next?: string; initialError?: string }) {
   const [email, setEmail] = useState('');
@@ -23,7 +24,7 @@ export default function LoginForm({ next, initialError }: { next?: string; initi
     });
 
     if (error) {
-      setError(error.message);
+      setError(signInError(error));
       setState('idle');
     } else {
       setState('sent');
