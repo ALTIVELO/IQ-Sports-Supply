@@ -115,3 +115,22 @@ export function Notice({ tone = 'error', children }: {
   }[tone];
   return <div className={`border rounded px-3 py-2 text-[13px] ${styles}`}>{children}</div>;
 }
+
+/**
+ * How a record that no longer counts should read.
+ *
+ * A cancelled order and a superseded invoice are still shown — the number was
+ * issued and someone will ask about it — but nothing about them should be
+ * mistaken for live. Faded so the eye skips them in a list, struck through and
+ * red on the number itself, which is the part anyone quotes back at you.
+ *
+ * Applied at two levels deliberately: striking a whole row would put a line
+ * through the badge that says why, which is the one thing still worth reading.
+ */
+export const voidedRow = 'opacity-55';
+export const voidedText = 'line-through text-danger';
+
+/** Says what happened to it, and stays legible while the rest is struck out. */
+export function VoidTag({ children }: { children: React.ReactNode }) {
+  return <Tag tone="red">{children}</Tag>;
+}

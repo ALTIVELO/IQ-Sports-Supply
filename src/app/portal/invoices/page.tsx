@@ -1,6 +1,6 @@
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
-import { Card, Empty, Money, Tag } from '@/components/ui';
+import { Card, Empty, Money, Tag, VoidTag, voidedRow, voidedText } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -12,10 +12,9 @@ export default async function Invoices() {
 
   const { data: invoices } = await sb
     .from('invoices')
-    .select(`id, number, type, date, due_date, vat_rate, paid, paid_date,
+    .select(`id, number, type, date, due_date, vat_rate, paid, paid_date, superseded,
              orders(number), invoice_lines(qty, unit_price)`)
     .eq('client_id', user.clientId)
-    .eq('superseded', false)
     .order('date', { ascending: false })
     .limit(300);
 
@@ -23,16 +22,21 @@ export default async function Invoices() {
     i.invoice_lines.reduce((s, l) => s + l.qty * Number(l.unit_price), 0)
       * (1 + Number(i.vat_rate) / 100);
 
+  // A superseded invoice was withdrawn and replaced. It is still listed — the
+  // number was issued and the client may have it on file — but it is owed by
+  // nobody, so it counts towards nothing below.
+  const owed = (invoices ?? []).filter((i) => !i.superseded);
+
   // A proforma asks for nothing and a credit note is money the other way, so
   // neither belongs in what this client owes. Counting a proforma here would
   // bill them twice for the same goods once the real invoice follows.
-  const outstanding = (invoices ?? [])
+  const outstanding = owed
     .filter((i) => !i.paid && i.type !== 'proforma' && i.type !== 'credit')
     .reduce((a, i) => a + gross(i), 0)
-    - (invoices ?? []).filter((i) => i.type === 'credit').reduce((a, i) => a + gross(i), 0);
+    - owed.filter((i) => i.type === 'credit').reduce((a, i) => a + gross(i), 0);
 
-  const overdue = (i: { paid: boolean; due_date: string; type: string }) =>
-    !i.paid && i.type !== 'proforma' && i.type !== 'credit'
+  const overdue = (i: { paid: boolean; due_date: string; type: string; superseded: boolean }) =>
+    !i.superseded && !i.paid && i.type !== 'proforma' && i.type !== 'credit'
       && new Date(i.due_date) < new Date();
 
   return (
@@ -63,27 +67,33 @@ export default async function Invoices() {
                 {invoices.map((i) => {
                   const net = i.invoice_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
                   return (
-                    <tr key={i.id}>
-                      <td className="num font-semibold">{i.number}</td>
+                    <tr key={i.id} className={i.superseded ? voidedRow : ''}>
+                      <td className={`num font-semibold ${i.superseded ? voidedText : ''}`}>
+                        {i.number}
+                      </td>
                       <td className="num">{(i.orders as unknown as { number: string })?.number}</td>
                       <td className="num whitespace-nowrap">{fmtDate(i.date)}</td>
                       <td className="num whitespace-nowrap">
-                        {i.type === 'proforma' || i.type === 'credit' ? '—' : fmtDate(i.due_date)}
+                        {i.superseded || i.type === 'proforma' || i.type === 'credit'
+                          ? '—' : fmtDate(i.due_date)}
                       </td>
                       <td className="num text-right"><Money value={net} /></td>
-                      <td className="num text-right font-semibold">
+                      <td className={`num text-right font-semibold
+                                      ${i.superseded ? 'line-through' : ''}`}>
                         <Money value={net * (1 + Number(i.vat_rate) / 100)} />
                       </td>
                       <td className="whitespace-nowrap">
-                        {i.type === 'proforma'
-                          ? <Tag tone="line">proforma · nothing to pay</Tag>
-                          : i.type === 'credit'
-                            ? <Tag tone="green">credit note</Tag>
-                            : i.paid
-                              ? <Tag tone="green">paid {fmtDate(i.paid_date)}</Tag>
-                              : overdue(i)
-                                ? <Tag tone="red">overdue</Tag>
-                                : <Tag tone="line">due</Tag>}
+                        {i.superseded
+                          ? <VoidTag>withdrawn</VoidTag>
+                          : i.type === 'proforma'
+                            ? <Tag tone="line">proforma · nothing to pay</Tag>
+                            : i.type === 'credit'
+                              ? <Tag tone="green">credit note</Tag>
+                              : i.paid
+                                ? <Tag tone="green">paid {fmtDate(i.paid_date)}</Tag>
+                                : overdue(i)
+                                  ? <Tag tone="red">overdue</Tag>
+                                  : <Tag tone="line">due</Tag>}
                       </td>
                       <td className="text-right">
                         <a

@@ -18,14 +18,18 @@ export default async function InvoicesPage({
     .select(`id, number, type, date, due_date, vat_rate, paid, paid_date, packed, shipped,
              ready_to_pack, superseded, xero_id, xero_status, xero_error, exported,
              clients(name), orders(number), invoice_lines(qty, unit_price)`)
-    .eq('superseded', false)
     .order('date', { ascending: false })
     .order('number', { ascending: false })
     .limit(300);
 
-  if (status === 'unpaid') query = query.eq('paid', false);
-  if (status === 'paid') query = query.eq('paid', true);
-  if (status === 'unsynced') query = query.neq('xero_status', 'synced');
+  // A superseded invoice is not unpaid, paid or awaiting Xero — it was
+  // withdrawn. It belongs in the full list, where its number can be found,
+  // and nowhere else.
+  if (status === 'unpaid') query = query.eq('superseded', false).eq('paid', false);
+  if (status === 'paid') query = query.eq('superseded', false).eq('paid', true);
+  if (status === 'unsynced') {
+    query = query.eq('superseded', false).neq('xero_status', 'synced');
+  }
 
   const { data: invoices } = await query;
 

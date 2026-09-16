@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Button, Card, Money, Notice, Tag } from '@/components/ui';
+import { Button, Card, Money, Notice, Tag, VoidTag,
+         voidedRow, voidedText } from '@/components/ui';
 import { fmtDate, today } from '@/lib/format';
 import Timeline from '@/components/Timeline';
 import { splitInvoice, editOrder, cancelOrder, deleteOrder,
@@ -79,21 +80,28 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
   }
 
   return (
-    <Card>
+    <Card className={cancelled ? voidedRow : ''}>
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => setOpen(!open)}
-          className="num text-[14px] font-bold hover:text-flame-text"
+          className={`num text-[14px] font-bold hover:text-flame-text
+                      ${cancelled ? voidedText : ''}`}
           aria-expanded={open}
         >
           {order.number}
         </button>
-        <span className="text-[13px]">{order.clients?.name}</span>
+        <span className={`text-[13px] ${cancelled ? 'line-through' : ''}`}>
+          {order.clients?.name}
+        </span>
         <span className="text-[12px] text-mute num">{fmtDate(order.date)}</span>
         {order.locations && <Tag tone="line">{order.locations.name}</Tag>}
-        {backordered > 0
-          ? <Tag tone="red">{backordered} on back order</Tag>
-          : <Tag tone="green">Fully allocated</Tag>}
+        {/* A cancelled order is not awaiting stock or fully allocated; it is
+            simply over, and saying either of those would read as live. */}
+        {cancelled
+          ? <VoidTag>cancelled</VoidTag>
+          : backordered > 0
+            ? <Tag tone="red">{backordered} on back order</Tag>
+            : <Tag tone="green">Fully allocated</Tag>}
         {live.map((i) => (
           <Tag key={i.id} tone={i.shipped ? 'green' : i.paid ? 'accent' : 'line'}>
             {i.number}

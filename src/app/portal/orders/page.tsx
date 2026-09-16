@@ -1,6 +1,6 @@
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
-import { Card, Empty, Money, Tag } from '@/components/ui';
+import { Card, Empty, Money, VoidTag, voidedRow, voidedText } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 import Timeline from '@/components/Timeline';
 import type { OrderEvent } from '@/lib/types';
@@ -23,10 +23,18 @@ export default async function CurrentOrders() {
     .limit(100);
 
   // "Not yet fully delivered" = at least one live invoice still unshipped.
-  const current = (orders ?? []).filter((o) => {
-    const live = o.invoices.filter((i) => !i.superseded);
-    return live.length === 0 || live.some((i) => !i.shipped);
-  });
+  //
+  // A cancelled order has no live invoices at all, so it lands here too — and
+  // it should: a client whose order was cancelled needs to see that said
+  // plainly, not find the order silently missing. It sinks below everything
+  // still in progress so it never sits on top of live work.
+  const current = (orders ?? [])
+    .filter((o) => {
+      const live = o.invoices.filter((i) => !i.superseded);
+      return live.length === 0 || live.some((i) => !i.shipped);
+    })
+    .sort((a, b) =>
+      Number(a.status === 'cancelled') - Number(b.status === 'cancelled'));
 
   return (
     <div className="space-y-4">
@@ -43,14 +51,21 @@ export default async function CurrentOrders() {
         current.map((o) => {
           const total = o.order_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
           const live = o.invoices.filter((i) => !i.superseded);
+          const cancelled = o.status === 'cancelled';
 
           return (
-            <Card key={o.id}>
+            <Card key={o.id} className={cancelled ? voidedRow : ''}>
               <div className="flex flex-wrap items-center gap-3">
-                <span className="num font-bold text-[15px]">{o.number}</span>
+                <span className={`num font-bold text-[15px] ${cancelled ? voidedText : ''}`}>
+                  {o.number}
+                </span>
                 <span className="text-[12px] text-mute num">{fmtDate(o.date)}</span>
+                {cancelled && <VoidTag>cancelled</VoidTag>}
                 <span className="num ml-auto font-semibold text-[14px]">
-                  <Money value={total} /> <span className="text-mute font-normal text-[12px]">net</span>
+                  {/* The figure is struck, not the word after it: nothing is
+                      owed on a cancelled order. */}
+                  <Money value={total} className={cancelled ? 'line-through' : ''} />{' '}
+                  <span className="text-mute font-normal text-[12px]">net</span>
                 </span>
               </div>
 

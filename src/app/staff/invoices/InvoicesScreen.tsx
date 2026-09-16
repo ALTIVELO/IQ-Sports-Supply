@@ -2,7 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
+import { Button, Card, Empty, Money, Notice, Tag, VoidTag,
+         voidedRow, voidedText } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 import { markPaid, markUnpaid } from '../actions';
 import type { ActionResult } from '../actions';
@@ -13,6 +14,7 @@ interface Inv {
   id: string; number: string; type: InvoiceType;
   date: string; due_date: string; vat_rate: number;
   paid: boolean; paid_date: string | null; packed: boolean; shipped: boolean;
+  superseded: boolean;
   xero_id: string | null; xero_status: 'not_synced' | 'synced' | 'error';
   xero_error: string | null; exported: boolean;
   clients: { name: string }; orders: { number: string };
@@ -106,23 +108,30 @@ export default function InvoicesScreen({
                 {invoices.map((inv) => {
                   const n = net(inv);
                   return (
-                    <tr key={inv.id}>
-                      <td className="num font-semibold">{inv.number}</td>
+                    <tr key={inv.id} className={inv.superseded ? voidedRow : ''}>
+                      <td className={`num font-semibold ${inv.superseded ? voidedText : ''}`}>
+                        {inv.number}
+                      </td>
                       <td>{inv.clients?.name}</td>
                       <td className="num">{inv.orders?.number}</td>
                       <td>
-                        {inv.type === 'full'
-                          ? <Tag tone="line">full</Tag>
-                          : <Tag tone={inv.type === 'backorder' ? 'red' : 'line'}>{inv.type}</Tag>}
+                        {inv.superseded
+                          ? <VoidTag>withdrawn</VoidTag>
+                          : inv.type === 'full'
+                            ? <Tag tone="line">full</Tag>
+                            : <Tag tone={inv.type === 'backorder' ? 'red' : 'line'}>{inv.type}</Tag>}
                       </td>
                       <td className="num whitespace-nowrap">{fmtDate(inv.date)}</td>
                       <td className="num whitespace-nowrap">{fmtDate(inv.due_date)}</td>
                       <td className="num text-right"><Money value={n} /></td>
-                      <td className="num text-right font-semibold">
+                      <td className={`num text-right font-semibold
+                                      ${inv.superseded ? 'line-through' : ''}`}>
                         <Money value={n * (1 + Number(inv.vat_rate) / 100)} />
                       </td>
                       <td className="whitespace-nowrap">
-                        {inv.type === 'proforma'
+                        {inv.superseded
+                          ? <span className="text-[12px] text-mute">—</span>
+                          : inv.type === 'proforma'
                           ? <Tag tone="line">nothing to pay</Tag>
                           : inv.type === 'credit'
                             ? <Tag tone="green">credit</Tag>
@@ -131,9 +140,10 @@ export default function InvoicesScreen({
                               : <Tag tone="red">unpaid</Tag>}
                       </td>
                       <td>
-                        {inv.xero_status === 'synced' && <Tag tone="green">synced</Tag>}
-                        {inv.xero_status === 'error' && <Tag tone="red">error</Tag>}
-                        {inv.xero_status === 'not_synced' &&
+                        {inv.superseded && <span className="text-[12px] text-mute">—</span>}
+                        {!inv.superseded && inv.xero_status === 'synced' && <Tag tone="green">synced</Tag>}
+                        {!inv.superseded && inv.xero_status === 'error' && <Tag tone="red">error</Tag>}
+                        {!inv.superseded && inv.xero_status === 'not_synced' &&
                           (inv.exported ? <Tag tone="line">exported</Tag> : <Tag tone="line">new</Tag>)}
                       </td>
                       <td>
@@ -144,7 +154,7 @@ export default function InvoicesScreen({
                           >
                             PDF
                           </a>
-                          {inv.type === 'proforma' || inv.type === 'credit' ? null
+                          {inv.superseded || inv.type === 'proforma' || inv.type === 'credit' ? null
                             : !inv.paid ? (
                             <Button small kind="ghost" disabled={pending}
                               onClick={() => run(() => markPaid(inv.id, null))}>

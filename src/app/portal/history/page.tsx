@@ -1,6 +1,6 @@
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
-import { Card, Empty, Money, Tag } from '@/components/ui';
+import { Card, Empty, Money, Tag, VoidTag, voidedRow, voidedText } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -56,18 +56,26 @@ export default async function OrderHistory({
           const total = o.order_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
           const live = o.invoices.filter((i) => !i.superseded);
           const allShipped = live.length > 0 && live.every((i) => i.shipped);
+          const cancelled = o.status === 'cancelled';
 
           return (
-            <Card key={o.id}>
+            <Card key={o.id} className={cancelled ? voidedRow : ''}>
               <details>
                 <summary className="cursor-pointer list-none flex flex-wrap items-center gap-3">
-                  <span className="num font-bold">{o.number}</span>
+                  <span className={`num font-bold ${cancelled ? voidedText : ''}`}>{o.number}</span>
                   <span className="text-[12px] text-mute num">{fmtDate(o.date)}</span>
                   <span className="text-[12px] text-mute">
                     {o.order_lines.length} line{o.order_lines.length === 1 ? '' : 's'}
                   </span>
-                  {allShipped ? <Tag tone="green">Delivered</Tag> : <Tag tone="line">In progress</Tag>}
-                  <span className="num ml-auto font-semibold"><Money value={total} /></span>
+                  {/* A cancelled order is neither delivered nor in progress. */}
+                  {cancelled
+                    ? <VoidTag>cancelled</VoidTag>
+                    : allShipped
+                      ? <Tag tone="green">Delivered</Tag>
+                      : <Tag tone="line">In progress</Tag>}
+                  <span className={`num ml-auto font-semibold ${cancelled ? 'line-through' : ''}`}>
+                    <Money value={total} />
+                  </span>
                 </summary>
 
                 <div className="overflow-x-auto mt-3">
