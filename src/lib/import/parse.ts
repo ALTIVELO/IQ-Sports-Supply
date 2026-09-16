@@ -48,6 +48,7 @@ export function guessMapping(header: string[], fields: (keyof ColumnMapping)[]):
     location: /\b(location|site|warehouse|depot|branch)\b/i,
     qty: /\b(qty|quantity|stock|on\s*hand|units)\b/i,
     image_url: /\b(image|photo|picture|img)\s*(url|link)?\b/i,
+    category: /\b(categor(y|ies)|collection|group|type|department|section)\b/i,
   };
 
   const mapping: ColumnMapping = {};
@@ -75,7 +76,37 @@ export function guessMapping(header: string[], fields: (keyof ColumnMapping)[]):
 }
 
 /**
- * Pulls mapped values out of the grid, skipping the header and any blank rows.
+ * A supplier price list is a printed document, not a data file: a title, a
+ * section heading every so often, and the column headers repeated underneath
+ * each one. None of those are products, and none should be reported as bad
+ * rows either — there are dozens of them in a real sheet, and an import that
+ * lists them as errors buries the errors that matter.
+ *
+ * Both shapes are recognised without guessing at content: a heading fills one
+ * cell of a row and nothing else, and a repeated header row says again what
+ * the header row above already said.
+ */
+export function isStructuralRow(
+  values: Record<string, string>,
+  headerLabels: string[],
+): boolean {
+  const filled = Object.values(values).filter((v) => v !== '');
+  if (filled.length === 0) return true;
+
+  // "BOTTOM BRACKETS" sitting alone on its row. One populated cell and no
+  // price is a heading, never a priced product.
+  if (filled.length === 1 && !values.price) return true;
+
+  // "CODE | DESCRIPTION | PRICE" appearing again under a heading.
+  const labels = new Set(headerLabels.map((h) => h.trim().toLowerCase()).filter(Boolean));
+  const looksLikeHeader = filled.length > 1
+    && filled.every((v) => labels.has(v.trim().toLowerCase()));
+  return looksLikeHeader;
+}
+
+/**
+ * Pulls mapped values out of the grid, skipping the header, blank rows, and
+ * the section headings and repeated headers a supplier's own sheet is full of.
  * Tolerates a header row that is not the first row of the sheet.
  */
 export function extractRows(
@@ -83,19 +114,19 @@ export function extractRows(
   headerRow: number,
   mapping: ColumnMapping,
 ): Record<string, string>[] {
+  // headerRow is 1-based, as the screen shows it, so the header cells are the
+  // row before it and the body starts at that same index.
+  const headerLabels = grid[headerRow - 1] ?? [];
   const body = grid.slice(headerRow);
   const fields = Object.entries(mapping).filter(([, letter]) => letter) as [string, string][];
 
   const rows: Record<string, string>[] = [];
   for (const row of body) {
     const values: Record<string, string> = {};
-    let hasContent = false;
     for (const [field, letter] of fields) {
-      const value = (row[colIndex(letter)] ?? '').toString().trim();
-      values[field] = value;
-      if (value) hasContent = true;
+      values[field] = (row[colIndex(letter)] ?? '').toString().trim();
     }
-    if (hasContent) rows.push(values);
+    if (!isStructuralRow(values, headerLabels)) rows.push(values);
   }
   return rows;
 }

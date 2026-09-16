@@ -21,6 +21,7 @@ const FIELDS: Record<ImportScope, { key: keyof ColumnMapping; label: string; req
     { key: 'name', label: 'Product name', required: false },
     { key: 'brand', label: 'Brand', required: false },
     { key: 'price', label: 'Price', required: true },
+    { key: 'category', label: 'Category', required: false },
     { key: 'image_url', label: 'Image URL', required: false },
   ],
   clients: [

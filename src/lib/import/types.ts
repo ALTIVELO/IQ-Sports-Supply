@@ -4,7 +4,10 @@ export type ImportScope = 'prices' | 'clients' | 'stock';
 
 /** One mapped row lifted out of a sheet, already trimmed. */
 export interface PriceRow {
-  sku: string; name: string; brand: string; price: number; image_url?: string;
+  sku: string; name: string; brand: string; price: number;
+  image_url?: string;
+  /** A category slug or name given by the sheet, overriding the classifier. */
+  category?: string;
 }
 export interface ClientRow {
   name: string; email: string; tier: string; vat_no: string; address: string; phone: string;
@@ -31,6 +34,7 @@ export interface PricePreview {
 
 export interface ColumnMapping {
   sku?: string; name?: string; brand?: string; price?: string; image_url?: string;
+  category?: string;
   email?: string; tier?: string; vat_no?: string; address?: string; phone?: string;
   location?: string; qty?: string;
 }

@@ -158,20 +158,28 @@ export async function applyPrices(input: {
       // Dedupe within the sheet before inserting.
       const unique = new Map(toCreate.map((r) => [norm(r.sku), r]));
 
-      // Categories come from the description, so clients can filter the
-      // catalogue without anyone maintaining a category column in Excel.
-      const { data: categories } = await sb.from('categories').select('id, slug');
+      // A category column in the sheet is taken at its word — a supplier's own
+      // section headings know more than any classifier can read out of a line
+      // like "RTCL900LJ". Where the sheet says nothing, the description is
+      // classified, so nobody has to maintain a category column in Excel.
+      const { data: categories } = await sb.from('categories').select('id, slug, name');
       const categoryId = new Map((categories ?? []).map((c) => [c.slug, c.id]));
+      const byLabel = new Map((categories ?? []).flatMap((c) => [
+        [norm(c.slug), c.id] as const,
+        [norm(c.name), c.id] as const,
+      ]));
 
       const { data: inserted, error } = await sb.from('products')
         .insert([...unique.values()].map((r) => {
-          const slug = classifyProduct({ name: r.name, brand: r.brand, sku: r.sku });
+          const given = r.category?.trim();
+          const givenId = given ? byLabel.get(norm(given)) ?? null : null;
+          const slug = givenId ? null : classifyProduct({ name: r.name, brand: r.brand, sku: r.sku });
           const image = r.image_url?.trim();
           return {
             sku: r.sku.trim(),
             name: r.name?.trim() || r.sku.trim(),
             brand: r.brand?.trim() || null,
-            category_id: slug ? categoryId.get(slug) ?? null : null,
+            category_id: givenId ?? (slug ? categoryId.get(slug) ?? null : null),
             // Only accept a real URL; a sheet often carries a filename here,
             // which would render as a broken image.
             image_url: image && /^https?:\/\//i.test(image) ? image : null,

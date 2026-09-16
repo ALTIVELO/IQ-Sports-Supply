@@ -9,4 +9,6 @@ next-env.d.ts
 
 # Generated supplier price files — these are commercial data, not source.
 *-catalogue-*.csv
+*Price_List*.csv
+*price-list*.csv
 .test-build/

@@ -117,6 +117,17 @@ export const CATEGORY_BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
  * nobody thinks to look for it.
  */
 const COMPOUND_RULES: { slug: string; patterns: RegExp[] }[] = [
+  // A complete groupset is described by what is in it — "R9200 — with Rotors",
+  // "with Powermeter Chainset" — so every component word in the line is a trap.
+  // A full series name spelled out, next to a build or bundle word, is the
+  // giveaway; the component rows themselves use trade shorthand ("D/Ace",
+  // "C/SET") and never read like this.
+  { slug: 'groupsets', patterns: [
+      /\b(dura-?ace|ultegra|105|grx|tiagra|sora|claris|xtr|slx|deore|rival|force|red|apex)\b[^|]*\b(standard\s+)?build\b/i,
+      /\b(dura-?ace|ultegra|105|grx|tiagra|sora|claris|xtr|slx|deore|rival|force|red|apex)\b[^|]*\bwith\s+(power\s*meter|powermeter|rotors?|chainset|cassette)\b/i,
+      /\b(complete|full)\s+group\s*set\b/i,
+  ]},
+
   // Supplier order forms are written in trade shorthand — "STI LVR", "RR MECH",
   // "C/SET", "CASS" — which no general keyword rule would catch. These come
   // first because the abbreviations are unambiguous where the long words are
