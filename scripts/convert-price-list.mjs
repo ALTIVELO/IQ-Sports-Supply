@@ -10,7 +10,7 @@
  * headers repeated under each heading, and whole sections where the
  * description column is simply empty. This flattens all of that into
  *
- *   sku,name,brand,category,price
+ *   name,sku,price,brand,category
  *
  * Two things are worth knowing about what it does NOT do. It never invents a
  * specification: where the supplier gives no description, the name is built
@@ -152,7 +152,9 @@ async function main() {
     }
   }
 
-  const header = ['sku', 'name', 'brand', 'category', 'price'];
+  // Ordered for reading rather than for the importer, which matches columns by
+  // their heading wherever they sit: name first, then the code and the money.
+  const header = ['name', 'sku', 'price', 'brand', 'category'];
   const csv = [header.join(','),
     ...rows.map((r) => header.map((h) => csvCell(r[h])).join(','))].join('\n') + '\n';
   // Byte-order mark: without it both Excel and the importer's own reader fall
