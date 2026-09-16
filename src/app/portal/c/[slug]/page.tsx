@@ -6,6 +6,7 @@ import { Card, Empty } from '@/components/ui';
 import { buildTree, findNode, slugsUnder, type CategoryRow } from '@/lib/catalogue/tree';
 import CollectionGrid from '../../CollectionGrid';
 import CollectionSearch from './CollectionSearch';
+import GroupCards, { type GroupCard } from '../../GroupCards';
 import BasketBar from '../../BasketBar';
 import type { CatalogueItem } from '../../page';
 
@@ -34,7 +35,8 @@ export default async function CollectionPage({
   const user = await requireClient();
   const sb = await supabaseServer();
 
-  const [{ data: rows }, { data: categories }, { data: client }, { data: settings }] =
+  const [{ data: rows }, { data: categories }, { data: client }, { data: settings },
+         { data: groupRows }] =
     await Promise.all([
       sb.from('client_catalogue')
         .select('id, sku, name, brand, price, in_stock, image_url, category_slug, category_name')
@@ -42,6 +44,9 @@ export default async function CollectionPage({
       sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),
       sb.from('clients').select('vat_exempt').eq('id', user.clientId).single(),
       sb.from('settings').select('vat_rate').eq('id', 1).single(),
+      sb.from('product_groups')
+        .select('slug, name, brand, image_url, categories(slug), product_group_steps(id, product_group_options(id))')
+        .eq('active', true).order('sort'),
     ]);
 
   const products = (rows ?? []) as CatalogueItem[];
@@ -60,6 +65,20 @@ export default async function CollectionPage({
     );
   }
 
+  type RawGroup = {
+    slug: string; name: string; brand: string | null; image_url: string | null;
+    categories: { slug: string } | null;
+    product_group_steps: { id: string; product_group_options: { id: string }[] }[];
+  };
+  const allGroups = ((groupRows ?? []) as unknown as RawGroup[]).map((g) => ({
+    slug: g.slug, name: g.name, brand: g.brand, image_url: g.image_url,
+    categorySlug: g.categories?.slug ?? null,
+    stepCount: g.product_group_steps.length,
+    optionCount: g.product_group_steps.reduce((a, s) => a + s.product_group_options.length, 0),
+  }));
+  const groupsIn = (slugs: Set<string>): GroupCard[] =>
+    allGroups.filter((g) => g.categorySlug && slugs.has(g.categorySlug));
+
   const tree = buildTree((categories ?? []) as CategoryRow[], products);
   const found = findNode(tree, slug);
   if (!found) notFound();
@@ -68,6 +87,9 @@ export default async function CollectionPage({
   const showAll = all === '1' || node.children.length === 0;
   const wanted = new Set(showAll ? slugsUnder(node) : [node.slug]);
   const shown = products.filter((p) => p.category_slug && wanted.has(p.category_slug));
+  // Groups count as things we list here, so "nothing listed yet" must not
+  // appear directly underneath a row of them.
+  const shownGroups = groupsIn(wanted);
 
   return (
     <Shell title={node.name} trail={trail} count={node.total} inStock={node.inStock}>
@@ -98,8 +120,10 @@ export default async function CollectionPage({
         </>
       )}
 
+      <GroupCards groups={shownGroups} />
+
       {shown.length === 0 ? (
-        node.children.length === 0 ? (
+        node.children.length === 0 && shownGroups.length === 0 ? (
           <Card>
             <Empty>
               We supply {node.name.toLowerCase()}, but none are listed here yet. Ask us

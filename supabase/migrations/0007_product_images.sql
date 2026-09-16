@@ -33,7 +33,10 @@ create policy product_images_staff_delete on storage.objects for delete
 
 -- The client-facing view gains the image. Still security_invoker, and the tier
 -- is still pinned to the signed-in client's own.
-drop view if exists client_catalogue;
+-- cascade: later migrations build views on top of this one, and a plain
+-- drop fails the moment one exists — which is every re-run of setup.sql.
+-- Each dependent view is recreated by its own migration further down.
+drop view if exists client_catalogue cascade;
 create view client_catalogue
 with (security_invoker = true) as
 select

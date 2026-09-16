@@ -72,7 +72,10 @@ on conflict (slug) do update set name = excluded.name, sort = excluded.sort;
 -- an arbitrary tier's prices back, silently and plausibly. Naming the tier
 -- makes the view correct on its own, with RLS as a second line rather than the
 -- only one. Availability is still only ever a boolean.
-drop view if exists client_catalogue;
+-- cascade: later migrations build views on top of this one, and a plain
+-- drop fails the moment one exists — which is every re-run of setup.sql.
+-- Each dependent view is recreated by its own migration further down.
+drop view if exists client_catalogue cascade;
 create view client_catalogue
 with (security_invoker = true) as
 select

@@ -167,7 +167,10 @@ $$;
 -- What a client is allowed to know about availability: a boolean, never a
 -- count, and never per-location. Security-invoker so tier_prices RLS still
 -- restricts each client to their own tier.
-drop view if exists client_catalogue;
+-- cascade: later migrations build views on top of this one, and a plain
+-- drop fails the moment one exists — which is every re-run of setup.sql.
+-- Each dependent view is recreated by its own migration further down.
+drop view if exists client_catalogue cascade;
 create view client_catalogue
 with (security_invoker = true) as
 select
