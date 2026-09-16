@@ -102,17 +102,33 @@ end $$;
 do $$
 declare v_std numeric; v_pm numeric;
 begin
+  -- Priced as the supplier's own bundle is specified. Wire length is a choice
+  -- now, so the combination has to be named: their bundle is a 900 and a 1000,
+  -- and picking two 900s would come to 20p less, correctly.
   select sum(price) into v_std from (
     select (select tp.price from product_group_options o
               join products p on p.id=o.product_id
               join lateral (select price from tier_prices
                              where product_id=p.id and tier_id=(select id from tiers where name='Distributor')
                              limit 1) tp on true
-             where o.step_id=s.id limit 1) as price
+             where o.step_id=s.id
+               and (s.name <> 'Second Di2 wire' or o.label = '1000mm')
+               and (s.name <> 'First Di2 wire'  or o.label = '900mm')
+             limit 1) as price
       from product_group_steps s
      where s.group_id=(select id from product_groups where slug='test-power') and s.required) x;
 
   -- 1209.87 standard, less the 177.88 chainset, plus the 496.80 power one.
   perform assert_eq(v_std, 1528.79::numeric,
                     'the power build comes to the published bundle price');
+
+  -- And the choice actually changes the price, rather than being decorative.
+  perform assert_eq(
+    (select count(distinct tp.price)::integer from product_group_options o
+       join product_group_steps s on s.id=o.step_id
+       join products p on p.id=o.product_id
+       join lateral (select price from tier_prices where product_id=p.id limit 1) tp on true
+      where s.name='First Di2 wire'
+        and s.group_id=(select id from product_groups where slug='test-power')),
+    2, 'the two wire lengths are priced differently');
 end $$;
