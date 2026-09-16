@@ -49,6 +49,10 @@ export function guessMapping(header: string[], fields: (keyof ColumnMapping)[]):
     qty: /\b(qty|quantity|stock|on\s*hand|units)\b/i,
     image_url: /\b(image|photo|picture|img)\s*(url|link)?\b/i,
     category: /\b(categor(y|ies)|collection|group|type|department|section)\b/i,
+    client: /\b(client|customer|account|company|buyer)\b/i,
+    date: /\b(date|ordered|placed|when)\b/i,
+    reference: /\b(ref(erence)?|order\s*(no|number|ref)?|our\s*ref|invoice\s*(no|number)?)\b/i,
+    unit_price: /\b(unit\s*price|price\s*each|each|net\s*price|line\s*price)\b/i,
   };
 
   const mapping: ColumnMapping = {};

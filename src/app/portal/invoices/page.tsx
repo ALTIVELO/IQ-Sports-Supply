@@ -19,15 +19,21 @@ export default async function Invoices() {
     .order('date', { ascending: false })
     .limit(300);
 
-  const outstanding = (invoices ?? [])
-    .filter((i) => !i.paid)
-    .reduce((a, i) => {
-      const net = i.invoice_lines.reduce((s, l) => s + l.qty * Number(l.unit_price), 0);
-      return a + net * (1 + Number(i.vat_rate) / 100);
-    }, 0);
+  const gross = (i: { vat_rate: number; invoice_lines: { qty: number; unit_price: number }[] }) =>
+    i.invoice_lines.reduce((s, l) => s + l.qty * Number(l.unit_price), 0)
+      * (1 + Number(i.vat_rate) / 100);
 
-  const overdue = (i: { paid: boolean; due_date: string }) =>
-    !i.paid && new Date(i.due_date) < new Date();
+  // A proforma asks for nothing and a credit note is money the other way, so
+  // neither belongs in what this client owes. Counting a proforma here would
+  // bill them twice for the same goods once the real invoice follows.
+  const outstanding = (invoices ?? [])
+    .filter((i) => !i.paid && i.type !== 'proforma' && i.type !== 'credit')
+    .reduce((a, i) => a + gross(i), 0)
+    - (invoices ?? []).filter((i) => i.type === 'credit').reduce((a, i) => a + gross(i), 0);
+
+  const overdue = (i: { paid: boolean; due_date: string; type: string }) =>
+    !i.paid && i.type !== 'proforma' && i.type !== 'credit'
+      && new Date(i.due_date) < new Date();
 
   return (
     <div className="space-y-4">
@@ -61,17 +67,23 @@ export default async function Invoices() {
                       <td className="num font-semibold">{i.number}</td>
                       <td className="num">{(i.orders as unknown as { number: string })?.number}</td>
                       <td className="num whitespace-nowrap">{fmtDate(i.date)}</td>
-                      <td className="num whitespace-nowrap">{fmtDate(i.due_date)}</td>
+                      <td className="num whitespace-nowrap">
+                        {i.type === 'proforma' || i.type === 'credit' ? '—' : fmtDate(i.due_date)}
+                      </td>
                       <td className="num text-right"><Money value={net} /></td>
                       <td className="num text-right font-semibold">
                         <Money value={net * (1 + Number(i.vat_rate) / 100)} />
                       </td>
                       <td className="whitespace-nowrap">
-                        {i.paid
-                          ? <Tag tone="green">paid {fmtDate(i.paid_date)}</Tag>
-                          : overdue(i)
-                            ? <Tag tone="red">overdue</Tag>
-                            : <Tag tone="line">due</Tag>}
+                        {i.type === 'proforma'
+                          ? <Tag tone="line">proforma · nothing to pay</Tag>
+                          : i.type === 'credit'
+                            ? <Tag tone="green">credit note</Tag>
+                            : i.paid
+                              ? <Tag tone="green">paid {fmtDate(i.paid_date)}</Tag>
+                              : overdue(i)
+                                ? <Tag tone="red">overdue</Tag>
+                                : <Tag tone="line">due</Tag>}
                       </td>
                       <td className="text-right">
                         <a

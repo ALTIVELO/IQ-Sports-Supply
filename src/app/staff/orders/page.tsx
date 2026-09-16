@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function OrdersPage({
   searchParams,
 }: { searchParams: Promise<{ q?: string; open?: string }> }) {
-  await requireStaff();
+  const user = await requireStaff();
   const { q, open } = await searchParams;
   const sb = await supabaseServer();
 
@@ -16,7 +16,8 @@ export default async function OrdersPage({
     .from('orders')
     .select(`id, number, date, status, notes,
              clients(id, name), locations(name),
-             order_lines(id, sku, name, qty, unit_price, alloc_qty, bo_qty, po_qty),
+             cancelled_reason,
+             order_lines(id, product_id, sku, name, qty, unit_price, alloc_qty, bo_qty, po_qty),
              invoices(id, number, type, date, due_date, paid, packed, shipped, superseded,
                       ready_to_pack, vat_rate),
              order_events(id, order_id, type, created_at, meta)`)
@@ -26,7 +27,11 @@ export default async function OrdersPage({
 
   if (q?.trim()) query = query.ilike('number', `%${q.trim()}%`);
 
-  const { data: orders } = await query;
+  const [{ data: orders }, { data: products }] = await Promise.all([
+    query,
+    // For adding a line while editing. The catalogue, not this order's lines.
+    sb.from('products').select('id, sku, name').eq('active', true).order('sku').limit(2000),
+  ]);
 
   const rows = (orders ?? []).filter((o) => {
     if (open === '1') return o.order_lines.some((l) => l.bo_qty > 0) || o.status === 'open';
@@ -57,7 +62,15 @@ export default async function OrdersPage({
         <Card><Empty>No orders yet. Take one from the Order desk.</Empty></Card>
       ) : (
         <div className="space-y-2.5">
-          {rows.map((o) => <OrderRow key={o.id} order={o as never} />)}
+          {rows.map((o) => (
+            <OrderRow
+              key={o.id}
+              order={o as never}
+              products={(products ?? []) as never}
+              canAmend={user.role === 'admin' || user.role === 'accounts'}
+              canDelete={user.role === 'admin'}
+            />
+          ))}
         </div>
       )}
     </>

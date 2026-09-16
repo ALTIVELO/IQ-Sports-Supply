@@ -1,6 +1,6 @@
 /** Shared shapes for the Excel/CSV import pipeline. */
 
-export type ImportScope = 'prices' | 'clients' | 'stock';
+export type ImportScope = 'prices' | 'clients' | 'stock' | 'orders';
 
 /** One mapped row lifted out of a sheet, already trimmed. */
 export interface PriceRow {
@@ -13,6 +13,12 @@ export interface ClientRow {
   name: string; email: string; tier: string; vat_no: string; address: string; phone: string;
 }
 export interface StockRow { sku: string; location: string; qty: number }
+
+/** One line of a past order, as an old spreadsheet tends to hold it. */
+export interface HistoricOrderRow {
+  client: string; date: string; reference?: string;
+  sku: string; name?: string; qty: number; unit_price: number;
+}
 
 export interface PriceChange {
   sku: string; name: string; oldPrice: number; newPrice: number;
@@ -37,6 +43,7 @@ export interface ColumnMapping {
   category?: string;
   email?: string; tier?: string; vat_no?: string; address?: string; phone?: string;
   location?: string; qty?: string;
+  client?: string; date?: string; reference?: string; unit_price?: string;
 }
 
 /** A sheet the user has chosen to import, with how to read it. */

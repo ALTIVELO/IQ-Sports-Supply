@@ -28,8 +28,10 @@ with checks as (
              'current_tier_price','product_in_stock','my_role','is_staff','is_admin',
              'my_client_id','my_location_ids','handle_new_user',
              'invite_staff','revoke_staff','delete_products',
-             'spec_value','seed_group_step','seed_shimano_groupset')),
-         '28'
+             'spec_value','seed_group_step','seed_shimano_groupset',
+             'edit_order','cancel_order','delete_order','credit_invoice',
+             'proforma_for_backorder','import_historic_order')),
+         '34'
 
   union all
   select 'signup trigger on auth.users',

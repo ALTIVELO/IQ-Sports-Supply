@@ -294,3 +294,89 @@ export async function receiveTransfer(transferId: string): Promise<ActionResult>
   revalidatePath('/staff/catalogue');
   return { ok: true, message: 'Transfer received' };
 }
+
+// ── amending an order after it has been placed ──────────────────────────────
+
+/**
+ * Replaces an order's lines. The whole order is sent, not a patch — a line
+ * left out is a line removed — because that is what the screen is editing.
+ */
+export async function editOrder(
+  orderId: string,
+  lines: { product_id: string; qty: number; unit_price?: number | null }[],
+): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  const clean = lines.filter((l) => l.product_id && l.qty > 0);
+  if (!clean.length) {
+    return { ok: false, error: 'An order needs at least one line. Cancel it instead.' };
+  }
+
+  const sb = await supabaseServer();
+  const { error } = await sb.rpc('edit_order', { p_order_id: orderId, p_lines: clean });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/orders');
+  revalidatePath('/staff/supplier');
+  revalidatePath('/portal/orders');
+  return { ok: true, message: 'Order updated and a new invoice raised' };
+}
+
+export async function cancelOrder(orderId: string, reason: string): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  const sb = await supabaseServer();
+  const { error } = await sb.rpc('cancel_order', {
+    p_order_id: orderId, p_reason: reason?.trim() || null,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/orders');
+  revalidatePath('/staff/supplier');
+  revalidatePath('/portal/orders');
+  return { ok: true, message: 'Order cancelled, stock released and invoices withdrawn' };
+}
+
+/** Admin only, and only an order that never became anything. */
+export async function deleteOrder(orderId: string): Promise<ActionResult> {
+  await requireStaff(['admin']);
+  const sb = await supabaseServer();
+  const { error } = await sb.rpc('delete_order', { p_order_id: orderId });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/orders');
+  revalidatePath('/portal/orders');
+  return { ok: true, message: 'Order deleted' };
+}
+
+/** A proforma covering whatever is still on back order. Asks for no payment. */
+export async function proformaForBackorder(orderId: string): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  const sb = await supabaseServer();
+  const { error } = await sb.rpc('proforma_for_backorder', { p_order_id: orderId });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/orders');
+  revalidatePath('/staff/invoices');
+  revalidatePath('/portal/invoices');
+  return { ok: true, message: 'Proforma raised — it asks for no payment' };
+}
+
+/** A credit note against an invoice, whole or in part. */
+export async function creditInvoice(input: {
+  invoiceId: string;
+  lines?: { sku: string; qty: number }[] | null;
+  reason: string;
+}): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  const sb = await supabaseServer();
+  const { error } = await sb.rpc('credit_invoice', {
+    p_invoice_id: input.invoiceId,
+    p_lines: input.lines?.length ? input.lines : null,
+    p_reason: input.reason?.trim() || null,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/orders');
+  revalidatePath('/staff/invoices');
+  revalidatePath('/portal/invoices');
+  return { ok: true, message: 'Credit note raised' };
+}

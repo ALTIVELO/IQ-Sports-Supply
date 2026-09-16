@@ -42,7 +42,9 @@ export interface DocLine { sku: string; name: string; qty: number; unit_price: n
 export interface DocData {
   invoiceNumber: string;
   orderNumber: string;
-  type: 'full' | 'shipment' | 'backorder';
+  type: 'full' | 'shipment' | 'backorder' | 'proforma' | 'credit';
+  /** Why a credit note was raised, or that a proforma asks for nothing. */
+  note?: string | null;
   date: string;
   dueDate: string;
   vatRate: number;
@@ -61,6 +63,16 @@ export interface DocData {
 
 const typeLabel = (t: DocData['type']) =>
   t === 'backorder' ? 'back-order shipment' : t === 'shipment' ? 'part shipment' : null;
+
+/**
+ * What the document calls itself.
+ *
+ * A credit note printed under the word Invoice would be read as a demand for
+ * the money it is refunding, so the type decides the heading rather than the
+ * route that rendered it.
+ */
+const documentTitle = (t: DocData['type']) =>
+  t === 'credit' ? 'Credit note' : t === 'proforma' ? 'Proforma' : 'Invoice';
 
 function Header({ d, title }: { d: DocData; title: string }) {
   const sub = typeLabel(d.type);
@@ -83,9 +95,9 @@ function Header({ d, title }: { d: DocData; title: string }) {
 export function InvoiceDocument({ d }: { d: DocData }) {
   const { net, vat, gross } = totals(d.lines, d.vatRate);
   return (
-    <Document title={`Invoice ${d.invoiceNumber}`}>
+    <Document title={`${documentTitle(d.type)} ${d.invoiceNumber}`}>
       <Page size="A4" style={s.page}>
-        <Header d={d} title="Invoice" />
+        <Header d={d} title={documentTitle(d.type)} />
 
         <View style={s.parties}>
           <View>
@@ -95,11 +107,15 @@ export function InvoiceDocument({ d }: { d: DocData }) {
             {d.clientVatNo ? <Text style={{ color: MUTE, marginTop: 3 }}>VAT {d.clientVatNo}</Text> : null}
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={s.label}>Invoice date</Text>
+            <Text style={s.label}>Date</Text>
             <Text style={s.strong}>{fmtDate(d.date)}</Text>
-            <Text style={[s.label, { marginTop: 8 }]}>Payment due</Text>
-            <Text style={s.strong}>{fmtDate(d.dueDate)}</Text>
-            {d.paid ? <Text style={[s.badge, { marginTop: 8 }]}>PAID</Text> : null}
+            {d.type === 'proforma' || d.type === 'credit' ? null : (
+              <>
+                <Text style={[s.label, { marginTop: 8 }]}>Payment due</Text>
+                <Text style={s.strong}>{fmtDate(d.dueDate)}</Text>
+                {d.paid ? <Text style={[s.badge, { marginTop: 8 }]}>PAID</Text> : null}
+              </>
+            )}
           </View>
         </View>
 
@@ -131,8 +147,15 @@ export function InvoiceDocument({ d }: { d: DocData }) {
           </View>
         </View>
 
+        {d.note ? <Text style={{ marginTop: 10, color: MUTE }}>{d.note}</Text> : null}
+
         <Text style={s.footer} fixed>
-          {d.company} · {d.companyAddress} · Payment due {fmtDate(d.dueDate)}
+          {d.company} · {d.companyAddress}
+          {d.type === 'proforma'
+            ? ' · Proforma — no payment is due on this document'
+            : d.type === 'credit'
+              ? ' · Credit note — this amount is owed to you, not by you'
+              : ` · Payment due ${fmtDate(d.dueDate)}`}
           {Number(d.vatRate) === 0 ? ' · Zero-rated supply' : ''}
         </Text>
       </Page>

@@ -9,11 +9,39 @@ import {
 import type {
   ColumnMapping, ImportScope, PricePreview, PriceRow, SheetPlan,
 } from '@/lib/import/types';
-import { previewPrices, applyPrices, applyClients, applyStock, saveTemplate } from './actions';
+import { previewPrices, applyPrices, applyClients, applyStock,
+         applyHistoricOrders, saveTemplate } from './actions';
 
 interface Named { id: string; name: string }
 interface Template { scope: string; tier_id: string | null; header_row: number; mapping: ColumnMapping }
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
+
+/**
+ * A date as a spreadsheet hands it over — 14/03/2025, 2025-03-14, or the
+ * serial number Excel keeps underneath — read into the one form the import
+ * accepts. Anything unrecognised is passed through untouched so the server
+ * reports it rather than this quietly inventing a date.
+ */
+export function normaliseDate(raw: string): string {
+  const text = (raw ?? '').trim();
+  if (!text) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+
+  const dmy = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    const year = y.length === 2 ? `20${y}` : y;
+    return `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  // Excel's day count, from the last day of 1899 it wrongly thinks existed.
+  if (/^\d{5}$/.test(text)) {
+    const ms = (Number(text) - 25569) * 86400000;
+    const dt = new Date(ms);
+    if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+  }
+  return text;
+}
 
 const FIELDS: Record<ImportScope, { key: keyof ColumnMapping; label: string; required: boolean }[]> = {
   prices: [
@@ -36,6 +64,17 @@ const FIELDS: Record<ImportScope, { key: keyof ColumnMapping; label: string; req
     { key: 'sku', label: 'SKU', required: true },
     { key: 'location', label: 'Location', required: true },
     { key: 'qty', label: 'Quantity', required: true },
+  ],
+  // One line per row, the order implied by the reference repeating — which is
+  // how a past order usually survives, in a spreadsheet.
+  orders: [
+    { key: 'client', label: 'Client (name or email)', required: true },
+    { key: 'date', label: 'Order date (YYYY-MM-DD)', required: true },
+    { key: 'reference', label: 'Their order reference', required: false },
+    { key: 'sku', label: 'SKU', required: true },
+    { key: 'name', label: 'Product name', required: false },
+    { key: 'qty', label: 'Quantity', required: true },
+    { key: 'unit_price', label: 'Unit price charged', required: true },
   ],
 };
 
@@ -191,9 +230,15 @@ export default function ImportScreen({
             name: x.name ?? '', email: x.email ?? '', tier: x.tier ?? '',
             vat_no: x.vat_no ?? '', address: x.address ?? '', phone: x.phone ?? '',
           })))
-        : await applyStock(raw.map((x) => ({
-            sku: x.sku ?? '', location: x.location ?? '', qty: toNumber(x.qty ?? ''),
-          })));
+        : scope === 'orders'
+          ? await applyHistoricOrders(raw.map((x) => ({
+              client: x.client ?? '', date: normaliseDate(x.date ?? ''),
+              reference: x.reference ?? '', sku: x.sku ?? '', name: x.name ?? '',
+              qty: toNumber(x.qty ?? ''), unit_price: toNumber(x.unit_price ?? ''),
+            })))
+          : await applyStock(raw.map((x) => ({
+              sku: x.sku ?? '', location: x.location ?? '', qty: toNumber(x.qty ?? ''),
+            })));
 
       setMessage(r.ok
         ? { tone: 'success', text: r.message ?? 'Applied' }
@@ -217,14 +262,16 @@ export default function ImportScreen({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {(['prices', 'clients', 'stock'] as ImportScope[]).map((s) => (
+        {(['prices', 'clients', 'stock', 'orders'] as ImportScope[]).map((s) => (
           <button
             key={s}
             onClick={() => { setScope(s); setSheets([]); setPlans({}); setPreviews(null); setMessage(null); }}
             className={`text-[12px] font-semibold rounded px-[10px] py-[5px] border
               ${scope === s ? 'bg-ink text-white border-ink' : 'bg-white border-line hover:bg-parch'}`}
           >
-            {s === 'prices' ? 'SKUs & prices' : s === 'clients' ? 'Client list' : 'Stock by location'}
+            {s === 'prices' ? 'SKUs & prices'
+              : s === 'clients' ? 'Client list'
+                : s === 'stock' ? 'Stock by location' : 'Past orders'}
           </button>
         ))}
       </div>
@@ -251,7 +298,11 @@ export default function ImportScreen({
               ? 'One file per tier, or one workbook with a tab per tier — tabs are matched to tiers by name.'
               : scope === 'clients'
                 ? 'Columns for client name and tier are required.'
-                : 'One row per SKU and location, with a quantity.'}
+                : scope === 'stock'
+                  ? 'One row per SKU and location, with a quantity.'
+                  : 'One row per order line. Rows sharing a reference — or a client and a date '
+                    + 'where there is none — become one order, dated when it happened and '
+                    + 'already settled. No stock moves and nothing is emailed.'}
           </p>
           <label className="inline-block mt-4">
             <span className="text-[12px] font-semibold border border-line rounded px-[10px] py-[5px] bg-white hover:bg-parch cursor-pointer">
@@ -410,7 +461,9 @@ export default function ImportScreen({
             )}
             {scope !== 'prices' && (
               <Button small kind="accent" onClick={doApplyOther} disabled={pending || !included.length}>
-                {pending ? 'Importing…' : `Import ${scope === 'clients' ? 'clients' : 'stock'}`}
+                {pending ? 'Importing…'
+                  : `Import ${scope === 'clients' ? 'clients'
+                      : scope === 'orders' ? 'past orders' : 'stock'}`}
               </Button>
             )}
           </Card>

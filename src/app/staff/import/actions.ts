@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { supabaseServer } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
 import { SUSPICIOUS_DELTA, type ClientRow, type ImportScope, type PriceChange,
-         type PricePreview, type PriceRow, type StockRow, type ColumnMapping } from '@/lib/import/types';
+         type PricePreview, type PriceRow, type StockRow, type HistoricOrderRow,
+         type ColumnMapping } from '@/lib/import/types';
 import type { ActionResult } from '../actions';
 import { classifyProduct } from '@/lib/catalogue/categories';
 
@@ -371,4 +372,97 @@ export async function setProductCategory(
   if (error) return { ok: false, error: error.message };
   revalidatePath('/staff/catalogue');
   return { ok: true };
+}
+
+/**
+ * Loads orders that happened before this system existed.
+ *
+ * Rows are grouped into orders by their reference, or by client and date where
+ * a sheet gives no reference — which is how an old spreadsheet usually reads,
+ * one line per row with the order implied by repetition.
+ *
+ * Each order lands settled and complete on the date it actually happened: no
+ * stock moves, no supplier order follows, and nothing is emailed to anyone.
+ */
+export async function applyHistoricOrders(rows: HistoricOrderRow[]): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  const sb = await supabaseServer();
+
+  const { data: clients } = await sb.from('clients').select('id, name, email');
+  const byName = new Map<string, string>();
+  for (const c of clients ?? []) {
+    byName.set(norm(c.name), c.id);
+    if (c.email) byName.set(norm(c.email), c.id);
+  }
+
+  // Grouped before anything is written, so a sheet naming an unknown client is
+  // reported whole rather than half-imported.
+  const groups = new Map<string, { clientId: string; date: string; reference: string | null;
+                                   lines: { sku: string; name?: string; qty: number; unit_price: number }[] }>();
+  const problems: string[] = [];
+
+  rows.forEach((r, i) => {
+    const line = i + 2;
+    const clientId = byName.get(norm(r.client ?? ''));
+    if (!clientId) { problems.push(`row ${line}: no client matching "${r.client}"`); return; }
+    if (!r.date?.trim()) { problems.push(`row ${line}: no order date`); return; }
+    const date = r.date.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      problems.push(`row ${line}: date "${date}" is not YYYY-MM-DD`); return;
+    }
+    if (!r.sku?.trim()) { problems.push(`row ${line}: no SKU`); return; }
+    if (!Number.isFinite(r.qty) || r.qty <= 0) { problems.push(`row ${line}: quantity is not a number`); return; }
+    if (!Number.isFinite(r.unit_price)) {
+      problems.push(`row ${line}: no price — a past order must say what was charged`); return;
+    }
+
+    const reference = r.reference?.trim() || null;
+    const key = reference ? `${clientId}|${reference}` : `${clientId}|${date}`;
+    const group = groups.get(key) ?? { clientId, date, reference, lines: [] };
+    group.lines.push({
+      sku: r.sku.trim(), name: r.name?.trim() || undefined,
+      qty: Math.round(r.qty), unit_price: r.unit_price,
+    });
+    groups.set(key, group);
+  });
+
+  if (problems.length) {
+    return {
+      ok: false,
+      error: `Nothing was imported. ${problems.length} row${problems.length === 1 ? '' : 's'} `
+           + `need attention: ${problems.slice(0, 5).join('; ')}`
+           + (problems.length > 5 ? `; and ${problems.length - 5} more` : ''),
+    };
+  }
+  if (!groups.size) return { ok: false, error: 'There was nothing to import' };
+
+  let made = 0;
+  for (const g of groups.values()) {
+    const { error } = await sb.rpc('import_historic_order', {
+      p_client_id: g.clientId,
+      p_date: g.date,
+      p_lines: g.lines,
+      p_number: g.reference,
+      p_notes: 'Imported from a past record',
+    });
+    // Stops at the first refusal rather than pressing on: a half-loaded
+    // history is harder to make sense of than none.
+    if (error) {
+      return {
+        ok: false,
+        error: made
+          ? `${made} order${made === 1 ? '' : 's'} imported, then stopped: ${error.message}`
+          : error.message,
+      };
+    }
+    made += 1;
+  }
+
+  revalidatePath('/staff/orders');
+  revalidatePath('/portal/orders');
+  revalidatePath('/portal/history');
+  return {
+    ok: true,
+    message: `${made} past order${made === 1 ? '' : 's'} added from ${rows.length} rows`,
+  };
 }

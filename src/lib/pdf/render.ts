@@ -95,6 +95,7 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     company: settings.company,
     companyAddress: settings.company_address,
     paid: inv.paid,
+    note: inv.note ?? null,
     locationName: (inv.locations as { name: string } | null)?.name ?? null,
   };
 }
