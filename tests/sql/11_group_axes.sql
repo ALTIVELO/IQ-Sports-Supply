@@ -134,6 +134,63 @@ begin
 end $$;
 
 \echo ''
+\echo '───────── A rotor is chosen by size, not by part code ─────────'
+insert into products (sku, name, brand, active) values
+  ('RTCL900SE','Shimano Disc Rotor RTCL900SE','Shimano',true),
+  ('RTCL900SSE','Shimano Disc Rotor RTCL900SSE','Shimano',true),
+  ('RTCL900MJ','Shimano Disc Rotor RTCL900MJ','Shimano',true),
+  ('RTCL900LJ','Shimano Disc Rotor RTCL900LJ','Shimano',true),
+  ('RTCL750200E','Shimano Disc Rotor RTCL750200E','Shimano',true);
+do $$
+begin
+  -- SS has to be tested before S, or every 140 reads as a 160.
+  perform assert_eq(spec_value('Shimano Disc Rotor RTCL900SSE', 'Rotor size'),
+                    '140mm', 'SS is 140mm');
+  perform assert_eq(spec_value('Shimano Disc Rotor RTCL900SE', 'Rotor size'),
+                    '160mm', 'S is 160mm, not 140');
+  perform assert_eq(spec_value('Shimano Disc Rotor RTCL900MJ', 'Rotor size'),
+                    '180mm', 'M is 180mm');
+  perform assert_eq(spec_value('Shimano Disc Rotor RTCL900LJ', 'Rotor size'),
+                    '203mm', 'L is 203mm');
+  -- The bigger sizes are spelled out in the code instead of lettered.
+  perform assert_eq(spec_value('Shimano Disc Rotor RTCL750200E', 'Rotor size'),
+                    '200mm', 'and an explicit size wins over the letters');
+end $$;
+
+select seed_group_step('test-build', 'Front rotor', 9, 'RTCL900%', false, 1,
+                       null, null, null, null, 'Rotor size', array['140mm','160mm']);
+do $$
+declare v_step uuid;
+begin
+  select id into v_step from product_group_steps
+   where name='Front rotor' and group_id=(select id from product_groups where slug='test-build');
+  perform assert_eq((select count(*)::integer from product_group_options where step_id=v_step),
+                    2, 'only the two road sizes are offered on a groupset');
+  perform assert_eq(
+    (select label from product_group_options o join products p on p.id=o.product_id
+      where o.step_id=v_step and p.sku='RTCL900SE'),
+    '160mm', 'and each one is labelled by its size');
+  perform assert_eq(
+    (select count(*)::integer from product_group_options o join products p on p.id=o.product_id
+      where o.step_id=v_step and p.sku in ('RTCL900MJ','RTCL900LJ')),
+    0, 'the 180 and 203 are kept off, so they cannot be ordered by mistake');
+end $$;
+
+-- Narrowing an existing step has to remove what no longer belongs, not just
+-- stop adding to it.
+select seed_group_step('test-build', 'Front rotor', 9, 'RTCL900%', false, 1,
+                       null, null, null, null, 'Rotor size', array['160mm']);
+do $$
+begin
+  perform assert_eq(
+    (select count(*)::integer from product_group_options o
+      join product_group_steps s on s.id=o.step_id
+     where s.name='Front rotor'
+       and s.group_id=(select id from product_groups where slug='test-build')),
+    1, 'dropping 140mm from the list drops the option too');
+end $$;
+
+\echo ''
 \echo '───────── A client sees the axes, and cannot change them ─────────'
 set role app_user;
 set session "test.user_id" = '22222222-2222-2222-2222-222222222222';

@@ -1,67 +1,23 @@
 -- ============================================================================
--- 0014: choosing a part by two things at once, and real groupset builds.
+-- 0015: rotors chosen by size.
 --
--- A chainset is one SKU that fixes both the crank length and the chainring
--- pair: FCR9200C26 is 170mm and 52/36, and there are fifteen of them per
--- groupset. Presenting that as a flat list of fifteen radio buttons asks the
--- customer to scan for a combination rather than state one, which is not how
--- anybody specs a bike.
+-- The supplier's sheet gives no description for any rotor — just a code and a
+-- price — so 0014 left them reading "Shimano Disc Rotor RTCL900SE", which is
+-- no use to anyone specifying a bike. The size is in the code: Shimano writes
+-- SS, S, M and L for 140, 160, 180 and 203mm, and spells the bigger XTR sizes
+-- out (RTCL750200E is 200mm).
 --
--- So a step may name up to two axes. When it does, the builder offers one
--- control per axis and resolves the pair to the single SKU that matches. A
--- step with no axes is unchanged — a plain list, which is right for a cassette
--- or a rotor.
+-- That convention is an assumption, not something the sheet states. It is kept
+-- in one CASE below so it is easy to see and easy to correct, and it holds
+-- against the data: all 48 rotors resolve, and the price bands per size line
+-- up. On a groupset only the road sizes are offered, which is what a road
+-- groupset takes.
 --
--- The axis values are read out of the product name rather than the part code:
--- the supplier writes "C/SET D/Ace R9200 50/34 170mm", which states both
--- plainly, where the code says C26 and would have to be decoded from a
--- convention we would be guessing at.
+-- Unlike a chainset, several rotors share a size — three 160mm in the R9200
+-- range, differing in lockring — so size is a label and a filter here rather
+-- than an axis, which would need one SKU per value.
 -- ============================================================================
 
-alter table product_group_steps
-  add column if not exists axis1_name text,
-  add column if not exists axis2_name text;
-
-alter table product_group_options
-  add column if not exists axis1_value text,
-  add column if not exists axis2_value text;
-
-create index if not exists product_group_options_axes_idx
-  on product_group_options (step_id, axis1_value, axis2_value);
-
--- Two options on the same step must not claim the same pair, or the controls
--- would resolve to whichever row came back first.
-create unique index if not exists product_group_options_axis_unique
-  on product_group_options (step_id, axis1_value, axis2_value)
-  where axis1_value is not null;
-
--- The client view carries the axes through, so the builder can group by them.
--- Dropped rather than replaced: CREATE OR REPLACE cannot add a column in the
--- middle of an existing view's column list.
-drop view if exists client_group_options;
-create view client_group_options
-with (security_invoker = true) as
-select o.id           as option_id,
-       s.group_id,
-       o.step_id,
-       o.product_id,
-       coalesce(nullif(trim(o.label), ''), c.name) as label,
-       o.axis1_value,
-       o.axis2_value,
-       o.sort,
-       c.sku,
-       c.name         as product_name,
-       c.price,
-       c.in_stock,
-       c.image_url
-  from product_group_options o
-  join product_group_steps s on s.id = o.step_id
-  join client_catalogue c    on c.id = o.product_id;
-
--- ── reading a spec out of a supplier's description ──────────────────────────
--- "C/SET D/Ace R9200 50/34 170mm"        → 50/34, 170mm
--- "Power 50 / 34 - double - 172.5 mm"    → 50/34, 172.5mm
--- "CASS D/Ace R9200 12 spd 11-30T"       → 11-30T
 create or replace function public.spec_value(p_name text, p_axis text)
 returns text language sql immutable as $$
   select case p_axis
@@ -71,6 +27,18 @@ returns text language sql immutable as $$
       replace(substring(p_name from '(\d{2}\s*/\s*\d{2})'), ' ', '')
     when 'Cassette' then
       replace(substring(p_name from '(\d{2}\s*-\s*\d{2}\s*T)'), ' ', '')
+    when 'Rotor size' then
+      coalesce(
+        -- XTR and downhill sizes are written out in the code itself.
+        substring(p_name from '(?:RTCL|SMRT)\d+(200|220)') || 'mm',
+        -- Otherwise the letter after the model number. SS is tested before S,
+        -- or every 140 would read as a 160.
+        case substring(p_name from '(?:RTCL|SMRT)\d+(SS|S|M|L)')
+          when 'SS' then '140mm'
+          when 'S'  then '160mm'
+          when 'M'  then '180mm'
+          when 'L'  then '203mm'
+        end)
     else null
   end;
 $$;
@@ -89,23 +57,21 @@ begin
   loop execute 'drop function ' || r.sig; end loop;
 end $$;
 
-/**
- * Adds one step to a group and attaches every catalogue SKU matching a
- * pattern. Re-runnable: the step is matched by name, and an option already
- * present is left alone, so this can be applied again after a price list
- * import brings new SKUs in.
- */
 create or replace function public.seed_group_step(
-  p_group_slug text,
-  p_step_name  text,
-  p_sort       integer,
-  p_pattern    text,
-  p_required   boolean default true,
-  p_qty        integer default 1,
-  p_axis1      text default null,
-  p_axis2      text default null,
-  p_hint       text default null,
-  p_exclude    text default null
+  p_group_slug  text,
+  p_step_name   text,
+  p_sort        integer,
+  p_pattern     text,
+  p_required    boolean default true,
+  p_qty         integer default 1,
+  p_axis1       text default null,
+  p_axis2       text default null,
+  p_hint        text default null,
+  p_exclude     text default null,
+  -- A spec used to label and narrow the options without making it an axis,
+  -- for a step where several SKUs legitimately share the same value.
+  p_spec        text default null,
+  p_spec_values text[] default null
 ) returns void
 language plpgsql security definer set search_path = public as $$
 declare v_group uuid; v_step uuid;
@@ -128,28 +94,48 @@ begin
      where id = v_step;
   end if;
 
+  -- An option that no longer belongs — a size we have stopped offering on this
+  -- step — is cleared out, so narrowing the list actually narrows it.
+  if p_spec is not null and p_spec_values is not null then
+    delete from product_group_options o
+     using products p
+     where o.step_id = v_step and p.id = o.product_id
+       and coalesce(spec_value(p.name, p_spec), '') <> all (p_spec_values);
+  end if;
+
   insert into product_group_options (step_id, product_id, label, axis1_value, axis2_value, sort)
   select v_step, p.id,
-         -- Where the axes say it all, the label repeats them rather than the
-         -- supplier's whole shorthand line.
-         case when p_axis1 is not null then
-           concat_ws(' · ', spec_value(p.name, p_axis1), spec_value(p.name, p_axis2))
-         else p.name end,
+         case
+           when p_axis1 is not null then
+             concat_ws(' · ', spec_value(p.name, p_axis1), spec_value(p.name, p_axis2))
+           -- The size is the choice. The part code is already printed under
+           -- the label, so repeating it here only reads as noise.
+           when p_spec is not null then spec_value(p.name, p_spec)
+           else p.name end,
          spec_value(p.name, p_axis1),
          spec_value(p.name, p_axis2),
-         row_number() over (order by p.sku)
+         row_number() over (order by spec_value(p.name, p_spec) nulls last, p.sku)
     from products p
    where p.active
      and p.sku like p_pattern
      and (p_exclude is null or p.sku not like p_exclude)
-     -- A step with axes can only offer SKUs whose spec we could actually read.
      and (p_axis1 is null or spec_value(p.name, p_axis1) is not null)
+     and (p_spec_values is null or spec_value(p.name, p_spec) = any (p_spec_values))
      and not exists (select 1 from product_group_options o
                       where o.step_id = v_step and o.product_id = p.id)
   on conflict do nothing;
+
+  -- Labels are rebuilt for options already present, so re-running after this
+  -- migration renames the ones 0014 left reading as bare part codes.
+  if p_spec is not null then
+    update product_group_options o
+       set label = spec_value(p.name, p_spec)
+      from products p
+     where p.id = o.product_id and o.step_id = v_step;
+  end if;
 end $$;
 
-/** Builds one Shimano Di2 groupset out of whatever of it is in the catalogue. */
+-- Rebuild both groupsets so the rotor steps pick this up.
 create or replace function public.seed_shimano_groupset(
   p_slug text, p_name text, p_series text,
   p_shift_l text, p_shift_r text, p_rd text, p_fd text,
@@ -167,14 +153,11 @@ begin
          (select id from categories where slug = 'groupsets')
   on conflict (slug) do update set name = excluded.name;
 
-  -- The parts that make it that groupset. One option each, so they are simply
-  -- shown as included rather than asked about.
   perform seed_group_step(p_slug, 'Left shifter',      0, p_shift_l);
   perform seed_group_step(p_slug, 'Right shifter',     1, p_shift_r);
   perform seed_group_step(p_slug, 'Rear derailleur',   2, p_rd);
   perform seed_group_step(p_slug, 'Front derailleur',  3, p_fd);
 
-  -- The specification.
   perform seed_group_step(p_slug, 'Chainset', 4, p_chainset, true, 1,
     'Crank length', 'Chainring', 'Standard chainset — power meter versions are listed separately',
     p_chainset || 'P%');
@@ -182,20 +165,19 @@ begin
     'Cassette', null, 'Sprocket range');
   perform seed_group_step(p_slug, 'Chain', 6, p_chain);
 
-  -- The Di2 electronics. Included rather than asked about, and the reason the
-  -- configured build comes to exactly the price the supplier publishes for the
-  -- standard bundle: the seven parts above total £1,122.62 on Dura-Ace, and
-  -- these four bring it to £1,209.87, which is their own bundle price.
-  perform seed_group_step(p_slug, 'Battery',        9, p_battery);
-  perform seed_group_step(p_slug, 'Charger',       10, p_charger);
+  -- Road sizes only: a road groupset takes 140 or 160, and offering the 180
+  -- and 203 from the same range would only invite a wrong order.
+  perform seed_group_step(p_slug, 'Front rotor', 7, p_rotor, false, 1,
+    null, null, 'Choose 160mm or 140mm, or leave out if the wheels already have rotors',
+    null, 'Rotor size', array['140mm','160mm']);
+  perform seed_group_step(p_slug, 'Rear rotor', 8, p_rotor, false, 1,
+    null, null, 'Often a size smaller than the front',
+    null, 'Rotor size', array['140mm','160mm']);
+
+  perform seed_group_step(p_slug, 'Battery',         9, p_battery);
+  perform seed_group_step(p_slug, 'Charger',        10, p_charger);
   perform seed_group_step(p_slug, 'Di2 wire 900mm',  11, p_wire_a);
   perform seed_group_step(p_slug, 'Di2 wire 1000mm', 12, p_wire_b);
-
-  -- Rotors: chosen independently front and rear, or left off entirely.
-  perform seed_group_step(p_slug, 'Front rotor', 7, p_rotor, false, 1,
-    null, null, 'Leave out if the wheels already have rotors');
-  perform seed_group_step(p_slug, 'Rear rotor', 8, p_rotor, false, 1,
-    null, null, 'Often a size smaller than the front');
 end $$;
 
 select seed_shimano_groupset(
@@ -207,3 +189,10 @@ select seed_shimano_groupset(
   'ultegra-r8100', 'Ultegra Di2 R8100 groupset', 'R8100',
   'R8170DLR', 'R8170DRF', 'RDR8150', 'FDR8150F',
   'FCR8100%', 'CSR8101%', 'CNM8100%', 'RTCL800%');
+
+-- Every rotor in the catalogue gets its size in its name, not just the ones a
+-- groupset offers: "Shimano Disc Rotor RTCL900SE" tells a customer nothing.
+update products
+   set name = 'Shimano ' || spec_value(name, 'Rotor size') || ' Disc Rotor ' || sku
+ where name like 'Shimano Disc Rotor %'
+   and spec_value(name, 'Rotor size') is not null;
