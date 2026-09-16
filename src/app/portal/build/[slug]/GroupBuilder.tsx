@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
+import { Button, Card, Empty, Field, Money, Notice, Tag } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
 import { useCart } from '../../CartContext';
 
@@ -10,11 +10,14 @@ export interface GroupOption {
   option_id: string; step_id: string; product_id: string;
   label: string; sort: number; sku: string;
   price: number; in_stock: boolean; image_url: string | null;
+  axis1_value: string | null; axis2_value: string | null;
 }
 
 export interface GroupStep {
   id: string; name: string; hint: string | null;
   qty: number; required: boolean; sort: number;
+  /** Named when the step is specified by two things at once, like a chainset. */
+  axis1_name: string | null; axis2_name: string | null;
   options: GroupOption[];
 }
 
@@ -127,6 +130,23 @@ export default function GroupBuilder({
 
           {step.options.length === 0 ? (
             <Empty>Nothing available for this part at the moment.</Empty>
+          ) : step.axis1_name ? (
+            <AxisPicker
+              step={step}
+              chosenId={chosen[step.id]}
+              onChoose={(id) => setChosen((c) => ({ ...c, [step.id]: id }))}
+            />
+          ) : step.options.length === 1 && step.required ? (
+            // Nothing to decide. Say what is included and move on rather than
+            // making someone confirm the only answer.
+            <div className="flex flex-wrap items-center gap-2 text-[13px]">
+              <Tag tone="green">Included</Tag>
+              <span className="font-medium">{step.options[0].label}</span>
+              <span className="num text-[11px] text-mute">{step.options[0].sku}</span>
+              <span className="num text-mute ml-auto">
+                <Money value={Number(step.options[0].price)} />
+              </span>
+            </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {step.options.map((o) => {
@@ -246,6 +266,95 @@ export default function GroupBuilder({
           change or remove any of them before ordering.
         </p>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * A part specified by two things at once — a chainset is a crank length and a
+ * chainring pair, and there are sixteen of them.
+ *
+ * One control per axis, and the pair resolves to the single SKU that is both.
+ * Values that no remaining SKU offers are disabled rather than hidden, so the
+ * gaps in the range are visible: there is no 54/40 at 160mm, and being told
+ * that is more use than watching the option quietly disappear.
+ */
+function AxisPicker({ step, chosenId, onChoose }: {
+  step: GroupStep;
+  chosenId: string | undefined;
+  onChoose: (optionId: string) => void;
+}) {
+  const chosen = step.options.find((o) => o.option_id === chosenId);
+  const [a1, setA1] = useState<string | null>(chosen?.axis1_value ?? null);
+  const [a2, setA2] = useState<string | null>(chosen?.axis2_value ?? null);
+
+  const values = (pick: (o: GroupOption) => string | null) =>
+    [...new Set(step.options.map(pick).filter((v): v is string => Boolean(v)))]
+      .sort((x, y) => parseFloat(x) - parseFloat(y) || x.localeCompare(y));
+
+  const axis1Values = values((o) => o.axis1_value);
+  const axis2Values = step.axis2_name ? values((o) => o.axis2_value) : [];
+
+  const resolve = (v1: string | null, v2: string | null) =>
+    step.options.find((o) =>
+      o.axis1_value === v1 && (!step.axis2_name || o.axis2_value === v2)) ?? null;
+
+  function pick(v1: string | null, v2: string | null) {
+    setA1(v1); setA2(v2);
+    const hit = resolve(v1, v2);
+    if (hit) onChoose(hit.option_id);
+  }
+
+  const current = resolve(a1, a2);
+  const offered = (axis: 1 | 2, value: string) => step.options.some((o) =>
+    axis === 1
+      ? o.axis1_value === value && (!step.axis2_name || !a2 || o.axis2_value === a2)
+      : o.axis2_value === value && (!a1 || o.axis1_value === a1));
+
+  return (
+    <div className="space-y-3">
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label={step.axis1_name ?? ''}>
+          <select value={a1 ?? ''} onChange={(e) => pick(e.target.value || null, a2)}>
+            <option value="">— choose —</option>
+            {axis1Values.map((v) => (
+              <option key={v} value={v} disabled={!offered(1, v)}>
+                {v}{offered(1, v) ? '' : ' — not available with this selection'}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {step.axis2_name && (
+          <Field label={step.axis2_name}>
+            <select value={a2 ?? ''} onChange={(e) => pick(a1, e.target.value || null)}>
+              <option value="">— choose —</option>
+              {axis2Values.map((v) => (
+                <option key={v} value={v} disabled={!offered(2, v)}>
+                  {v}{offered(2, v) ? '' : ' — not available with this selection'}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+      </div>
+
+      {current ? (
+        <div className="flex flex-wrap items-center gap-2 text-[13px] border border-ink
+                        bg-parch rounded p-3">
+          <span className="font-semibold">{current.label}</span>
+          <span className="num text-[11px] text-mute">{current.sku}</span>
+          {current.in_stock ? <Tag tone="green">In stock</Tag> : <Tag tone="line">Back order</Tag>}
+          <span className="num font-semibold ml-auto">
+            <Money value={Number(current.price)} />
+          </span>
+        </div>
+      ) : (
+        <p className="text-[12px] text-mute">
+          {a1 || a2
+            ? 'That combination is not made — try another.'
+            : `Choose ${[step.axis1_name, step.axis2_name].filter(Boolean).join(' and ')}.`}
+        </p>
+      )}
     </div>
   );
 }

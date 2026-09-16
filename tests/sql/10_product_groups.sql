@@ -58,19 +58,24 @@ insert into product_group_steps (group_id, name, qty, sort)
 
 insert into product_group_options (step_id, product_id, label, sort)
   select s.id, p.id, '700x25', 0 from product_group_steps s, products p
-   where s.name='Size' and p.sku='GP-700x25';
+   where s.name='Size' and p.sku='GP-700x25'
+     and s.group_id=(select id from product_groups where slug='gp5000');
 insert into product_group_options (step_id, product_id, label, sort)
   select s.id, p.id, '700x28', 1 from product_group_steps s, products p
-   where s.name='Size' and p.sku='GP-700x28';
+   where s.name='Size' and p.sku='GP-700x28'
+     and s.group_id=(select id from product_groups where slug='gp5000');
 insert into product_group_options (step_id, product_id, sort)
   select s.id, p.id, 0 from product_group_steps s, products p
-   where s.name='Cassette' and p.sku='CS-1130';
+   where s.name='Cassette' and p.sku='CS-1130'
+     and s.group_id=(select id from product_groups where slug='ultegra-build');
 insert into product_group_options (step_id, product_id, sort)
   select s.id, p.id, 1 from product_group_steps s, products p
-   where s.name='Cassette' and p.sku='CS-1134';
+   where s.name='Cassette' and p.sku='CS-1134'
+     and s.group_id=(select id from product_groups where slug='ultegra-build');
 insert into product_group_options (step_id, product_id, sort)
   select s.id, p.id, 0 from product_group_steps s, products p
-   where s.name='Tyres' and p.sku='GP-700x25';
+   where s.name='Tyres' and p.sku='GP-700x25'
+     and s.group_id=(select id from product_groups where slug='ultegra-build');
 \set QUIET off
 
 set role app_user;
@@ -138,7 +143,8 @@ end $$;
 \echo '───────── A build step can need more than one of a thing ─────────'
 do $$
 begin
-  perform assert_eq((select qty from product_group_steps where name='Tyres'), 2,
+  perform assert_eq((select qty from product_group_steps where name='Tyres'
+                       and group_id=(select id from product_groups where slug='ultegra-build')), 2,
                     'the build asks for two tyres');
   perform assert_eq(
     (select count(*)::integer from product_group_steps

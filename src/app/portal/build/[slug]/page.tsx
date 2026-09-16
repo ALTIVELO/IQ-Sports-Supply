@@ -26,12 +26,13 @@ export default async function GroupPage({ params }: { params: Promise<{ slug: st
   const [{ data: steps }, { data: options }, { data: client }, { data: settings }] =
     await Promise.all([
       sb.from('product_group_steps')
-        .select('id, name, hint, qty, required, sort')
+        .select('id, name, hint, qty, required, sort, axis1_name, axis2_name')
         .eq('group_id', group.id).order('sort'),
       // Priced and stocked for this client by client_catalogue's own RLS, so
       // the figures here are the ones their order would be billed at.
       sb.from('client_group_options')
-        .select('option_id, step_id, product_id, label, sort, sku, price, in_stock, image_url')
+        .select(`option_id, step_id, product_id, label, sort, sku, price, in_stock,
+                 image_url, axis1_value, axis2_value`)
         .eq('group_id', group.id).order('sort'),
       sb.from('clients').select('vat_exempt').eq('id', user.clientId).single(),
       sb.from('settings').select('vat_rate').eq('id', 1).single(),
