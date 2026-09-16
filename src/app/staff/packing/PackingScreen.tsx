@@ -6,9 +6,10 @@ import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 import { markPacked, markShipped } from '../actions';
 import type { ActionResult } from '../actions';
+import type { InvoiceType } from '@/lib/types';
 
 interface Inv {
-  id: string; number: string; type: 'full' | 'shipment' | 'backorder'; date: string;
+  id: string; number: string; type: InvoiceType; date: string;
   paid: boolean; paid_date: string | null; ready_to_pack: boolean;
   packed: boolean; packed_at: string | null; shipped: boolean; shipped_at: string | null;
   carrier: string | null; tracking_number: string | null; tracking_url: string | null;

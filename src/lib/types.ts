@@ -1,6 +1,14 @@
 export type Role = 'admin' | 'accounts' | 'ops' | 'client';
 export type OrderStatus = 'open' | 'complete' | 'cancelled';
-export type InvoiceType = 'full' | 'shipment' | 'backorder';
+export type InvoiceType =
+  | 'full' | 'shipment' | 'backorder'
+  /** Asks for nothing: shows what is coming and what it will cost. */
+  | 'proforma'
+  /** Money owed back to the client, never a debt waiting on them. */
+  | 'credit';
+
+/** Neither of these is ever waiting on a payment. */
+export const isPayableType = (t: InvoiceType) => t !== 'proforma' && t !== 'credit';
 export type RequestStatus = 'pending' | 'approved' | 'rejected';
 export type TransferStatus = 'draft' | 'in_transit' | 'received' | 'cancelled';
 export type XeroStatus = 'not_synced' | 'synced' | 'error';

@@ -7,9 +7,10 @@ import { fmtDate } from '@/lib/format';
 import { markPaid, markUnpaid } from '../actions';
 import type { ActionResult } from '../actions';
 import { pushToXero, pullPaymentStatus } from './actions';
+import type { InvoiceType } from '@/lib/types';
 
 interface Inv {
-  id: string; number: string; type: 'full' | 'shipment' | 'backorder';
+  id: string; number: string; type: InvoiceType;
   date: string; due_date: string; vat_rate: number;
   paid: boolean; paid_date: string | null; packed: boolean; shipped: boolean;
   xero_id: string | null; xero_status: 'not_synced' | 'synced' | 'error';
@@ -121,9 +122,13 @@ export default function InvoicesScreen({
                         <Money value={n * (1 + Number(inv.vat_rate) / 100)} />
                       </td>
                       <td className="whitespace-nowrap">
-                        {inv.paid
-                          ? <Tag tone="green">paid {fmtDate(inv.paid_date)}</Tag>
-                          : <Tag tone="red">unpaid</Tag>}
+                        {inv.type === 'proforma'
+                          ? <Tag tone="line">nothing to pay</Tag>
+                          : inv.type === 'credit'
+                            ? <Tag tone="green">credit</Tag>
+                            : inv.paid
+                              ? <Tag tone="green">paid {fmtDate(inv.paid_date)}</Tag>
+                              : <Tag tone="red">unpaid</Tag>}
                       </td>
                       <td>
                         {inv.xero_status === 'synced' && <Tag tone="green">synced</Tag>}
@@ -139,7 +144,8 @@ export default function InvoicesScreen({
                           >
                             PDF
                           </a>
-                          {!inv.paid ? (
+                          {inv.type === 'proforma' || inv.type === 'credit' ? null
+                            : !inv.paid ? (
                             <Button small kind="ghost" disabled={pending}
                               onClick={() => run(() => markPaid(inv.id, null))}>
                               Mark paid

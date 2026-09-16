@@ -5,8 +5,8 @@ import { Button, Card, Money, Notice, Tag } from '@/components/ui';
 import { fmtDate, today } from '@/lib/format';
 import Timeline from '@/components/Timeline';
 import { splitInvoice, editOrder, cancelOrder, deleteOrder,
-         proformaForBackorder, creditInvoice } from '../actions';
-import type { OrderEvent } from '@/lib/types';
+         proformaForBackorder, creditInvoice, markPaid } from '../actions';
+import type { InvoiceType, OrderEvent } from '@/lib/types';
 
 interface Line {
   id: string; product_id: string | null; sku: string; name: string;
@@ -16,7 +16,7 @@ interface Line {
 export interface ProductLite { id: string; sku: string; name: string }
 interface Inv {
   id: string; number: string;
-  type: 'full' | 'shipment' | 'backorder' | 'proforma' | 'credit'; date: string;
+  type: InvoiceType; date: string;
   due_date: string; paid: boolean; packed: boolean; shipped: boolean;
   superseded: boolean; ready_to_pack: boolean; vat_rate: number;
 }
@@ -35,7 +35,7 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
 }) {
   const [open, setOpen] = useState(false);
   const [splitting, setSplitting] = useState(false);
-  const [mode, setMode] = useState<'none' | 'edit' | 'cancel' | 'delete' | 'credit'>('none');
+  const [mode, setMode] = useState<'none' | 'edit' | 'cancel' | 'delete' | 'credit' | 'paid'>('none');
   const [message, setMessage] = useState('');
   const [availableDate, setAvailableDate] = useState(today());
   const [error, setError] = useState('');
@@ -55,6 +55,10 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
   const gone = realInvoices.some((i) => i.packed || i.shipped);
   const amendable = canAmend && !cancelled && !settled && !gone;
   const creditable = live.filter((i) => i.type !== 'proforma' && i.type !== 'credit');
+  // A proforma asks for nothing and a credit note is money going the other
+  // way, so neither is ever waiting on a payment.
+  const payable = live.filter(
+    (i) => !i.paid && i.type !== 'proforma' && i.type !== 'credit');
 
   function run(fn: () => Promise<{ ok: boolean; error?: string; message?: string }>) {
     setError(''); setMessage('');
@@ -155,6 +159,11 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
                   Split into shipment + back order
                 </Button>
               )}
+              {canAmend && payable.length > 0 && mode === 'none' && (
+                <Button small kind="accent" onClick={() => { setMode('paid'); setError(''); }}>
+                  Mark paid
+                </Button>
+              )}
               {canAmend && !cancelled && backordered > 0 && (
                 <Button small kind="ghost" disabled={pending}
                         onClick={() => run(() => proformaForBackorder(order.id))}>
@@ -223,6 +232,13 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
                 confirmLabel="Delete for good" danger
                 pending={pending} onCancel={() => setMode('none')}
                 onConfirm={() => run(() => deleteOrder(order.id))}
+              />
+            )}
+            {mode === 'paid' && (
+              <MarkPaid
+                invoices={payable} pending={pending}
+                onCancel={() => setMode('none')}
+                onSave={(id, date) => run(() => markPaid(id, date))}
               />
             )}
             {mode === 'credit' && (
@@ -450,6 +466,55 @@ function CreditNote({ invoices, pending, onSave, onCancel }: {
         </Button>
         <Button small kind="ghost" disabled={pending} onClick={onCancel}>Cancel</Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Recording a payment against one of this order's invoices.
+ *
+ * The date defaults to today but is editable, because payment usually reaches
+ * the bank before anyone reaches this screen, and an invoice recorded as paid
+ * today when it cleared last Tuesday makes the ledger disagree with the bank.
+ */
+function MarkPaid({ invoices, pending, onSave, onCancel }: {
+  invoices: Inv[]; pending: boolean;
+  onSave: (invoiceId: string, paidDate: string) => void;
+  onCancel: () => void;
+}) {
+  const [invoiceId, setInvoiceId] = useState(invoices[0]?.id ?? '');
+  const [date, setDate] = useState(today());
+  const chosen = invoices.find((i) => i.id === invoiceId);
+
+  return (
+    <div className="mt-3 border border-ink rounded p-3 space-y-3">
+      <h3 className="text-[13px] font-semibold">Record a payment</h3>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-[12px]">
+          <span className="block font-semibold mb-1">Invoice</span>
+          <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)}
+                  className="text-[12px]">
+            {invoices.map((i) => (
+              <option key={i.id} value={i.id}>{i.number} · {i.type}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[12px]">
+          <span className="block font-semibold mb-1">Payment received</span>
+          <input type="date" value={date} max={today()}
+                 min={chosen?.date}
+                 onChange={(e) => setDate(e.target.value)} className="w-[170px]" />
+        </label>
+        <Button small kind="accent" disabled={pending || !invoiceId}
+                onClick={() => onSave(invoiceId, date)}>
+          {pending ? 'Recording…' : 'Mark paid'}
+        </Button>
+        <Button small kind="ghost" disabled={pending} onClick={onCancel}>Cancel</Button>
+      </div>
+      <p className="text-[11px] text-mute">
+        Once paid, the invoice can be packed as soon as its stock is here. Nothing ships
+        before payment.
+      </p>
     </div>
   );
 }

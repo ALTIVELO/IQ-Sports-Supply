@@ -140,13 +140,45 @@ begin
 end $$;
 
 \echo ''
+\echo '───────── Recording a payment, and what cannot be paid ─────────'
+do $$
+declare v_order uuid := (select id from placed order by n limit 1); v_inv uuid; v_pro uuid;
+begin
+  select id into v_inv from invoices
+   where order_id=v_order and not superseded and type='full';
+  select id into v_pro from invoices
+   where order_id=v_order and not superseded and type='proforma';
+
+  -- A proforma asks for nothing, so settling one would record a payment
+  -- against money never demanded — and the real invoice would still be chased.
+  perform assert_fails(format($q$select mark_invoice_paid(%L)$q$, v_pro),
+                       'a proforma cannot be marked paid');
+  perform assert_fails(
+    format($q$select mark_invoice_paid(%L, current_date + 1)$q$, v_inv),
+    'nor can a payment be dated in the future');
+  perform assert_fails(
+    format($q$select mark_invoice_paid(%L, date '2020-01-01')$q$, v_inv),
+    'nor before the invoice existed');
+
+  -- The date it actually cleared, not the day someone got to the screen. The
+  -- invoice is backdated first, because this guard is why it has to be.
+  update invoices set date = current_date - 5, due_date = current_date + 25 where id = v_inv;
+  perform mark_invoice_paid(v_inv, current_date - 2);
+  perform assert_eq((select paid_date from invoices where id=v_inv), current_date - 2,
+                    'the payment is recorded on the day it arrived, not today');
+  perform assert_eq((select paid from invoices where id=v_inv), true, 'and it reads as paid');
+  perform assert_eq((select count(*)::integer from order_events
+                      where order_id=v_order and type='payment_received'), 1,
+                    'with one payment event against the order');
+end $$;
+
+\echo ''
 \echo '───────── An order that has moved on cannot be rewritten ─────────'
 do $$
 declare v_order uuid := (select id from placed order by n limit 1); v_inv uuid;
 begin
   select id into v_inv from invoices
    where order_id=v_order and not superseded and type='full';
-  perform mark_invoice_paid(v_inv, current_date);
 
   perform assert_fails(
     format($q$select edit_order(%L, '[]'::jsonb)$q$, v_order),
