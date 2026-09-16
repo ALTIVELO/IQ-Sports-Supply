@@ -11,7 +11,13 @@ rm -rf .test-build
 $TSC src/lib/catalogue/*.ts --outDir .test-build/catalogue >/dev/null 2>&1
 $TSC src/lib/app-url.ts     --outDir .test-build/lib       >/dev/null 2>&1
 $TSC src/lib/login/*.ts     --outDir .test-build/login     >/dev/null 2>&1
-$TSC src/lib/import/parse.ts --outDir .test-build/import    >/dev/null 2>&1
+$TSC src/lib/import/*.ts    --outDir .test-build/import    >/dev/null 2>&1
+
+# tsc emits the specifier as written ("./types"), which Node's ESM loader will
+# not resolve. Nothing here imports a directory, so appending .js to relative
+# specifiers is safe and keeps the source free of build-shaped imports.
+find .test-build -name '*.js' -print0 |
+  xargs -0 sed -i -E "s#(from '\\.[^']*)'#\\1.js'#g"
 
 fail=0
 for f in tests/unit/*.test.mjs; do

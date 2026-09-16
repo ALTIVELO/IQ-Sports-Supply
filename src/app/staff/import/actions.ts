@@ -3,9 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { supabaseServer } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
-import { SUSPICIOUS_DELTA, type ClientRow, type ImportScope, type PriceChange,
-         type PricePreview, type PriceRow, type StockRow, type HistoricOrderRow,
-         type ColumnMapping } from '@/lib/import/types';
+import { SUSPICIOUS_DELTA, type CatalogueRow, type CataloguePreview,
+         type ClientRow, type ColumnMapping, type CostPreview, type ImportScope,
+         type PriceChange, type PricePreview, type StockRow,
+         type HistoricOrderRow } from '@/lib/import/types';
 import type { ActionResult } from '../actions';
 import { classifyProduct } from '@/lib/catalogue/categories';
 
@@ -40,102 +41,229 @@ export async function saveTemplate(input: {
   return { ok: true, message: 'Column mapping saved' };
 }
 
-// ── price import ────────────────────────────────────────────────────────────
+// ── catalogue import: SKUs, tier prices and what they cost us ───────────────
+
+/** Every tier this file prices, in the order the tiers themselves are kept. */
+function tiersPriced(rows: CatalogueRow[], tiers: { id: string; name: string }[]) {
+  const seen = new Set(rows.flatMap((r) => Object.keys(r.prices)));
+  return tiers.filter((t) => seen.has(t.id));
+}
 
 /**
- * Compares a sheet against what is already in the system. Reads only — nothing
+ * Folds every included sheet into one row per SKU.
+ *
+ * A workbook may hold the whole catalogue on one tab with a column per tier,
+ * or a tab per tier with one price column each. Merging by SKU makes both the
+ * same thing by the time anything is compared, so the rest of this file only
+ * ever deals with "this product, these prices, this cost".
+ */
+function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
+  const merged = new Map<string, CatalogueRow>();
+  const invalid: { row: number; reason: string }[] = [];
+  let line = 0;
+
+  for (const sheet of sheets) {
+    const seenHere = new Set<string>();
+    for (const row of sheet.rows) {
+      line += 1;
+      const sku = row.sku?.trim();
+      if (!sku) { invalid.push({ row: line, reason: 'No SKU' }); continue; }
+      const key = norm(sku);
+
+      // Twice on one sheet is a mistake in the sheet. Twice across sheets is
+      // the tab-per-tier shape, and is the whole point of merging.
+      if (seenHere.has(key)) {
+        invalid.push({ row: line, reason: `${sku} appears twice on the same sheet` });
+        continue;
+      }
+      seenHere.add(key);
+
+      for (const price of Object.values(row.prices)) {
+        if (!Number.isFinite(price) || price < 0) {
+          invalid.push({ row: line, reason: `Unreadable price for ${sku}` });
+        }
+      }
+      if (row.cost !== undefined && (!Number.isFinite(row.cost) || row.cost < 0)) {
+        invalid.push({ row: line, reason: `Unreadable cost for ${sku}` });
+      }
+
+      const prices = Object.fromEntries(
+        Object.entries(row.prices).filter(([, v]) => Number.isFinite(v) && v >= 0),
+      );
+      const cost = row.cost !== undefined && Number.isFinite(row.cost) && row.cost >= 0
+        ? row.cost : undefined;
+
+      const existing = merged.get(key);
+      merged.set(key, existing
+        ? {
+            ...existing,
+            name: existing.name || row.name,
+            brand: existing.brand || row.brand,
+            category: existing.category || row.category,
+            image_url: existing.image_url || row.image_url,
+            cost: cost ?? existing.cost,
+            prices: { ...existing.prices, ...prices },
+          }
+        : { ...row, sku, cost, prices });
+    }
+  }
+
+  return { rows: [...merged.values()], invalid };
+}
+
+/** The price in force for each product on a tier, as at a date. */
+async function pricesAsAt(
+  sb: Awaited<ReturnType<typeof supabaseServer>>, tierId: string, on: string,
+) {
+  const { data } = await sb
+    .from('tier_prices')
+    .select('product_id, price, effective_from')
+    .eq('tier_id', tierId)
+    .lte('effective_from', on)
+    .order('effective_from', { ascending: false });
+
+  const current = new Map<string, number>();
+  for (const r of data ?? []) {
+    if (!current.has(r.product_id)) current.set(r.product_id, Number(r.price));
+  }
+  return current;
+}
+
+/** What each product cost us, as at a date. */
+async function costsAsAt(
+  sb: Awaited<ReturnType<typeof supabaseServer>>, on: string,
+) {
+  const { data } = await sb
+    .from('product_costs')
+    .select('product_id, cost, effective_from')
+    .lte('effective_from', on)
+    .order('effective_from', { ascending: false });
+
+  const current = new Map<string, number>();
+  for (const r of data ?? []) {
+    if (!current.has(r.product_id)) current.set(r.product_id, Number(r.cost));
+  }
+  return current;
+}
+
+function describeChange(
+  sku: string, name: string, old: number | undefined, next: number,
+): PriceChange | null {
+  if (old !== undefined && Math.abs(old - next) < 0.005) return null;
+  const from = old ?? 0;
+  const deltaPct = from === 0 ? 100 : ((next - from) / from) * 100;
+  return {
+    sku, name, oldPrice: from, newPrice: next, deltaPct,
+    // Priced from nothing is not a swing, it is a first price.
+    suspicious: old !== undefined && Math.abs(deltaPct) > SUSPICIOUS_DELTA,
+  };
+}
+
+/**
+ * Compares a file against what is already in the system. Reads only — nothing
  * is written until the user applies the preview.
  */
-export async function previewPrices(
-  sheets: { tierId: string; rows: PriceRow[] }[],
+export async function previewCatalogue(
+  sheets: { rows: CatalogueRow[] }[],
   effectiveFrom: string,
-): Promise<{ ok: true; previews: PricePreview[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; preview: CataloguePreview } | { ok: false; error: string }> {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
 
   const [{ data: tiers }, { data: products }] = await Promise.all([
-    sb.from('tiers').select('id, name'),
+    sb.from('tiers').select('id, name').order('sort'),
     sb.from('products').select('id, sku, name').eq('active', true),
   ]);
 
+  const { rows, invalid } = mergeSheets(sheets);
+  if (!rows.length) return { ok: false, error: 'That file had no product rows in it' };
+
   const bySku = new Map((products ?? []).map((p) => [norm(p.sku), p]));
-  const previews: PricePreview[] = [];
+  const priced = tiersPriced(rows, tiers ?? []);
 
-  for (const sheet of sheets) {
-    const tier = (tiers ?? []).find((t) => t.id === sheet.tierId);
-    if (!tier) return { ok: false, error: 'Unknown pricing tier on one of the sheets' };
+  const nameOf = (r: CatalogueRow) => bySku.get(norm(r.sku))?.name ?? r.name ?? r.sku;
 
-    // Current price per product for this tier, as of the effective date.
-    const { data: prices } = await sb
-      .from('tier_prices')
-      .select('product_id, price, effective_from')
-      .eq('tier_id', tier.id)
-      .lte('effective_from', effectiveFrom)
-      .order('effective_from', { ascending: false });
+  // ── per tier ──
+  const tierPreviews: PricePreview[] = [];
 
-    const currentPrice = new Map<string, number>();
-    for (const p of prices ?? []) {
-      if (!currentPrice.has(p.product_id)) currentPrice.set(p.product_id, Number(p.price));
-    }
-
-    const created: PriceRow[] = [];
+  for (const tier of priced) {
+    const current = await pricesAsAt(sb, tier.id, effectiveFrom);
     const changed: PriceChange[] = [];
-    const invalid: { row: number; reason: string }[] = [];
-    const seen = new Set<string>();
+    let created = 0;
     let unchanged = 0;
 
-    sheet.rows.forEach((row, i) => {
-      const sku = row.sku?.trim();
-      if (!sku) { invalid.push({ row: i + 1, reason: 'No SKU' }); return; }
-      if (!Number.isFinite(row.price) || row.price < 0) {
-        invalid.push({ row: i + 1, reason: `Unreadable price for ${sku}` });
-        return;
-      }
-      const key = norm(sku);
-      if (seen.has(key)) { invalid.push({ row: i + 1, reason: `${sku} appears twice` }); return; }
-      seen.add(key);
+    for (const row of rows) {
+      const price = row.prices[tier.id];
+      if (price === undefined) continue;
 
-      const existing = bySku.get(key);
-      if (!existing) { created.push({ ...row, sku }); return; }
+      const product = bySku.get(norm(row.sku));
+      if (!product) { created += 1; continue; }
 
-      const old = currentPrice.get(existing.id);
-      if (old === undefined) {
-        // Known product, no price on this tier yet — treated as a change from nothing.
-        changed.push({
-          sku: existing.sku, name: existing.name, oldPrice: 0, newPrice: row.price,
-          deltaPct: 100, suspicious: false,
-        });
-        return;
-      }
-      if (Math.abs(old - row.price) < 0.005) { unchanged += 1; return; }
+      const change = describeChange(product.sku, product.name, current.get(product.id), price);
+      if (change) changed.push(change); else unchanged += 1;
+    }
 
-      const deltaPct = old === 0 ? 100 : ((row.price - old) / old) * 100;
-      changed.push({
-        sku: existing.sku, name: existing.name, oldPrice: old, newPrice: row.price,
-        deltaPct,
-        suspicious: Math.abs(deltaPct) > SUSPICIOUS_DELTA,
-      });
-    });
-
-    const missing = (products ?? [])
-      .filter((p) => !seen.has(norm(p.sku)))
-      .map((p) => ({ sku: p.sku, name: p.name }));
-
-    previews.push({
-      tierId: tier.id, tierName: tier.name, created, changed, unchanged, missing, invalid,
-    });
+    tierPreviews.push({ tierId: tier.id, tierName: tier.name, created, changed, unchanged });
   }
 
-  return { ok: true, previews };
+  // ── what we pay ──
+  const withCost = rows.filter((r) => r.cost !== undefined);
+  let costs: CostPreview | null = null;
+
+  if (withCost.length) {
+    const current = await costsAsAt(sb, effectiveFrom);
+    const changed: PriceChange[] = [];
+    let created = 0;
+    let unchanged = 0;
+
+    for (const row of withCost) {
+      const product = bySku.get(norm(row.sku));
+      if (!product) { created += 1; continue; }
+      const change = describeChange(product.sku, product.name, current.get(product.id), row.cost!);
+      if (change) changed.push(change); else unchanged += 1;
+    }
+
+    // Against the prices this same file sets, not the ones it replaces: what
+    // matters is whether we would be selling at a loss once it is applied.
+    const belowCost: CostPreview['belowCost'] = [];
+    for (const row of withCost) {
+      for (const tier of priced) {
+        const price = row.prices[tier.id];
+        if (price === undefined || price > row.cost!) continue;
+        belowCost.push({
+          sku: row.sku, name: nameOf(row), tierName: tier.name,
+          price, cost: row.cost!,
+        });
+      }
+    }
+
+    costs = { created, changed, unchanged, belowCost };
+  }
+
+  const inFile = new Set(rows.map((r) => norm(r.sku)));
+  return {
+    ok: true,
+    preview: {
+      tiers: tierPreviews,
+      costs,
+      newSkus: rows.filter((r) => !bySku.has(norm(r.sku)))
+        .map((r) => ({ sku: r.sku, name: r.name || r.sku })),
+      missing: (products ?? []).filter((p) => !inFile.has(norm(p.sku)))
+        .map((p) => ({ sku: p.sku, name: p.name })),
+      invalid,
+    },
+  };
 }
 
 /**
- * Applies a previewed import. Creates products for new SKUs and writes new
- * tier_prices rows dated to the effective date — history is preserved and
- * nothing is ever deleted.
+ * Applies a previewed import.
+ *
+ * Creates products for new SKUs, then writes tier_prices and product_costs
+ * rows dated to the effective date. Both are dated histories: nothing is
+ * overwritten, and last quarter's margin still reads as last quarter's.
  */
-export async function applyPrices(input: {
-  sheets: { tierId: string; rows: PriceRow[] }[];
+export async function applyCatalogue(input: {
+  sheets: { rows: CatalogueRow[] }[];
   effectiveFrom: string;
   filename: string;
   deactivateMissing: boolean;
@@ -143,93 +271,120 @@ export async function applyPrices(input: {
   const user = await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
 
-  let totalAdded = 0;
-  let totalChanged = 0;
+  const { rows } = mergeSheets(input.sheets);
+  const valid = rows.filter((r) => r.sku.trim());
+  if (!valid.length) return { ok: false, error: 'There was nothing to import' };
 
-  for (const sheet of input.sheets) {
-    const valid = sheet.rows.filter((r) => r.sku?.trim() && Number.isFinite(r.price) && r.price >= 0);
-    if (!valid.length) continue;
+  const { data: tiers } = await sb.from('tiers').select('id, name').order('sort');
+  const priced = tiersPriced(valid, tiers ?? []);
 
-    // Create any SKU the system has not seen before.
-    const { data: existing } = await sb.from('products').select('id, sku');
-    const bySku = new Map((existing ?? []).map((p) => [norm(p.sku), p.id]));
+  const { data: existing } = await sb.from('products').select('id, sku');
+  const bySku = new Map((existing ?? []).map((p) => [norm(p.sku), p.id]));
 
-    const toCreate = valid.filter((r) => !bySku.has(norm(r.sku)));
-    if (toCreate.length) {
-      // Dedupe within the sheet before inserting.
-      const unique = new Map(toCreate.map((r) => [norm(r.sku), r]));
+  // ── new SKUs ──
+  const toCreate = valid.filter((r) => !bySku.has(norm(r.sku)));
+  let added = 0;
+  if (toCreate.length) {
+    // A category column in the sheet is taken at its word — a supplier's own
+    // section headings know more than any classifier can read out of a line
+    // like "RTCL900LJ". Where the sheet says nothing, the description is
+    // classified, so nobody has to maintain a category column in Excel.
+    const { data: categories } = await sb.from('categories').select('id, slug, name');
+    const categoryId = new Map((categories ?? []).map((c) => [c.slug, c.id]));
+    const byLabel = new Map((categories ?? []).flatMap((c) => [
+      [norm(c.slug), c.id] as const,
+      [norm(c.name), c.id] as const,
+    ]));
 
-      // A category column in the sheet is taken at its word — a supplier's own
-      // section headings know more than any classifier can read out of a line
-      // like "RTCL900LJ". Where the sheet says nothing, the description is
-      // classified, so nobody has to maintain a category column in Excel.
-      const { data: categories } = await sb.from('categories').select('id, slug, name');
-      const categoryId = new Map((categories ?? []).map((c) => [c.slug, c.id]));
-      const byLabel = new Map((categories ?? []).flatMap((c) => [
-        [norm(c.slug), c.id] as const,
-        [norm(c.name), c.id] as const,
-      ]));
-
-      const { data: inserted, error } = await sb.from('products')
-        .insert([...unique.values()].map((r) => {
-          const given = r.category?.trim();
-          const givenId = given ? byLabel.get(norm(given)) ?? null : null;
-          const slug = givenId ? null : classifyProduct({ name: r.name, brand: r.brand, sku: r.sku });
-          const image = r.image_url?.trim();
-          return {
-            sku: r.sku.trim(),
-            name: r.name?.trim() || r.sku.trim(),
-            brand: r.brand?.trim() || null,
-            category_id: givenId ?? (slug ? categoryId.get(slug) ?? null : null),
-            // Only accept a real URL; a sheet often carries a filename here,
-            // which would render as a broken image.
-            image_url: image && /^https?:\/\//i.test(image) ? image : null,
-          };
-        }))
-        .select('id, sku');
-      if (error) return { ok: false, error: `Creating new SKUs failed: ${error.message}` };
-      for (const p of inserted ?? []) bySku.set(norm(p.sku), p.id);
-      totalAdded += inserted?.length ?? 0;
-    }
-
-    const priceRows = valid
-      .map((r) => ({
-        product_id: bySku.get(norm(r.sku))!,
-        tier_id: sheet.tierId,
-        price: r.price,
-        effective_from: input.effectiveFrom,
+    const { data: inserted, error } = await sb.from('products')
+      .insert(toCreate.map((r) => {
+        const given = r.category?.trim();
+        const givenId = given ? byLabel.get(norm(given)) ?? null : null;
+        const slug = givenId ? null : classifyProduct({ name: r.name, brand: r.brand, sku: r.sku });
+        const image = r.image_url?.trim();
+        return {
+          sku: r.sku.trim(),
+          name: r.name?.trim() || r.sku.trim(),
+          brand: r.brand?.trim() || null,
+          category_id: givenId ?? (slug ? categoryId.get(slug) ?? null : null),
+          // Only accept a real URL; a sheet often carries a filename here,
+          // which would render as a broken image.
+          image_url: image && /^https?:\/\//i.test(image) ? image : null,
+        };
       }))
-      .filter((r) => r.product_id);
-
-    if (priceRows.length) {
-      const { error } = await sb.from('tier_prices')
-        .upsert(priceRows, { onConflict: 'product_id,tier_id,effective_from' });
-      if (error) return { ok: false, error: `Writing prices failed: ${error.message}` };
-      totalChanged += priceRows.length;
-    }
-
-    if (input.deactivateMissing) {
-      const present = new Set(valid.map((r) => norm(r.sku)));
-      const stale = (existing ?? []).filter((p) => !present.has(norm(p.sku))).map((p) => p.id);
-      if (stale.length) await sb.from('products').update({ active: false }).in('id', stale);
-    }
-
-    await sb.from('price_imports').insert({
-      tier_id: sheet.tierId,
-      filename: input.filename,
-      rows_added: totalAdded,
-      rows_changed: priceRows.length,
-      effective_from: input.effectiveFrom,
-      applied_by: user.id,
-    });
+      .select('id, sku');
+    if (error) return { ok: false, error: `Creating new SKUs failed: ${error.message}` };
+    for (const p of inserted ?? []) bySku.set(norm(p.sku), p.id);
+    added = inserted?.length ?? 0;
   }
 
+  // ── sell prices ──
+  let priceRows = 0;
+  for (const tier of priced) {
+    const batch = valid
+      .filter((r) => r.prices[tier.id] !== undefined && bySku.has(norm(r.sku)))
+      .map((r) => ({
+        product_id: bySku.get(norm(r.sku))!,
+        tier_id: tier.id,
+        price: r.prices[tier.id],
+        effective_from: input.effectiveFrom,
+      }));
+    if (!batch.length) continue;
+
+    const { error } = await sb.from('tier_prices')
+      .upsert(batch, { onConflict: 'product_id,tier_id,effective_from' });
+    if (error) return { ok: false, error: `Writing ${tier.name} prices failed: ${error.message}` };
+    priceRows += batch.length;
+  }
+
+  // ── what we pay ──
+  const costBatch = valid
+    .filter((r) => r.cost !== undefined && bySku.has(norm(r.sku)))
+    .map((r) => ({
+      product_id: bySku.get(norm(r.sku))!,
+      cost: r.cost!,
+      effective_from: input.effectiveFrom,
+    }));
+
+  if (costBatch.length) {
+    const { error } = await sb.from('product_costs')
+      .upsert(costBatch, { onConflict: 'product_id,effective_from' });
+    if (error) return { ok: false, error: `Writing cost prices failed: ${error.message}` };
+
+    // Orders placed before we knew what their lines cost can be costed now,
+    // at the cost in force on the day each was placed. Nothing already
+    // recorded is touched.
+    await sb.rpc('refill_order_line_costs');
+  }
+
+  if (input.deactivateMissing) {
+    const present = new Set(valid.map((r) => norm(r.sku)));
+    const stale = (existing ?? []).filter((p) => !present.has(norm(p.sku))).map((p) => p.id);
+    if (stale.length) await sb.from('products').update({ active: false }).in('id', stale);
+  }
+
+  await sb.from('price_imports').insert({
+    tier_id: priced.length === 1 ? priced[0].id : null,
+    filename: input.filename,
+    rows_added: added,
+    rows_changed: priceRows,
+    costs_changed: costBatch.length,
+    effective_from: input.effectiveFrom,
+    applied_by: user.id,
+  });
+
   revalidatePath('/staff/catalogue');
+  revalidatePath('/staff/orders');
   revalidatePath('/staff/import');
-  return {
-    ok: true,
-    message: `Applied — ${totalAdded} new SKU${totalAdded === 1 ? '' : 's'}, ${totalChanged} price row${totalChanged === 1 ? '' : 's'} effective ${input.effectiveFrom}`,
-  };
+
+  const parts = [`${added} new SKU${added === 1 ? '' : 's'}`];
+  if (priceRows) {
+    parts.push(`${priceRows} price${priceRows === 1 ? '' : 's'} across `
+      + `${priced.length} tier${priced.length === 1 ? '' : 's'}`);
+  }
+  if (costBatch.length) parts.push(`${costBatch.length} cost${costBatch.length === 1 ? '' : 's'}`);
+
+  return { ok: true, message: `Applied — ${parts.join(', ')}, effective ${input.effectiveFrom}` };
 }
 
 // ── client and stock imports ────────────────────────────────────────────────

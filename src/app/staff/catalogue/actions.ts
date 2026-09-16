@@ -7,7 +7,7 @@ import type { ActionResult } from '../actions';
 
 export async function saveProduct(input: {
   id?: string; sku: string; name: string; brand: string;
-  prices: Record<string, string>; effectiveFrom: string;
+  prices: Record<string, string>; cost?: string; effectiveFrom: string;
 }): Promise<ActionResult> {
   await requireStaff();
   const sb = await supabaseServer();
@@ -39,6 +39,17 @@ export async function saveProduct(input: {
   if (rows.length) {
     const { error } = await sb.from('tier_prices')
       .upsert(rows, { onConflict: 'product_id,tier_id,effective_from' });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  // What we pay is a dated history too, for the same reason: a margin worked
+  // out last quarter must not move because the supplier repriced this one.
+  const cost = input.cost?.trim();
+  if (cost && !Number.isNaN(Number(cost))) {
+    const { error } = await sb.from('product_costs').upsert(
+      { product_id: productId!, cost: Number(cost), effective_from: input.effectiveFrom },
+      { onConflict: 'product_id,effective_from' },
+    );
     if (error) return { ok: false, error: error.message };
   }
 

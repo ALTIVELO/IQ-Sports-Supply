@@ -26,10 +26,12 @@ interface Transfer {
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
 
 export default function CatalogueScreen({
-  products, tiers, locations, prices, stock, transfers, categories, canDelete, query, tab,
+  products, tiers, locations, prices, costs, stock, transfers, categories, canDelete, query, tab,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
+  /** Product id → what it costs us today. Staff-only, and never sent client-side. */
+  costs: Record<string, number>;
   stock: Record<string, Record<string, number>>;
   transfers: Transfer[]; categories: CategoryOption[];
   canDelete: boolean; query: string; tab: 'catalogue' | 'transfers';
@@ -68,7 +70,7 @@ export default function CatalogueScreen({
           </form>
           <StockMatrix
             products={products} tiers={tiers} locations={locations}
-            prices={prices} stock={stock} categories={categories}
+            prices={prices} costs={costs} stock={stock} categories={categories}
             canDelete={canDelete} onMessage={setMessage}
           />
         </>
@@ -89,15 +91,18 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
   const [brand, setBrand] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState(today());
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [cost, setCost] = useState('');
   const [pending, startTransition] = useTransition();
 
   function submit() {
     startTransition(async () => {
-      const r = await saveProduct({ sku, name, brand, prices, effectiveFrom });
+      const r = await saveProduct({ sku, name, brand, prices, cost, effectiveFrom });
       onMessage(r.ok
         ? { tone: 'success', text: r.message ?? 'Saved' }
         : { tone: 'error', text: r.error ?? 'Could not save' });
-      if (r.ok) { setSku(''); setName(''); setBrand(''); setPrices({}); setOpen(false); }
+      if (r.ok) {
+        setSku(''); setName(''); setBrand(''); setPrices({}); setCost(''); setOpen(false);
+      }
     });
   }
 
@@ -116,7 +121,13 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
           <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
         </label>
       </div>
-      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${tiers.length}, minmax(0,1fr))` }}>
+      <div className="grid gap-2"
+           style={{ gridTemplateColumns: `repeat(${tiers.length + 1}, minmax(0,1fr))` }}>
+        <input
+          type="number" step="0.01" min={0} className="num"
+          placeholder="Our cost £" value={cost}
+          onChange={(e) => setCost(e.target.value)}
+        />
         {tiers.map((t) => (
           <input
             key={t.id} type="number" step="0.01" min={0} className="num"
@@ -134,10 +145,11 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
 }
 
 function StockMatrix({
-  products, tiers, locations, prices, stock, categories, canDelete, onMessage,
+  products, tiers, locations, prices, costs, stock, categories, canDelete, onMessage,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
+  costs: Record<string, number>;
   stock: Record<string, Record<string, number>>;
   categories: CategoryOption[];
   canDelete: boolean;
@@ -298,6 +310,7 @@ function StockMatrix({
               <th>SKU</th><th>Product</th><th>Brand</th><th>Category</th>
               {locations.map((l) => <th key={l.id} className="text-right">{l.name}</th>)}
               <th className="text-right">Total</th>
+              <th className="text-right">Cost</th>
               {tiers.map((t) => <th key={t.id} className="text-right">{t.name}</th>)}
               <th />
             </tr>
@@ -377,11 +390,25 @@ function StockMatrix({
                     );
                   })}
                   <td className="num text-right font-semibold">{total}</td>
-                  {tiers.map((t) => (
-                    <td key={t.id} className="num text-right">
-                      {prices[p.id]?.[t.id] != null ? <Money value={prices[p.id][t.id]} /> : '—'}
-                    </td>
-                  ))}
+                  <td className="num text-right text-mute">
+                    {costs[p.id] != null ? <Money value={costs[p.id]} /> : '—'}
+                  </td>
+                  {tiers.map((t) => {
+                    const price = prices[p.id]?.[t.id];
+                    const cost = costs[p.id];
+                    // A tier priced at or under what we pay sells at a loss.
+                    // Worth seeing at a glance, not only on the import preview.
+                    const atALoss = price != null && cost != null && price <= cost;
+                    return (
+                      <td
+                        key={t.id}
+                        className={`num text-right ${atALoss ? 'text-danger font-semibold' : ''}`}
+                        title={atALoss ? `At or below the ${'\u00A3'}${cost.toFixed(2)} we pay` : undefined}
+                      >
+                        {price != null ? <Money value={price} /> : '—'}
+                      </td>
+                    );
+                  })}
                   <td className="text-right">
                     <Button
                       small kind="ghost"

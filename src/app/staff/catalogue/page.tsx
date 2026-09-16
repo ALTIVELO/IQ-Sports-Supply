@@ -23,11 +23,16 @@ export default async function CataloguePage({
     .order('sku').limit(500);
   if (q?.trim()) productQuery = productQuery.or(`sku.ilike.%${q.trim()}%,name.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%`);
 
-  const [{ data: products }, { data: prices }, { data: stock }, { data: transfers }] =
+  const todayISO = new Date().toISOString().slice(0, 10);
+
+  const [{ data: products }, { data: prices }, { data: costs }, { data: stock }, { data: transfers }] =
     await Promise.all([
       productQuery,
       sb.from('tier_prices').select('product_id, tier_id, price, effective_from')
-        .lte('effective_from', new Date().toISOString().slice(0, 10))
+        .lte('effective_from', todayISO)
+        .order('effective_from', { ascending: false }),
+      sb.from('product_costs').select('product_id, cost, effective_from')
+        .lte('effective_from', todayISO)
         .order('effective_from', { ascending: false }),
       sb.from('stock_levels').select('product_id, location_id, qty'),
       sb.from('stock_transfers')
@@ -43,6 +48,12 @@ export default async function CataloguePage({
     }
   }
 
+  // Latest row first, so the first one seen for a product is the one in force.
+  const costMap: Record<string, number> = {};
+  for (const r of costs ?? []) {
+    if (costMap[r.product_id] === undefined) costMap[r.product_id] = Number(r.cost);
+  }
+
   const stockMap: Record<string, Record<string, number>> = {};
   for (const r of stock ?? []) {
     stockMap[r.product_id] ??= {};
@@ -51,7 +62,7 @@ export default async function CataloguePage({
 
   return (
     <>
-      <PageHeading sub="Every SKU with a price per tier and stock held per site. Client-facing prices come from here; supplier orders never carry them. Bulk price changes belong on the Import screen.">
+      <PageHeading sub="Every SKU with what it costs us, a price per tier and stock held per site. Client-facing prices come from here; supplier orders never carry them. Bulk price changes belong on the Import screen.">
         Catalogue
       </PageHeading>
       <CatalogueScreen
@@ -59,6 +70,7 @@ export default async function CataloguePage({
         tiers={tiers ?? []}
         locations={locations ?? []}
         prices={priceMap}
+        costs={costMap}
         stock={stockMap}
         transfers={(transfers ?? []) as never}
         categories={categories ?? []}

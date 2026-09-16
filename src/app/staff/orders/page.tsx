@@ -27,11 +27,17 @@ export default async function OrdersPage({
 
   if (q?.trim()) query = query.ilike('number', `%${q.trim()}%`);
 
-  const [{ data: orders }, { data: products }] = await Promise.all([
+  const [{ data: orders }, { data: products }, { data: lineCosts }] = await Promise.all([
     query,
     // For adding a line while editing. The catalogue, not this order's lines.
     sb.from('products').select('id, sku, name').eq('active', true).order('sku').limit(2000),
+    // What each line cost us, as recorded when it was placed. A separate table
+    // because a client reads their own order lines and may never read this.
+    sb.from('order_line_costs').select('order_line_id, unit_cost'),
   ]);
+
+  const costOf: Record<string, number> = {};
+  for (const c of lineCosts ?? []) costOf[c.order_line_id] = Number(c.unit_cost);
 
   const rows = (orders ?? []).filter((o) => {
     if (open === '1') return o.order_lines.some((l) => l.bo_qty > 0) || o.status === 'open';
@@ -40,7 +46,7 @@ export default async function OrdersPage({
 
   return (
     <>
-      <PageHeading sub="Every order shows what was allocated at its fulfilment site and what is on back order. The full invoice is raised at placement; split it only when a part-shipment becomes necessary.">
+      <PageHeading sub="Every order shows what was allocated at its fulfilment site and what is on back order, alongside what it cost us and what it earned. The full invoice is raised at placement; split it only when a part-shipment becomes necessary.">
         Orders
       </PageHeading>
 
@@ -67,6 +73,7 @@ export default async function OrdersPage({
               key={o.id}
               order={o as never}
               products={(products ?? []) as never}
+              costOf={costOf}
               canAmend={user.role === 'admin' || user.role === 'accounts'}
               canDelete={user.role === 'admin'}
             />

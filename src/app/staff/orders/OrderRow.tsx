@@ -31,8 +31,11 @@ export interface OrderData {
   order_events: OrderEvent[];
 }
 
-export default function OrderRow({ order, products, canAmend, canDelete }: {
-  order: OrderData; products: ProductLite[]; canAmend: boolean; canDelete: boolean;
+export default function OrderRow({ order, products, costOf, canAmend, canDelete }: {
+  order: OrderData; products: ProductLite[];
+  /** Order line id → what it cost us, where we know. */
+  costOf: Record<string, number>;
+  canAmend: boolean; canDelete: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [splitting, setSplitting] = useState(false);
@@ -44,6 +47,14 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
 
   const backordered = order.order_lines.reduce((a, l) => a + l.bo_qty, 0);
   const total = order.order_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
+
+  // What this order owes the supplier, and what is left over. Lines we have
+  // never costed count as nothing towards the first, which flatters the
+  // second — so the count of them is shown rather than hidden.
+  const supplier = order.order_lines.reduce((a, l) => a + l.qty * (costOf[l.id] ?? 0), 0);
+  const uncosted = order.order_lines.filter((l) => costOf[l.id] === undefined).length;
+  const profit = total - supplier;
+  const marginPct = total > 0 ? (profit / total) * 100 : 0;
   const live = order.invoices.filter((i) => !i.superseded);
   const fullInvoice = live.find((i) => i.type === 'full');
   const canSplit = Boolean(fullInvoice && !fullInvoice.paid && backordered > 0);
@@ -108,8 +119,21 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
             {i.shipped ? ' shipped' : i.packed ? ' packed' : i.paid ? ' paid' : ' unpaid'}
           </Tag>
         ))}
-        <span className="num ml-auto font-semibold text-[13px]">
-          <Money value={total} /> <span className="text-mute font-normal">net</span>
+        <span className="num ml-auto text-[13px] flex items-baseline gap-3">
+          <span className="font-semibold">
+            <Money value={total} /> <span className="text-mute font-normal">net</span>
+          </span>
+          {supplier > 0 && (
+            <>
+              <span className="text-mute">
+                <Money value={supplier} /> <span className="font-normal">to supplier</span>
+              </span>
+              <span className={profit >= 0 ? 'text-success font-semibold' : 'text-danger font-semibold'}>
+                <Money value={profit} />{' '}
+                <span className="font-normal">({marginPct.toFixed(0)}%)</span>
+              </span>
+            </>
+          )}
         </span>
       </div>
 
@@ -126,6 +150,8 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
                     <th className="text-right">Back order</th>
                     <th className="text-right">With supplier</th>
                     <th className="text-right">Unit</th>
+                    <th className="text-right">Cost</th>
+                    <th className="text-right">Margin</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -140,11 +166,30 @@ export default function OrderRow({ order, products, canAmend, canDelete }: {
                       </td>
                       <td className="num text-right text-mute">{l.po_qty || '—'}</td>
                       <td className="num text-right"><Money value={Number(l.unit_price)} /></td>
+                      <td className="num text-right text-mute">
+                        {costOf[l.id] === undefined
+                          ? '—' : <Money value={costOf[l.id]} />}
+                      </td>
+                      <td className="num text-right">
+                        {costOf[l.id] === undefined ? (
+                          <span className="text-mute">—</span>
+                        ) : (
+                          <LineMargin price={Number(l.unit_price)} cost={costOf[l.id]} qty={l.qty} />
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {uncosted > 0 && (
+              <p className="text-[12px] text-mute mt-2">
+                {uncosted} line{uncosted === 1 ? '' : 's'} with no cost recorded, so the
+                margin above is only as complete as the price list. Import a cost column
+                on the Import screen and past orders are costed with it.
+              </p>
+            )}
 
             {order.notes && (
               <p className="text-[12px] text-mute mt-3">Note: {order.notes}</p>
@@ -524,5 +569,17 @@ function MarkPaid({ invoices, pending, onSave, onCancel }: {
         before payment.
       </p>
     </div>
+  );
+}
+
+/** What one line earns, in money and as a share of what it sold for. */
+function LineMargin({ price, cost, qty }: { price: number; cost: number; qty: number }) {
+  const profit = (price - cost) * qty;
+  const pct = price > 0 ? ((price - cost) / price) * 100 : 0;
+  return (
+    <span className={profit >= 0 ? '' : 'text-danger font-semibold'}>
+      <Money value={profit} />
+      <span className="text-mute font-normal"> {pct.toFixed(0)}%</span>
+    </span>
   );
 }

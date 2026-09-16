@@ -4,17 +4,21 @@ import { useCallback, useMemo, useState, useTransition } from 'react';
 import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
 import { today } from '@/lib/format';
 import {
-  parseWorkbook, columnLetters, guessMapping, extractRows, toNumber, type ParsedSheet,
+  parseWorkbook, columnLetters, guessMapping, guessCatalogueColumns,
+  unclaimedMoneyColumns, extractRows, toNumber, type ParsedSheet,
 } from '@/lib/import/parse';
-import type {
-  ColumnMapping, ImportScope, PricePreview, PriceRow, SheetPlan,
+import {
+  tierKey,
+  type CatalogueRow, type CataloguePreview, type ColumnMapping, type CostPreview,
+  type ImportScope, type PricePreview, type SheetPlan,
 } from '@/lib/import/types';
-import { previewPrices, applyPrices, applyClients, applyStock,
+import { previewCatalogue, applyCatalogue, applyClients, applyStock,
          applyHistoricOrders, saveTemplate } from './actions';
 
 interface Named { id: string; name: string }
 interface Template { scope: string; tier_id: string | null; header_row: number; mapping: ColumnMapping }
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
+type Plan = SheetPlan & { include: boolean };
 
 /**
  * A date as a spreadsheet hands it over — 14/03/2025, 2025-03-14, or the
@@ -43,14 +47,16 @@ export function normaliseDate(raw: string): string {
   return text;
 }
 
-const FIELDS: Record<ImportScope, { key: keyof ColumnMapping; label: string; required: boolean }[]> = {
+interface Field { key: string; label: string; required: boolean }
+
+const FIXED_FIELDS: Record<ImportScope, Field[]> = {
   prices: [
     { key: 'sku', label: 'SKU', required: true },
     { key: 'name', label: 'Product name', required: false },
     { key: 'brand', label: 'Brand', required: false },
-    { key: 'price', label: 'Price', required: true },
     { key: 'category', label: 'Category', required: false },
     { key: 'image_url', label: 'Image URL', required: false },
+    { key: 'cost', label: 'Our cost', required: false },
   ],
   clients: [
     { key: 'name', label: 'Client name', required: true },
@@ -78,87 +84,122 @@ const FIELDS: Record<ImportScope, { key: keyof ColumnMapping; label: string; req
   ],
 };
 
+/**
+ * The columns to ask about. A price file gets one selector per tier after the
+ * fixed fields, so a single sheet can carry the whole price book — our cost
+ * beside what each kind of customer pays for the same thing.
+ */
+function fieldsFor(scope: ImportScope, tiers: Named[]): Field[] {
+  if (scope !== 'prices') return FIXED_FIELDS[scope];
+  return [
+    ...FIXED_FIELDS.prices,
+    ...tiers.map((t) => ({ key: tierKey(t.id), label: `${t.name} price`, required: false })),
+  ];
+}
+
 export default function ImportScreen({
   tiers, locations, templates,
 }: { tiers: Named[]; locations: Named[]; templates: Template[] }) {
   const [scope, setScope] = useState<ImportScope>('prices');
   const [filename, setFilename] = useState('');
   const [sheets, setSheets] = useState<ParsedSheet[]>([]);
-  const [plans, setPlans] = useState<Record<string, SheetPlan & { include: boolean }>>({});
+  const [plans, setPlans] = useState<Record<string, Plan>>({});
   const [effectiveFrom, setEffectiveFrom] = useState(today());
   const [deactivateMissing, setDeactivateMissing] = useState(false);
-  const [previews, setPreviews] = useState<PricePreview[] | null>(null);
+  const [preview, setPreview] = useState<CataloguePreview | null>(null);
   const [message, setMessage] = useState<Msg>(null);
   const [dragging, setDragging] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const templateFor = useCallback(
-    (tierId: string | null) =>
-      templates.find((t) => t.scope === scope && (t.tier_id ?? null) === tierId),
+  const fields = useMemo(() => fieldsFor(scope, tiers), [scope, tiers]);
+
+  // One saved layout per scope now: a price file describes every tier at once,
+  // so there is no longer a mapping per tier to keep apart.
+  const savedTemplate = useCallback(
+    // tier_id is null for every layout saved now. A row still keyed to a tier
+    // is from before a price file could describe all of them, and its mapping
+    // no longer means what it says.
+    () => templates.find((t) => t.scope === scope && t.tier_id === null),
     [templates, scope],
   );
 
-  /** A tab called "Shop" is almost certainly the Shop tier's sheet. */
-  const guessTier = useCallback(
-    (sheetName: string) =>
-      tiers.find((t) => sheetName.trim().toLowerCase().includes(t.name.toLowerCase()))?.id ?? null,
-    [tiers],
+  const mappingFor = useCallback(
+    (sheetName: string, header: string[]): ColumnMapping => {
+      const base = guessMapping(header, FIXED_FIELDS[scope].map((f) => f.key));
+      if (scope !== 'prices') return base;
+      return { ...base, ...guessCatalogueColumns(header, sheetName, tiers, base) };
+    },
+    [scope, tiers],
   );
 
   const handleFile = useCallback(
     async (file: File) => {
       setMessage(null);
-      setPreviews(null);
+      setPreview(null);
       try {
         const parsed = await parseWorkbook(file);
         setFilename(file.name);
         setSheets(parsed);
 
-        const next: Record<string, SheetPlan & { include: boolean }> = {};
+        const saved = savedTemplate();
+        const next: Record<string, Plan> = {};
         for (const sheet of parsed) {
-          const tierId = scope === 'prices' ? guessTier(sheet.name) : null;
-          const saved = templateFor(tierId);
           const headerRow = saved?.header_row ?? 1;
           const header = sheet.grid[headerRow - 1] ?? [];
+          const mapping = saved?.mapping ?? mappingFor(sheet.name, header);
           next[sheet.name] = {
             sheetName: sheet.name,
-            tierId,
             headerRow,
-            mapping: saved?.mapping ?? guessMapping(header, FIELDS[scope].map((f) => f.key)),
-            include: parsed.length === 1 || scope !== 'prices' ? true : Boolean(tierId),
+            mapping,
+            // A workbook usually has a tab or two that are not product data at
+            // all — a summary, terms, a blank. No SKU column means no SKUs, so
+            // it starts unticked rather than reporting every row as broken.
+            include: parsed.length === 1 || Boolean(mapping.sku),
           };
         }
         setPlans(next);
 
-        const matched = Object.values(next).filter((p) => p.include).length;
-        setMessage({
-          tone: 'info',
-          text: `${parsed.length} sheet${parsed.length === 1 ? '' : 's'} read from ${file.name}` +
-            (scope === 'prices' ? ` · ${matched} matched to a tier automatically` : ''),
+        const read = `${parsed.length} sheet${parsed.length === 1 ? '' : 's'} read from ${file.name}`;
+        if (scope !== 'prices') {
+          setMessage({ tone: 'info', text: read });
+          return;
+        }
+
+        const matched = new Set(Object.values(next).flatMap((p) =>
+          Object.keys(p.mapping).filter((k) => k.startsWith('price:') && p.mapping[k]))).size;
+        const costed = Object.values(next).some((p) => p.mapping.cost);
+
+        // A supplier's list has one price column and no clue whose price it
+        // is. Rather than guess, name it and ask — that is a five-second job
+        // once, and the mapping is saved.
+        const spare = parsed.flatMap((sheet) => {
+          const plan = next[sheet.name];
+          if (!plan.include) return [];
+          return unclaimedMoneyColumns(sheet.grid[plan.headerRow - 1] ?? [], plan.mapping);
         });
+
+        setMessage(matched === 0 && !costed && spare.length > 0
+          ? {
+              tone: 'info',
+              text: `${read}. Nothing on it says whose price is whose — point `
+                + `${spare.map((c) => `column ${c.letter} (${c.label})`).join(' and ')} `
+                + 'at a tier, or at our cost, below.',
+            }
+          : {
+              tone: 'info',
+              text: `${read} · ${matched} tier${matched === 1 ? '' : 's'} matched to a column`
+                + (costed ? ', cost column found' : ', no cost column found'),
+            });
       } catch (e) {
         setMessage({ tone: 'error', text: e instanceof Error ? e.message : 'Could not read that file' });
       }
     },
-    [scope, guessTier, templateFor],
+    [scope, savedTemplate, mappingFor],
   );
 
-  function updatePlan(sheetName: string, patch: Partial<SheetPlan & { include: boolean }>) {
-    setPreviews(null);
-    setPlans((p) => {
-      const current = p[sheetName];
-      const next = { ...current, ...patch };
-
-      // Switching tier pulls in that tier's saved mapping.
-      if (patch.tierId !== undefined && patch.tierId !== current.tierId) {
-        const saved = templateFor(patch.tierId ?? null);
-        if (saved) {
-          next.headerRow = saved.header_row;
-          next.mapping = saved.mapping;
-        }
-      }
-      return { ...p, [sheetName]: next };
-    });
+  function updatePlan(sheetName: string, patch: Partial<Plan>) {
+    setPreview(null);
+    setPlans((p) => ({ ...p, [sheetName]: { ...p[sheetName], ...patch } }));
   }
 
   const included = useMemo(
@@ -166,36 +207,56 @@ export default function ImportScreen({
     [sheets, plans],
   );
 
-  /** Turns each included sheet into the mapped rows the server will compare. */
-  function buildPriceSheets(): { tierId: string; rows: PriceRow[] }[] {
-    return included
-      .filter((s) => plans[s.name].tierId)
-      .map((s) => {
-        const plan = plans[s.name];
-        const raw = extractRows(s.grid, plan.headerRow, plan.mapping);
-        return {
-          tierId: plan.tierId!,
-          rows: raw.map((r) => ({
+  /** Every column on an included sheet that holds a price or a cost. */
+  const pricedColumns = useMemo(
+    () => included.flatMap((s) => {
+      const m = plans[s.name]?.mapping ?? {};
+      return Object.keys(m).filter((k) => (k === 'cost' || k.startsWith('price:')) && m[k]);
+    }),
+    [included, plans],
+  );
+
+  /** Turns each included sheet into the rows the server will compare. */
+  function buildSheets(): { rows: CatalogueRow[] }[] {
+    return included.map((s) => {
+      const plan = plans[s.name];
+      const raw = extractRows(s.grid, plan.headerRow, plan.mapping);
+      return {
+        rows: raw.map((r) => {
+          // A blank cell is silence: the row simply does not price that tier.
+          // Something unreadable in it is a problem, and reaches the server as
+          // NaN so it can be reported rather than guessed at.
+          const prices: Record<string, number> = {};
+          for (const tier of tiers) {
+            const cell = r[tierKey(tier.id)];
+            if (cell) prices[tier.id] = toNumber(cell);
+          }
+          return {
             sku: r.sku ?? '',
             name: r.name ?? '',
             brand: r.brand ?? '',
-            price: toNumber(r.price ?? ''),
+            category: r.category ?? '',
             image_url: r.image_url ?? '',
-          })),
-        };
-      });
+            cost: r.cost ? toNumber(r.cost) : undefined,
+            prices,
+          };
+        }),
+      };
+    });
   }
 
   function doPreview() {
-    const payload = buildPriceSheets();
-    if (!payload.length) {
-      setMessage({ tone: 'error', text: 'Assign at least one sheet to a pricing tier first' });
+    if (!pricedColumns.length) {
+      setMessage({
+        tone: 'error',
+        text: 'Point at least one column at a tier, or at our cost, before previewing',
+      });
       return;
     }
     startTransition(async () => {
-      const r = await previewPrices(payload, effectiveFrom);
+      const r = await previewCatalogue(buildSheets(), effectiveFrom);
       if (r.ok) {
-        setPreviews(r.previews);
+        setPreview(r.preview);
         setMessage(null);
       } else {
         setMessage({ tone: 'error', text: r.error });
@@ -205,16 +266,13 @@ export default function ImportScreen({
 
   function doApply() {
     startTransition(async () => {
-      const r = await applyPrices({
-        sheets: buildPriceSheets(),
-        effectiveFrom,
-        filename,
-        deactivateMissing,
+      const r = await applyCatalogue({
+        sheets: buildSheets(), effectiveFrom, filename, deactivateMissing,
       });
       setMessage(r.ok
         ? { tone: 'success', text: r.message ?? 'Applied' }
         : { tone: 'error', text: r.error ?? 'Could not apply the import' });
-      if (r.ok) { setPreviews(null); setSheets([]); setPlans({}); setFilename(''); }
+      if (r.ok) { setPreview(null); setSheets([]); setPlans({}); setFilename(''); }
     });
   }
 
@@ -251,7 +309,7 @@ export default function ImportScreen({
     const plan = plans[sheetName];
     startTransition(async () => {
       const r = await saveTemplate({
-        scope, tierId: plan.tierId, headerRow: plan.headerRow, mapping: plan.mapping,
+        scope, tierId: null, headerRow: plan.headerRow, mapping: plan.mapping,
       });
       setMessage(r.ok
         ? { tone: 'success', text: 'Mapping saved — next quarter is drag-and-drop' }
@@ -265,11 +323,11 @@ export default function ImportScreen({
         {(['prices', 'clients', 'stock', 'orders'] as ImportScope[]).map((s) => (
           <button
             key={s}
-            onClick={() => { setScope(s); setSheets([]); setPlans({}); setPreviews(null); setMessage(null); }}
+            onClick={() => { setScope(s); setSheets([]); setPlans({}); setPreview(null); setMessage(null); }}
             className={`text-[12px] font-semibold rounded px-[10px] py-[5px] border
               ${scope === s ? 'bg-ink text-white border-ink' : 'bg-white border-line hover:bg-parch'}`}
           >
-            {s === 'prices' ? 'SKUs & prices'
+            {s === 'prices' ? 'SKUs, prices & cost'
               : s === 'clients' ? 'Client list'
                 : s === 'stock' ? 'Stock by location' : 'Past orders'}
           </button>
@@ -278,9 +336,7 @@ export default function ImportScreen({
 
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
-      <Card
-        className={dragging ? 'border-flame bg-flame-tint' : ''}
-      >
+      <Card className={dragging ? 'border-flame bg-flame-tint' : ''}>
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
@@ -295,7 +351,8 @@ export default function ImportScreen({
           <p className="text-[14px] font-semibold">Drop an .xlsx or .csv file here</p>
           <p className="text-[12px] text-mute mt-1">
             {scope === 'prices'
-              ? 'One file per tier, or one workbook with a tab per tier — tabs are matched to tiers by name.'
+              ? 'One row per SKU, with a column for what we pay and a column for each tier. '
+                + 'Columns are matched to tiers by their headings; a tab per tier still works too.'
               : scope === 'clients'
                 ? 'Columns for client name and tier are required.'
                 : scope === 'stock'
@@ -326,7 +383,7 @@ export default function ImportScreen({
             if (!plan) return null;
             const letters = columnLetters(sheet.grid);
             const header = sheet.grid[plan.headerRow - 1] ?? [];
-            const preview = extractRows(sheet.grid, plan.headerRow, plan.mapping).slice(0, 3);
+            const rows = extractRows(sheet.grid, plan.headerRow, plan.mapping).slice(0, 3);
 
             return (
               <Card key={sheet.name} className={plan.include ? '' : 'opacity-60'}>
@@ -340,19 +397,6 @@ export default function ImportScreen({
                   </label>
                   <span className="text-[12px] text-mute">{sheet.grid.length} rows</span>
 
-                  {scope === 'prices' && (
-                    <label className="text-[12px] flex items-center gap-1.5">
-                      Tier
-                      <select
-                        className="w-[140px]" value={plan.tierId ?? ''}
-                        onChange={(e) => updatePlan(sheet.name, { tierId: e.target.value || null })}
-                      >
-                        <option value="">Not imported</option>
-                        {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                    </label>
-                  )}
-
                   <label className="text-[12px] flex items-center gap-1.5">
                     Header row
                     <input
@@ -362,7 +406,7 @@ export default function ImportScreen({
                         const nextHeader = sheet.grid[headerRow - 1] ?? [];
                         updatePlan(sheet.name, {
                           headerRow,
-                          mapping: guessMapping(nextHeader, FIELDS[scope].map((f) => f.key)),
+                          mapping: mappingFor(sheet.name, nextHeader),
                         });
                       }}
                     />
@@ -379,7 +423,7 @@ export default function ImportScreen({
                 {plan.include && (
                   <>
                     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-                      {FIELDS[scope].map((field) => (
+                      {fields.map((field) => (
                         <label key={field.key} className="text-[12px]">
                           <span className="block font-semibold mb-1">
                             {field.label}
@@ -404,19 +448,19 @@ export default function ImportScreen({
                       ))}
                     </div>
 
-                    {preview.length > 0 && (
+                    {rows.length > 0 && (
                       <div className="mt-3 overflow-x-auto">
                         <div className="text-[11px] font-semibold text-mute uppercase tracking-wide mb-1">
                           First rows as mapped
                         </div>
                         <table>
                           <thead>
-                            <tr>{FIELDS[scope].map((f) => <th key={f.key}>{f.label}</th>)}</tr>
+                            <tr>{fields.map((f) => <th key={f.key}>{f.label}</th>)}</tr>
                           </thead>
                           <tbody>
-                            {preview.map((row, i) => (
+                            {rows.map((row, i) => (
                               <tr key={i}>
-                                {FIELDS[scope].map((f) => (
+                                {fields.map((f) => (
                                   <td key={f.key} className="num">{row[f.key] || '—'}</td>
                                 ))}
                               </tr>
@@ -438,7 +482,7 @@ export default function ImportScreen({
                   <span className="block font-semibold mb-1">Effective from</span>
                   <input
                     type="date" className="w-[170px]" value={effectiveFrom}
-                    onChange={(e) => { setEffectiveFrom(e.target.value); setPreviews(null); }}
+                    onChange={(e) => { setEffectiveFrom(e.target.value); setPreview(null); }}
                   />
                   <span className="block text-[11px] text-mute mt-1">
                     Upload next quarter early — prices switch over on this date on their own.
@@ -454,7 +498,7 @@ export default function ImportScreen({
                 <Button small kind="ghost" onClick={doPreview} disabled={pending}>
                   {pending ? 'Checking…' : 'Preview changes'}
                 </Button>
-                <Button small kind="accent" onClick={doApply} disabled={pending || !previews}>
+                <Button small kind="accent" onClick={doApply} disabled={pending || !preview}>
                   Apply
                 </Button>
               </>
@@ -470,12 +514,116 @@ export default function ImportScreen({
         </>
       )}
 
-      {previews?.map((p) => <PreviewCard key={p.tierId} preview={p} />)}
+      {preview && <PreviewCards preview={preview} />}
     </div>
   );
 }
 
-function PreviewCard({ preview }: { preview: PricePreview }) {
+function PreviewCards({ preview }: { preview: CataloguePreview }) {
+  return (
+    <>
+      {preview.invalid.length > 0 && (
+        <Notice>
+          {preview.invalid.length} row{preview.invalid.length === 1 ? '' : 's'} skipped:{' '}
+          {preview.invalid.slice(0, 3).map((i) => `row ${i.row} (${i.reason})`).join(', ')}
+          {preview.invalid.length > 3 ? '…' : ''}
+        </Notice>
+      )}
+
+      {preview.costs && <CostCard costs={preview.costs} />}
+
+      {preview.tiers.map((t) => <TierCard key={t.tierId} preview={t} />)}
+
+      {preview.newSkus.length > 0 && (
+        <Card>
+          <Bucket title={`New SKUs to be created (${preview.newSkus.length})`}>
+            <p className="text-[12px] num">
+              {preview.newSkus.slice(0, 60).map((r) => r.sku).join(' · ')}
+              {preview.newSkus.length > 60 ? ` … and ${preview.newSkus.length - 60} more` : ''}
+            </p>
+          </Bucket>
+        </Card>
+      )}
+
+      {preview.missing.length > 0 && (
+        <Card>
+          <Bucket title={`In the system but not in this file (${preview.missing.length})`}>
+            <p className="text-[12px] text-mute mb-2">
+              Reported only. Nothing is ever deleted by an import.
+            </p>
+            <p className="text-[12px] num">
+              {preview.missing.slice(0, 40).map((m) => m.sku).join(' · ')}
+              {preview.missing.length > 40 ? ` … and ${preview.missing.length - 40} more` : ''}
+            </p>
+          </Bucket>
+        </Card>
+      )}
+    </>
+  );
+}
+
+/**
+ * What we would be paying, and — the part worth stopping for — anything this
+ * file would have us selling at or below what it costs us.
+ */
+function CostCard({ costs }: { costs: CostPreview }) {
+  const flagged = costs.changed.filter((c) => c.suspicious);
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <Tag tone="line">Our cost</Tag>
+        <span className="text-[12px]">
+          <strong>{costs.created}</strong> on new SKUs ·{' '}
+          <strong>{costs.changed.length}</strong> changed ·{' '}
+          <strong>{costs.unchanged}</strong> unchanged
+        </span>
+        {flagged.length > 0 && <Tag tone="red">{flagged.length} to check</Tag>}
+      </div>
+
+      {costs.belowCost.length > 0 && (
+        <div className="mb-3">
+          <Notice>
+            {costs.belowCost.length} price{costs.belowCost.length === 1 ? '' : 's'} at or below
+            what we pay — selling these loses money. Check the columns are the right way round
+            before applying.
+          </Notice>
+          <div className="overflow-x-auto max-h-[240px] overflow-y-auto mt-2">
+            <table>
+              <thead>
+                <tr>
+                  <th>SKU</th><th>Product</th><th>Tier</th>
+                  <th className="text-right">Cost</th><th className="text-right">Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costs.belowCost.slice(0, 50).map((b, i) => (
+                  <tr key={`${b.sku}-${b.tierName}-${i}`}>
+                    <td className="num font-semibold">{b.sku}</td>
+                    <td>{b.name}</td>
+                    <td>{b.tierName}</td>
+                    <td className="num text-right"><Money value={b.cost} /></td>
+                    <td className="num text-right text-danger font-semibold">
+                      <Money value={b.price} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {costs.changed.length > 0
+        ? <ChangeTable title={`Cost changes (${costs.changed.length})`} changes={costs.changed} />
+        : costs.belowCost.length === 0 && (
+          <Empty>Nothing to change — every cost in this file already matches.</Empty>
+        )}
+    </Card>
+  );
+}
+
+function TierCard({ preview }: { preview: PricePreview }) {
   const flagged = preview.changed.filter((c) => c.suspicious);
 
   return (
@@ -483,94 +631,58 @@ function PreviewCard({ preview }: { preview: PricePreview }) {
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <Tag tone="accent">{preview.tierName}</Tag>
         <span className="text-[12px]">
-          <strong>{preview.created.length}</strong> new ·{' '}
+          <strong>{preview.created}</strong> on new SKUs ·{' '}
           <strong>{preview.changed.length}</strong> changed ·{' '}
-          <strong>{preview.unchanged}</strong> unchanged ·{' '}
-          <strong>{preview.missing.length}</strong> not in this sheet
+          <strong>{preview.unchanged}</strong> unchanged
         </span>
         {flagged.length > 0 && <Tag tone="red">{flagged.length} to check</Tag>}
       </div>
 
-      {preview.invalid.length > 0 && (
-        <div className="mb-3">
-          <Notice>
-            {preview.invalid.length} row{preview.invalid.length === 1 ? '' : 's'} skipped:{' '}
-            {preview.invalid.slice(0, 3).map((i) => `row ${i.row} (${i.reason})`).join(', ')}
-            {preview.invalid.length > 3 ? '…' : ''}
-          </Notice>
-        </div>
-      )}
-
-      {preview.created.length > 0 && (
-        <Bucket title={`New SKUs to be created (${preview.created.length})`}>
-          <table>
-            <thead><tr><th>SKU</th><th>Product</th><th>Brand</th><th className="text-right">Price</th></tr></thead>
-            <tbody>
-              {preview.created.slice(0, 50).map((r) => (
-                <tr key={r.sku}>
-                  <td className="num font-semibold">{r.sku}</td>
-                  <td>{r.name || '—'}</td>
-                  <td className="text-mute">{r.brand || '—'}</td>
-                  <td className="num text-right"><Money value={r.price} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Bucket>
-      )}
-
-      {preview.changed.length > 0 && (
-        <Bucket title={`Price changes (${preview.changed.length})`}>
-          <table>
-            <thead>
-              <tr>
-                <th>SKU</th><th>Product</th>
-                <th className="text-right">Old</th><th className="text-right">New</th>
-                <th className="text-right">Change</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...preview.changed]
-                .sort((a, b) => Number(b.suspicious) - Number(a.suspicious))
-                .slice(0, 100)
-                .map((c) => (
-                  <tr key={c.sku} className={c.suspicious ? 'bg-[#FDF2F0]' : ''}>
-                    <td className="num font-semibold">{c.sku}</td>
-                    <td>{c.name}</td>
-                    <td className="num text-right text-mute"><Money value={c.oldPrice} /></td>
-                    <td className="num text-right font-semibold"><Money value={c.newPrice} /></td>
-                    <td className={`num text-right ${c.suspicious ? 'text-danger font-semibold' : 'text-mute'}`}>
-                      {c.deltaPct > 0 ? '+' : ''}{c.deltaPct.toFixed(1)}%
-                      {c.suspicious && ' ⚠'}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          {flagged.length > 0 && (
-            <p className="text-[11px] text-danger mt-2">
-              Highlighted rows move by more than ±25% — worth a second look before applying.
-            </p>
-          )}
-        </Bucket>
-      )}
-
-      {preview.missing.length > 0 && (
-        <Bucket title={`In the system but not in this sheet (${preview.missing.length})`}>
-          <p className="text-[12px] text-mute mb-2">
-            Reported only. Nothing is ever deleted by an import.
-          </p>
-          <p className="text-[12px] num">
-            {preview.missing.slice(0, 40).map((m) => m.sku).join(' · ')}
-            {preview.missing.length > 40 ? ` … and ${preview.missing.length - 40} more` : ''}
-          </p>
-        </Bucket>
-      )}
-
-      {preview.created.length === 0 && preview.changed.length === 0 && (
-        <Empty>Nothing to change — every price in this sheet already matches.</Empty>
-      )}
+      {preview.changed.length > 0
+        ? <ChangeTable title={`Price changes (${preview.changed.length})`} changes={preview.changed} />
+        : <Empty>Nothing to change — every {preview.tierName} price already matches.</Empty>}
     </Card>
+  );
+}
+
+function ChangeTable({ title, changes }: {
+  title: string; changes: PricePreview['changed'];
+}) {
+  const flagged = changes.filter((c) => c.suspicious);
+  return (
+    <Bucket title={title}>
+      <table>
+        <thead>
+          <tr>
+            <th>SKU</th><th>Product</th>
+            <th className="text-right">Old</th><th className="text-right">New</th>
+            <th className="text-right">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...changes]
+            .sort((a, b) => Number(b.suspicious) - Number(a.suspicious))
+            .slice(0, 100)
+            .map((c) => (
+              <tr key={c.sku} className={c.suspicious ? 'bg-[#FDF2F0]' : ''}>
+                <td className="num font-semibold">{c.sku}</td>
+                <td>{c.name}</td>
+                <td className="num text-right text-mute"><Money value={c.oldPrice} /></td>
+                <td className="num text-right font-semibold"><Money value={c.newPrice} /></td>
+                <td className={`num text-right ${c.suspicious ? 'text-danger font-semibold' : 'text-mute'}`}>
+                  {c.deltaPct > 0 ? '+' : ''}{c.deltaPct.toFixed(1)}%
+                  {c.suspicious && ' ⚠'}
+                </td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+      {flagged.length > 0 && (
+        <p className="text-[11px] text-danger mt-2">
+          Highlighted rows move by more than ±25% — worth a second look before applying.
+        </p>
+      )}
+    </Bucket>
   );
 }
 
