@@ -16,13 +16,14 @@ export default async function CurrentOrders() {
     .from('orders')
     .select(`id, number, date, status,
              order_lines(id, sku, name, qty, unit_price, alloc_qty, bo_qty),
-             invoices(id, number, type, paid, packed, shipped, superseded, carrier, tracking_number, tracking_url),
+             invoices(id, number, type, paid, packed, shipped, delivered, superseded, carrier, tracking_number, tracking_url),
              order_events(id, order_id, type, created_at, meta)`)
     .eq('client_id', user.clientId)
     .order('date', { ascending: false })
     .limit(100);
 
-  // "Not yet fully delivered" = at least one live invoice still unshipped.
+  // "Not yet fully delivered" = at least one live invoice still undelivered —
+  // a shipped parcel still in transit belongs here, not in history.
   //
   // A cancelled order has no live invoices at all, so it lands here too — and
   // it should: a client whose order was cancelled needs to see that said
@@ -31,7 +32,7 @@ export default async function CurrentOrders() {
   const current = (orders ?? [])
     .filter((o) => {
       const live = o.invoices.filter((i) => !i.superseded);
-      return live.length === 0 || live.some((i) => !i.shipped);
+      return live.length === 0 || live.some((i) => !i.delivered);
     })
     .sort((a, b) =>
       Number(a.status === 'cancelled') - Number(b.status === 'cancelled'));
@@ -46,7 +47,7 @@ export default async function CurrentOrders() {
       </div>
 
       {current.length === 0 ? (
-        <Card><Empty>Nothing outstanding — every order has shipped.</Empty></Card>
+        <Card><Empty>Nothing outstanding — every order has been delivered.</Empty></Card>
       ) : (
         current.map((o) => {
           const total = o.order_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
