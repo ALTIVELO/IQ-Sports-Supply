@@ -6,7 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireStaff } from '@/lib/auth';
 import { trackingUrlFor } from '@/lib/format';
 import {
-  notifyOrderPlaced, notifySupplierOrder, notifyShipped,
+  notifyOrderPlaced, notifySupplierOrder, notifyShipped, notifyDelivered,
 } from '@/lib/notifications';
 
 export interface ActionResult {
@@ -164,6 +164,25 @@ export async function markShipped(input: {
   return {
     ok: true,
     message: warning ? 'Marked shipped' : 'Shipped — the client has been sent the tracking link',
+    warning,
+  };
+}
+
+export async function markDelivered(invoiceId: string): Promise<ActionResult> {
+  await requireStaff();
+  const sb = await supabaseServer();
+
+  const { error } = await sb.rpc('mark_invoice_delivered', { p_invoice_id: invoiceId });
+  if (error) return { ok: false, error: error.message };
+
+  const warning = await notify(
+    () => notifyDelivered(invoiceId), 'The delivery notification');
+
+  revalidatePath('/staff/packing');
+  revalidatePath('/staff/invoices');
+  return {
+    ok: true,
+    message: warning ? 'Marked delivered' : 'Delivered — the client has been notified',
     warning,
   };
 }

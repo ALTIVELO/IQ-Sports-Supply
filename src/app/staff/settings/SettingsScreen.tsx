@@ -81,7 +81,7 @@ export default function SettingsScreen({
           )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Field label="Order confirmation CC"
-                   hint="Comma separated. Copied on every order confirmation.">
+                   hint="Comma separated. Copied on order confirmation, dispatch and delivery emails.">
               <input name="confirmation_cc" defaultValue={settings.confirmation_cc?.join(', ') ?? ''} />
             </Field>
             <Field label="Supplier order recipient"

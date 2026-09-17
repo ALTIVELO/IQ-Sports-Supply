@@ -6,7 +6,7 @@ import ProductImage from '@/components/ProductImage';
 export interface HomeOrder {
   id: string; number: string; date: string; status: string;
   order_lines: { id: string; qty: number; unit_price: number }[];
-  invoices: { id: string; shipped: boolean; superseded: boolean }[];
+  invoices: { id: string; shipped: boolean; delivered: boolean; superseded: boolean }[];
 }
 export interface HomeParcel {
   id: string; number: string; shipped_at: string | null;
@@ -85,7 +85,7 @@ export default function HomeScreen({ data }: { data: HomeData }) {
           href="/portal/orders"
           label="Orders in progress"
           value={String(data.inProgressCount)}
-          note={data.inProgressCount ? 'Still on their way to you' : 'Everything has shipped'}
+          note={data.inProgressCount ? 'Still on their way to you' : 'Everything has been delivered'}
         />
         <Summary
           href="/portal/invoices"
@@ -154,7 +154,8 @@ export default function HomeScreen({ data }: { data: HomeData }) {
                   const cancelled = o.status === 'cancelled';
                   const net = o.order_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
                   const invoices = o.invoices.filter((i) => !i.superseded);
-                  const delivered = invoices.length > 0 && invoices.every((i) => i.shipped);
+                  const delivered = invoices.length > 0 && invoices.every((i) => i.delivered);
+                  const shipped = invoices.length > 0 && invoices.every((i) => i.shipped);
                   return (
                     <tr key={o.id} className={cancelled ? 'opacity-55' : ''}>
                       <td className={`num font-semibold ${cancelled ? voidedText : ''}`}>
@@ -172,7 +173,9 @@ export default function HomeScreen({ data }: { data: HomeData }) {
                           ? <VoidTag>cancelled</VoidTag>
                           : delivered
                             ? <Tag tone="green">Delivered</Tag>
-                            : <Tag tone="line">In progress</Tag>}
+                            : shipped
+                              ? <Tag tone="line">Shipped</Tag>
+                              : <Tag tone="line">In progress</Tag>}
                       </td>
                     </tr>
                   );

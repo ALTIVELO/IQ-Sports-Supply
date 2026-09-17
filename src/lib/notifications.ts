@@ -2,7 +2,7 @@ import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sendEmail } from '@/lib/email/send';
 import {
-  orderConfirmation, supplierOrder, shippedNotice, welcomeEmail, rejectionEmail,
+  orderConfirmation, supplierOrder, shippedNotice, deliveredNotice, welcomeEmail, rejectionEmail,
 } from '@/lib/email/templates';
 import { invoiceDocData, renderInvoicePdf } from '@/lib/pdf/render';
 import { appUrl } from '@/lib/app-url';
@@ -119,7 +119,7 @@ export async function notifySupplierOrder(poId: string) {
   });
 }
 
-/** Shipping notification with the tracking link. */
+/** Shipping notification with the tracking link. CC'd the same as order confirmation. */
 export async function notifyShipped(invoiceId: string) {
   const db = supabaseAdmin();
 
@@ -131,7 +131,8 @@ export async function notifyShipped(invoiceId: string) {
     .single();
   if (!inv) return;
 
-  const { data: settings } = await db.from('settings').select('company').eq('id', 1).single();
+  const { data: settings } = await db
+    .from('settings').select('company, confirmation_cc').eq('id', 1).single();
   const client = inv.clients as unknown as { name: string; email: string | null };
 
   const msg = shippedNotice({
@@ -148,6 +149,41 @@ export async function notifyShipped(invoiceId: string) {
   await sendEmail({
     kind: 'shipped',
     to: client.email ? [client.email] : [],
+    cc: settings!.confirmation_cc ?? [],
+    subject: msg.subject,
+    body: msg.body,
+    orderId: inv.order_id,
+    invoiceId,
+  });
+}
+
+/** Delivery confirmation, once a parcel is confirmed at the client's door. */
+export async function notifyDelivered(invoiceId: string) {
+  const db = supabaseAdmin();
+
+  const { data: inv } = await db
+    .from('invoices')
+    .select(`number, order_id, clients(name, email), orders(number), invoice_lines(sku, name, qty)`)
+    .eq('id', invoiceId)
+    .single();
+  if (!inv) return;
+
+  const { data: settings } = await db
+    .from('settings').select('company, confirmation_cc').eq('id', 1).single();
+  const client = inv.clients as unknown as { name: string; email: string | null };
+
+  const msg = deliveredNotice({
+    company: settings!.company,
+    orderNumber: (inv.orders as unknown as { number: string }).number,
+    invoiceNumber: inv.number,
+    lines: inv.invoice_lines as { sku: string; name: string; qty: number }[],
+    portalUrl: `${appUrl()}/portal/history`,
+  });
+
+  await sendEmail({
+    kind: 'delivered',
+    to: client.email ? [client.email] : [],
+    cc: settings!.confirmation_cc ?? [],
     subject: msg.subject,
     body: msg.body,
     orderId: inv.order_id,
