@@ -112,8 +112,16 @@ export function groupVariants(products: CatalogueItem[]): VariantGroup[] {
   });
 }
 
-/** The name without the size on the end, for a bike whose rows are "X — M". */
-export function groupName(g: VariantGroup): string {
+/**
+ * The name without the size on the end, for a set of rows called "X — M".
+ *
+ * Typed on what it actually reads rather than on VariantGroup, because the
+ * staff catalogue groups rows that carry stock and cost columns the portal's
+ * shape knows nothing about.
+ */
+export function groupName(
+  g: { sizes: unknown[]; lead: { name: string; variant_label: string | null } },
+): string {
   if (g.sizes.length < 2) return g.lead.name;
   const label = g.lead.variant_label?.trim();
   if (!label) return g.lead.name;

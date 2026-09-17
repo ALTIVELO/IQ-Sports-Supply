@@ -157,3 +157,87 @@ export async function deleteProducts(ids: string[]): Promise<DeleteResult> {
   }
   return { ok: true, message: parts.join('. ') || 'Nothing to do', deleted, withdrawn };
 }
+
+// ── grouping the sizes that were already in the names ───────────────────────
+
+export interface VariantSuggestion {
+  model: string;
+  /** Collection and brand are part of the key, so two are shown side by side. */
+  sizes: { productId: string; sku: string; name: string; label: string }[];
+}
+
+/**
+ * What would be grouped, without grouping it.
+ *
+ * Read-only on purpose. A wrong grouping hides a real product behind another
+ * one's name, and the person who finds out is a customer looking for a part
+ * that used to be in the list — so somebody looks at this first.
+ */
+export async function previewVariantGroups(): Promise<
+  { ok: true; groups: VariantSuggestion[] } | { ok: false; error: string }
+> {
+  await requireStaff(['admin', 'accounts']);
+  const sb = await supabaseServer();
+
+  const { data, error } = await sb.rpc('suggest_variant_groups');
+  if (error) return { ok: false, error: error.message };
+
+  const byModel = new Map<string, VariantSuggestion>();
+  for (const row of (data ?? []) as {
+    product_id: string; sku: string; name: string; model: string; label: string;
+  }[]) {
+    const group = byModel.get(row.model) ?? { model: row.model, sizes: [] };
+    group.sizes.push({
+      productId: row.product_id, sku: row.sku, name: row.name, label: row.label,
+    });
+    byModel.set(row.model, group);
+  }
+  return { ok: true, groups: [...byModel.values()] };
+}
+
+/** Writes the grouping. Products already in a group are never touched. */
+export async function applyVariantGroups(): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  const sb = await supabaseServer();
+
+  const { data, error } = await sb.rpc('apply_variant_groups');
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/catalogue');
+  revalidatePath('/portal/catalogue');
+
+  const n = Number(data ?? 0);
+  return {
+    ok: true,
+    message: n
+      ? `${n} product${n === 1 ? '' : 's'} grouped. They now show as one item with `
+        + 'sizes under it, here and in the customer catalogue.'
+      : 'Nothing left to group — every product whose size is in its name already has one.',
+  };
+}
+
+/**
+ * Takes a product back out of its group.
+ *
+ * The way back from a wrong grouping. Ungrouping one size of a pair leaves the
+ * other on its own, which the catalogue draws as an ordinary product, so there
+ * is nothing to clean up afterwards.
+ */
+export async function ungroupProducts(productIds: string[]): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  if (!productIds.length) return { ok: false, error: 'Nothing selected' };
+  const sb = await supabaseServer();
+
+  const { error } = await sb.from('products')
+    .update({ variant_group: null, variant_label: null, variant_sort: null })
+    .in('id', productIds);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/catalogue');
+  revalidatePath('/portal/catalogue');
+  return {
+    ok: true,
+    message: `${productIds.length} product${productIds.length === 1 ? '' : 's'} `
+           + 'taken out of their group and listed on their own again',
+  };
+}

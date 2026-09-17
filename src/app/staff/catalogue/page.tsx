@@ -34,7 +34,8 @@ export default async function CataloguePage({
   }
 
   let productQuery = sb.from('products')
-    .select('id, sku, name, brand, active, category_id, image_url, currency, variant_label')
+    .select(`id, sku, name, brand, active, category_id, image_url, currency,
+             variant_group, variant_label, variant_sort`)
     .order('sku').limit(500);
   if (q?.trim()) productQuery = productQuery.or(`sku.ilike.%${q.trim()}%,name.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%`);
   // Filtered in the database rather than after the fact: the 500-row limit is

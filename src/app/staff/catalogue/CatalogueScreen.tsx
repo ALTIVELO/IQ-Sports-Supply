@@ -4,10 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
 import { CURRENCY_SYMBOL, currencyOf, fmtDate, money, today } from '@/lib/format';
-import { saveProduct, setProductActive, deleteProducts } from './actions';
+import { saveProduct, setProductActive, deleteProducts, ungroupProducts } from './actions';
 import { setStock, createTransfer, receiveTransfer } from '../actions';
 import { categoriseUncategorised, setProductCategory } from '../import/actions';
 import ImageCell from './ImageCell';
+import GroupVariants from './GroupVariants';
+import { groupSizes, groupName } from '@/lib/catalogue/variants';
 import CollectionPicker, { collectionName } from '@/components/CollectionPicker';
 import { catalogueHref, type CollectionGroup } from '@/lib/catalogue/collections';
 
@@ -16,8 +18,11 @@ interface Product {
   active: boolean; category_id: string | null; image_url: string | null;
   /** The money this product's cost and every tier price are quoted in. */
   currency: string;
-  /** Its frame size, where it is one size of a bike. */
+  /** Its size, where it is one size of a model: a frame, a crank, a ratio. */
   variant_label: string | null;
+  /** Shared by every size of one model. */
+  variant_group: string | null;
+  variant_sort: number | null;
 }
 interface Named { id: string; name: string }
 interface CategoryOption {
@@ -75,7 +80,10 @@ export default function CatalogueScreen({
 
       {tab === 'catalogue' ? (
         <>
-          <ProductEditor tiers={tiers} onMessage={setMessage} />
+          <div className="flex flex-wrap items-start gap-2">
+            <ProductEditor tiers={tiers} onMessage={setMessage} />
+            <GroupVariants onMessage={setMessage} />
+          </div>
 
           <CollectionPicker
             groups={collections}
@@ -158,7 +166,9 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
   }
 
   return (
-    <Card accent className="space-y-3">
+    // w-full so that, sharing a wrapping row with the other button, an open
+    // panel takes a line of its own rather than being squeezed beside it.
+    <Card accent className="space-y-3 w-full">
       <div className="grid sm:grid-cols-[140px_1fr_140px_90px_150px] gap-2">
         <input placeholder="SKU" value={sku} onChange={(e) => setSku(e.target.value)} />
         <input placeholder="Product name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -226,6 +236,10 @@ function StockMatrix({
     [visibleIds, selected],
   );
   const allShown = chosen.length > 0 && chosen.length === visibleIds.length;
+  const grouped = useMemo(
+    () => chosen.filter((id) => products.find((p) => p.id === id)?.variant_group),
+    [chosen, products],
+  );
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -273,6 +287,32 @@ function StockMatrix({
   }
 
   const uncategorised = products.filter((p) => !p.category_id).length;
+
+  /**
+   * The table's rows, with a model's sizes gathered under a heading.
+   *
+   * Gathered rather than collapsed. Every size keeps its own row because every
+   * size has its own stock to set, its own cost and its own price per tier —
+   * hiding four of five chainsets behind a chevron would put the thing this
+   * screen exists to edit one click further away. The heading only says which
+   * of them belong together, which is what was missing.
+   */
+  const rows = useMemo(() => {
+    const out: ({ kind: 'head'; key: string; name: string; count: number }
+              | { kind: 'row'; key: string; product: Product })[] = [];
+    for (const shelf of groupSizes(products)) {
+      if (shelf.sizes.length > 1) {
+        out.push({
+          kind: 'head', key: `h-${shelf.key}`,
+          name: groupName(shelf), count: shelf.sizes.length,
+        });
+      }
+      for (const product of shelf.sizes) {
+        out.push({ kind: 'row', key: product.id, product });
+      }
+    }
+    return out;
+  }, [products]);
 
   // Categories are a two-level tree now, so the picker mirrors it — seventy
   // options in one flat list is not a choice anyone can make quickly.
@@ -330,6 +370,26 @@ function StockMatrix({
             Clear
           </button>
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            {/* The way back from a wrong grouping, offered exactly where the
+                wrong grouping is visible. Ungrouping one of a pair leaves the
+                other on its own, which the catalogue draws as an ordinary
+                product, so there is nothing to tidy up afterwards. */}
+            {grouped.length > 0 && !confirming && (
+              <Button
+                small kind="ghost" disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const r = await ungroupProducts(grouped);
+                    onMessage(r.ok
+                      ? { tone: 'success', text: r.message ?? 'Ungrouped' }
+                      : { tone: 'error', text: r.error ?? 'Failed' });
+                    if (r.ok) setSelected(new Set());
+                  })
+                }
+              >
+                Ungroup {grouped.length}
+              </Button>
+            )}
             {confirming ? (
               <>
                 <span className="text-[12px]">
@@ -378,7 +438,18 @@ function StockMatrix({
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => {
+            {rows.map((entry) => {
+              if (entry.kind === 'head') {
+                return (
+                  <tr key={entry.key} className="bg-parch">
+                    <td colSpan={99} className="!py-1.5">
+                      <span className="text-[12px] font-semibold">{entry.name}</span>
+                      <span className="text-[11px] text-mute num"> · {entry.count} sizes</span>
+                    </td>
+                  </tr>
+                );
+              }
+              const p = entry.product;
               const byLoc = stock[p.id] ?? {};
               const total = Object.values(byLoc).reduce((a, b) => a + b, 0);
               return (
@@ -401,17 +472,18 @@ function StockMatrix({
                     />
                   </td>
                   <td className="num font-semibold whitespace-nowrap">{p.sku}</td>
-                  <td className="min-w-[200px]">
-                    {p.name}
-                    {/* Named separately as well as inside the name: staff
-                        scanning a stock column need to see which frame a row
-                        is without reading to the end of every product name. */}
-                    {p.variant_label && (
-                      <span className="ml-1.5 text-[11px] font-semibold border border-line
-                                       rounded px-[6px] py-[1px] whitespace-nowrap">
+                  {/* Under a heading that already names the model, the row
+                      only has to say which one it is — repeating "C/SET D/Ace
+                      R9200" on all six of them, each ending in the size that
+                      is also in the chip beside it, is three ways of saying
+                      the same thing. The full description stays on hover. */}
+                  <td className="min-w-[200px]" title={p.name}>
+                    {p.variant_label ? (
+                      <span className="text-[11px] font-semibold border border-line
+                                       rounded px-[6px] py-[2px] whitespace-nowrap">
                         {p.variant_label}
                       </span>
-                    )}
+                    ) : p.name}
                   </td>
                   <td className="text-mute">{p.brand}</td>
                   <td>
