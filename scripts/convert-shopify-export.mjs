@@ -97,7 +97,7 @@ function categoryFor(type, name) {
 function parseArgs(argv) {
   const args = {
     markup: [], retailFromRrp: false, prefix: 'DRAG', currency: 'GBP',
-    sizes: null, priceNote: '',
+    sizes: null, images: null, priceNote: '',
   };
   const [input, output, ...rest] = argv;
   args.input = input; args.output = output;
@@ -111,13 +111,15 @@ function parseArgs(argv) {
     else if (rest[i] === '--prefix') args.prefix = rest[++i];
     else if (rest[i] === '--currency') args.currency = rest[++i].toUpperCase();
     else if (rest[i] === '--sizes') args.sizes = rest[++i];
+    else if (rest[i] === '--images') args.images = rest[++i];
     else if (rest[i] === '--price-note') args.priceNote = rest[++i];
     else throw new Error(`Unknown argument ${rest[i]}`);
   }
   if (!args.input || !args.output || !args.markup.length) {
     throw new Error('usage: convert-shopify-export.mjs <in.csv> <out.csv> '
       + '--markup "Distributor=10,Shop=15,Club=20" [--retail-from-rrp] [--prefix DRAG] '
-      + '[--currency EUR] [--sizes sizes.json] [--price-note "…"]');
+      + '[--currency EUR] [--sizes sizes.json] [--images images.json] '
+      + '[--price-note "…"]');
   }
   return args;
 }
@@ -130,8 +132,17 @@ function main() {
   // price list. Read from a file rather than guessed: a size range invented
   // here would have the catalogue offering a frame DRAG do not make.
   const sizes = args.sizes ? JSON.parse(readFileSync(args.sizes, 'utf8')) : {};
+  // The export carries no image data at all — Image Src is empty on every row
+  // — so the photos come from DRAG's own shop, matched by the same strict rule
+  // the sizes use. Every frame of a bike shows the bike's photo: DRAG do not
+  // photograph each size, and a size with no picture beside four that have one
+  // reads as a size we cannot supply.
+  const images = args.images ? JSON.parse(readFileSync(args.images, 'utf8')) : {};
 
-  const notes = { uncosted: [], duplicates: [], uncategorised: [], sized: 0, unsized: 0 };
+  const notes = {
+    uncosted: [], duplicates: [], uncategorised: [],
+    sized: 0, unsized: 0, photographed: 0,
+  };
   const seen = new Map();
   const out = [];
 
@@ -165,7 +176,10 @@ function main() {
     // A bike built in five frames is five rows sharing one model, because the
     // frame is what gets ordered, stocked and shipped. One row for a bike that
     // comes one way, as before.
-    const range = sizes[tidy(r.Title)]?.sizes ?? [];
+    const title = tidy(r.Title);
+    const range = sizes[title]?.sizes ?? [];
+    const photo = images[title]?.image ?? tidy(r['Image Src']);
+    if (photo) notes.photographed += 1;
     if (range.length > 1) notes.sized += 1; else notes.unsized += 1;
     const frames = range.length > 1 ? range : [null];
 
@@ -192,9 +206,7 @@ function main() {
         row[tier.name] = cost === null ? '' : (cost * (1 + tier.rate)).toFixed(2);
       }
       row.Retail = args.retailFromRrp && rrp !== null ? rrp.toFixed(2) : '';
-      // Carried through untouched: the export is where the pictures come from,
-      // and a column dropped here is a catalogue of grey placeholders.
-      row['Image URL'] = tidy(r['Image Src']);
+      row['Image URL'] = photo;
 
       out.push(row);
     }
@@ -222,7 +234,8 @@ function main() {
     console.log(`  ${tier.name.padEnd(12)} cost + ${(tier.rate * 100).toFixed(0)}%`);
   }
   console.log(`  ${out.filter((r) => r.Retail !== '').length} with a retail price`);
-  console.log(`  ${out.filter((r) => r['Image URL'] !== '').length} with an image`);
+  console.log(`  ${out.filter((r) => r['Image URL'] !== '').length} rows with a photo `
+            + `(${notes.photographed} of ${notes.sized + notes.unsized} bikes)`);
 
   if (notes.uncosted.length) {
     console.log(`\n  no cost in the export, so no prices (listed, not orderable):`);

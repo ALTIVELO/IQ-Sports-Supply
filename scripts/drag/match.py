@@ -52,7 +52,18 @@ def build(site_json, price_csv):
             hits.append((len(d) + (0 if tr == str_ else 2), h, p['title'], sorted(d)))
         if hits:
             hits.sort()
-            out[r['Title']] = {'handle': hits[0][1], 'site_title': hits[0][2], 'diff': hits[0][3]}
+            # DRAG list the same bike twice often enough — once with the wheel
+            # size in the title and once without — that picking one and
+            # discarding the rest loses real data: the copy that wins on
+            # alphabetical order is sometimes the one with no sizes and no
+            # photos on it. Every equally-good candidate is kept, and the step
+            # that wants sizes or images takes the first that has any.
+            best = hits[0][0]
+            tied = [h for h in hits if h[0] == best]
+            out[r['Title']] = {
+                'handle': tied[0][1], 'site_title': tied[0][2], 'diff': tied[0][3],
+                'also': [h[1] for h in tied[1:]],
+            }
     return rows, out
 
 if __name__ == '__main__':

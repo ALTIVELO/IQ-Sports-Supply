@@ -17,7 +17,7 @@ def sort_key(s):
     return (0, ORDER.index(s)) if s in LETTERS else (1, int(s) if s.isdigit() else 0)
 
 def options_for(product):
-    for o in product['options']:
+    for o in product.get('options', []):
         if o['name'].strip().lower() in ('frame size', 'size'):
             vals = []
             for v in o['values']:
@@ -32,17 +32,22 @@ def build():
     bikes = json.load(open('drag-bikes.json'))
     out = {}
     for title, m in match.items():
-        h = m['handle']
-        g = [s for s in geom.get(h, []) if s in LETTERS]
-        o = [s for s in options_for(bikes[h]) if s in LETTERS]
-        chosen, source = (g, 'geometry') if len(g) > 1 else ((o, 'stock listing') if len(o) > 1 else ([], None))
-        if not chosen: continue
-        out[title] = {
-            'sizes': sorted(set(chosen), key=sort_key),
-            'source': source,
-            'site_title': m['site_title'],
-            'handle': h,
-        }
+        # Geometry across every equally-good listing first, then stock options
+        # across every one: a size range on any copy of the bike is the range,
+        # and a copy that happens to carry neither says nothing about it.
+        for source, pick in (('geometry', lambda h: geom.get(h, [])),
+                             ('stock listing', lambda h: options_for(bikes.get(h, {})))):
+            for h in [m['handle'], *m.get('also', [])]:
+                found = [s for s in pick(h) if s in LETTERS]
+                if len(found) > 1:
+                    out[title] = {
+                        'sizes': sorted(set(found), key=sort_key),
+                        'source': source,
+                        'site_title': m['site_title'],
+                        'handle': h,
+                    }
+                    break
+            if title in out: break
     return out
 
 if __name__ == '__main__':

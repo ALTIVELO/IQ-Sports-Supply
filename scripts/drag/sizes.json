@@ -31,7 +31,7 @@
    "XL"
   ],
   "source": "stock listing",
-  "site_title": "Drag Sterrato G2 9.0 28\"",
+  "site_title": "Drag Sterrato G2 9.0",
   "handle": "drag-sterrato-g2-9-0-28"
  },
  "28 Sterrato 7.0": {
@@ -92,6 +92,16 @@
   "source": "stock listing",
   "site_title": "Drag Master Comp 28\"",
   "handle": "bicycle-drag-28-master-comp"
+ },
+ "28 Pista": {
+  "sizes": [
+   "XS",
+   "S",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Pista Comp 28\"",
+  "handle": "bicycle-drag-28-pista-comp"
  },
  "28 Corsa CX Pro": {
   "sizes": [
@@ -254,6 +264,36 @@
   "site_title": "Drag Icosa Nona 3.0 29\"",
   "handle": "drag-icosa-nona-3-0-29"
  },
+ "27.5/29 Trigger 8.0 Trail": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Trigger 8.0 27.5\"",
+  "handle": "bicycle-drag-29-trigger-8-0"
+ },
+ "27.5/29 Trigger 6.0 Trail": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Trigger 6.0 27.5\"",
+  "handle": "bicycle-drag-29-trigger-6-0"
+ },
+ "27.5/29 Trigger 9.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Trigger 9.0 27.5\"",
+  "handle": "bicycle-drag-29-trigger-9-0"
+ },
  "27.5/29 Trigger 7.1": {
   "sizes": [
    "M",
@@ -273,6 +313,55 @@
   "source": "stock listing",
   "site_title": "Drag Trigger 5.2 29\"",
   "handle": "drag-trigger-5-2-29"
+ },
+ "27.5/29 Trigger 3.1": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Trigger 3.1 27.5\"",
+  "handle": "bicycle-drag-29-trigger-3-1"
+ },
+ "27.5/29 Hardy 9.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Hardy 9.0 27.5\"",
+  "handle": "bicycle-drag-29-hardy-9-0-l-19-black-red"
+ },
+ "27.5/29 Hardy 7.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Hardy 7.0 27.5\"",
+  "handle": "bicycle-drag-29-hardy-7-0-m-17-red-gray"
+ },
+ "27.5/29 Hardy 5.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Hardy 5.0 27.5\"",
+  "handle": "bicycle-drag-29-hardy-5-0"
+ },
+ "26/27.5/29 Grace 7.0": {
+  "sizes": [
+   "S",
+   "M"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Grace 7.0 27.5\"",
+  "handle": "bicycle-drag-27-5-grace-7-0"
  },
  "26/27.5/29 Grace 5.0": {
   "sizes": [
