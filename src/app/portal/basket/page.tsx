@@ -15,7 +15,8 @@ export default async function BasketPage() {
   const [{ data: products }, { data: client }, { data: settings }, { data: addresses }] =
     await Promise.all([
       sb.from('client_catalogue')
-        .select('id, sku, name, brand, price, in_stock, image_url, category_slug, category_name')
+        .select(`id, sku, name, brand, price, in_stock, image_url,
+               category_slug, category_name, configurator_only`)
         .order('sku').limit(2000),
       sb.from('clients').select('vat_exempt').eq('id', user.clientId).single(),
       sb.from('settings').select('vat_rate, payment_days').eq('id', 1).single(),

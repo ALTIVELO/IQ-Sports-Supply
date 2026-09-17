@@ -12,12 +12,16 @@ export default async function PortalCatalogue() {
   const user = await requireClient();
   const sb = await supabaseServer();
 
-  const [{ data: products }, { data: categories }, { data: client }, { data: settings }] =
+  const [{ data: products }, { data: categories }, { data: groupRows },
+         { data: client }, { data: settings }] =
     await Promise.all([
     sb.from('client_catalogue')
-      .select('id, sku, name, brand, price, in_stock, image_url, category_slug, category_name')
+      .select(`id, sku, name, brand, price, in_stock, image_url,
+               category_slug, category_name, configurator_only`)
       .order('sku').limit(2000),
     sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),
+    // Counted alongside the products: a builder is one thing to click.
+    sb.from('product_groups').select('categories(slug)').eq('active', true),
     sb.from('clients').select('vat_exempt').eq('id', user.clientId).single(),
     sb.from('settings').select('vat_rate').eq('id', 1).single(),
   ]);
@@ -26,6 +30,8 @@ export default async function PortalCatalogue() {
     <CollectionsBrowser
       products={(products ?? []) as CatalogueItem[]}
       categories={(categories ?? []) as CategoryRow[]}
+      configurators={((groupRows ?? []) as unknown as { categories: { slug: string } | null }[])
+        .map((g) => ({ categorySlug: g.categories?.slug ?? null }))}
       vatRate={client?.vat_exempt ? 0 : Number(settings?.vat_rate ?? 20)}
     />
   );

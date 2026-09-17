@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { Card, Empty } from '@/components/ui';
-import { buildTree, type CategoryRow } from '@/lib/catalogue/tree';
+import { buildTree, offeredLoose,
+         type CategoryRow, type FiledGroup } from '@/lib/catalogue/tree';
 import CollectionGrid from './CollectionGrid';
 import ProductRow from './ProductRow';
 import BasketBar from './BasketBar';
@@ -17,28 +18,40 @@ import type { CatalogueItem } from '@/lib/types';
  * shelf it is on.
  */
 export default function CollectionsBrowser({
-  products, categories, vatRate,
-}: { products: CatalogueItem[]; categories: CategoryRow[]; vatRate: number }) {
+  products, categories, configurators, vatRate,
+}: {
+  products: CatalogueItem[]; categories: CategoryRow[];
+  configurators: FiledGroup[]; vatRate: number;
+}) {
   const [query, setQuery] = useState('');
   const searching = query.trim().length > 0;
 
-  const groups = useMemo(() => buildTree(categories, products), [categories, products]);
-  const unfiled = useMemo(() => products.filter((p) => !p.category_slug), [products]);
+  const groups = useMemo(
+    () => buildTree(categories, products, configurators),
+    [categories, products, configurators],
+  );
+
+  // Everything a customer can order on its own. A collection served by
+  // builders keeps its products out of the listings and out of search, so a
+  // fixed-spec groupset cannot be found round the back of the builder that
+  // replaced it.
+  const offered = useMemo(() => products.filter(offeredLoose), [products]);
+  const unfiled = useMemo(() => offered.filter((p) => !p.category_slug), [offered]);
 
   const results = useMemo(() => {
     const s = query.trim().toLowerCase();
     if (!s) return [];
-    return products
+    return offered
       .filter((p) => `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(s))
       .slice(0, 120);
-  }, [query, products]);
+  }, [query, offered]);
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-[26px] font-semibold tracking-[-0.02em]">Catalogue</h1>
         <p className="text-[13px] text-mute mt-1">
-          {products.length} product{products.length === 1 ? '' : 's'} at your prices, excluding VAT.
+          {offered.length} product{offered.length === 1 ? '' : 's'} at your prices, excluding VAT.
         </p>
       </div>
 

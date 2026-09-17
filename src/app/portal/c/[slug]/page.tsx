@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
 import { Card, Empty } from '@/components/ui';
-import { buildTree, findNode, slugsUnder, type CategoryRow } from '@/lib/catalogue/tree';
+import { buildTree, findNode, offeredLoose, slugsUnder,
+         type CategoryRow } from '@/lib/catalogue/tree';
 import CollectionGrid from '../../CollectionGrid';
 import CollectionSearch from './CollectionSearch';
 import GroupCards, { type GroupCard } from '../../GroupCards';
@@ -39,7 +40,8 @@ export default async function CollectionPage({
          { data: groupRows }] =
     await Promise.all([
       sb.from('client_catalogue')
-        .select('id, sku, name, brand, price, in_stock, image_url, category_slug, category_name')
+        .select(`id, sku, name, brand, price, in_stock, image_url,
+               category_slug, category_name, configurator_only`)
         .order('sku').limit(2000),
       sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),
       sb.from('clients').select('vat_exempt').eq('id', user.clientId).single(),
@@ -54,7 +56,7 @@ export default async function CollectionPage({
 
   // Everything not yet categorised, which has no row in `categories`.
   if (slug === 'other') {
-    const unfiled = products.filter((p) => !p.category_slug);
+    const unfiled = products.filter((p) => !p.category_slug && offeredLoose(p));
     if (unfiled.length === 0) notFound();
     return (
       <Shell title="Other" trail={[]} count={unfiled.length}>
@@ -78,14 +80,18 @@ export default async function CollectionPage({
   const groupsIn = (slugs: Set<string>): GroupCard[] =>
     allGroups.filter((g) => g.categorySlug && slugs.has(g.categorySlug));
 
-  const tree = buildTree((categories ?? []) as CategoryRow[], products);
+  const tree = buildTree((categories ?? []) as CategoryRow[], products,
+                         allGroups.map((g) => ({ categorySlug: g.categorySlug })));
   const found = findNode(tree, slug);
   if (!found) notFound();
   const { node, trail } = found;
 
   const showAll = all === '1' || node.children.length === 0;
   const wanted = new Set(showAll ? slugsUnder(node) : [node.slug]);
-  const shown = products.filter((p) => p.category_slug && wanted.has(p.category_slug));
+  // A collection served by builders lists its builders and nothing else: the
+  // loose products in it are fixed-spec versions of the same goods.
+  const shown = products.filter(
+    (p) => p.category_slug && wanted.has(p.category_slug) && offeredLoose(p));
   // Groups count as things we list here, so "nothing listed yet" must not
   // appear directly underneath a row of them.
   const shownGroups = groupsIn(wanted);

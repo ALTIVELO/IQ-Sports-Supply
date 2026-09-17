@@ -25,6 +25,8 @@ export interface CatalogueItem {
   id: string; sku: string; name: string; brand: string | null;
   price: number; in_stock: boolean; image_url: string | null;
   category_slug: string | null; category_name: string | null;
+  /** Its collection is served by builders, so it is not offered on its own. */
+  configurator_only: boolean;
 }
 
 export interface Settings {

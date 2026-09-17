@@ -5,6 +5,7 @@ import { Button, Card, Empty, Field, Notice, Tag } from '@/components/ui';
 import {
   saveGroup, setGroupActive, deleteGroup,
   saveStep, deleteStep, addOptions, deleteOption,
+  setCategoryConfiguratorOnly,
 } from './actions';
 
 export interface ProductLite {
@@ -22,7 +23,10 @@ export interface Group {
   image_url: string | null; active: boolean; sort: number;
   product_group_steps: Step[];
 }
-interface Category { id: string; name: string; parent_id: string | null; sort: number }
+interface Category {
+  id: string; name: string; parent_id: string | null; sort: number;
+  configurator_only: boolean;
+}
 
 type Msg = { tone: 'error' | 'success'; text: string } | null;
 
@@ -39,6 +43,13 @@ export default function GroupsScreen({ groups, products, categories }: {
   const grouped = useMemo(() => categories
     .filter((c) => c.parent_id === null)
     .map((g) => ({ g, children: categories.filter((c) => c.parent_id === g.id) })), [categories]);
+
+  // Only collections that actually hold a builder can sensibly be served by
+  // one, so those are the only ones offered the choice.
+  const withBuilders = useMemo(() => {
+    const ids = new Set(groups.filter((g) => g.active).map((g) => g.category_id));
+    return categories.filter((c) => ids.has(c.id));
+  }, [groups, categories]);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string; message?: string }>) {
     setMessage(null);
@@ -65,6 +76,32 @@ export default function GroupsScreen({ groups, products, categories }: {
         <Button kind="accent" onClick={() => { setCreating(true); setMessage(null); }}>
           New variant or build
         </Button>
+      )}
+
+      {withBuilders.length > 0 && (
+        <Card>
+          <div className="text-[12px] font-semibold text-mute uppercase tracking-wide mb-2">
+            Collections served by their builders
+          </div>
+          <p className="text-[12px] text-mute mb-3 max-w-2xl">
+            A groupset is specified, not picked off a shelf. Tick a collection and
+            customers see its builders and nothing else — the loose products stay in the
+            catalogue, stay priced, and staff still see them here and on the Catalogue
+            screen.
+          </p>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {withBuilders.map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-[13px]">
+                <input
+                  type="checkbox" checked={c.configurator_only} disabled={pending}
+                  onChange={(e) =>
+                    run(() => setCategoryConfiguratorOnly(c.id, e.target.checked))}
+                />
+                {c.name}
+              </label>
+            ))}
+          </div>
+        </Card>
       )}
 
       {groups.length === 0 && !creating && (

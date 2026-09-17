@@ -24,7 +24,8 @@ export default async function GroupsPage() {
       .order('name'),
     sb.from('products').select('id, sku, name, brand, active').eq('active', true)
       .order('sku').limit(2000),
-    sb.from('categories').select('id, name, parent_id, sort').order('sort'),
+    sb.from('categories')
+      .select('id, name, parent_id, sort, configurator_only').order('sort'),
   ]);
 
   return (

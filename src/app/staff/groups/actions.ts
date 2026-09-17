@@ -54,6 +54,29 @@ export async function saveGroup(input: unknown): Promise<ActionResult> {
   return { ok: true, message: id ? 'Group saved' : `${name} created` };
 }
 
+/**
+ * Says that a collection is served by its builders.
+ *
+ * Its products stay in the catalogue and stay priced — staff still see them,
+ * they still cost and margin, and a builder may still use one as a part. They
+ * simply stop being listed to a customer beside the builder that specs the
+ * same goods properly.
+ */
+export async function setCategoryConfiguratorOnly(
+  categoryId: string, value: boolean,
+): Promise<ActionResult> {
+  await requireStaff(['admin', 'accounts']);
+  const sb = await supabaseServer();
+  const { error } = await sb.from('categories')
+    .update({ configurator_only: value }).eq('id', categoryId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/staff/groups');
+  revalidatePath('/portal', 'layout');
+  return { ok: true, message: value
+    ? 'Customers now see only the builders in that collection'
+    : 'Customers see that collection’s products again' };
+}
+
 export async function setGroupActive(id: string, active: boolean): Promise<ActionResult> {
   await requireStaff([...STAFF]);
   const sb = await supabaseServer();

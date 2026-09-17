@@ -1,6 +1,6 @@
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
-import { buildTree, type CategoryRow } from '@/lib/catalogue/tree';
+import { buildTree, offeredLoose, type CategoryRow } from '@/lib/catalogue/tree';
 import HomeScreen, { type HomeData } from './HomeScreen';
 
 export const dynamic = 'force-dynamic';
@@ -43,12 +43,15 @@ export default async function PortalHome() {
         .order('shipped_at', { ascending: false })
         .limit(1),
 
+      // Every active builder: four are shown as cards, all of them are counted
+      // into the departments below.
       sb.from('product_groups')
-        .select('slug, name, brand, image_url')
-        .eq('active', true).order('sort').limit(4),
+        .select('slug, name, brand, image_url, categories(slug)')
+        .eq('active', true).order('sort'),
 
       // Two columns, not nine: this only needs to count what is filed where.
-      sb.from('client_catalogue').select('category_slug, image_url').limit(2000),
+      sb.from('client_catalogue')
+        .select('category_slug, image_url, configurator_only').limit(2000),
 
       sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),
     ]);
@@ -72,7 +75,7 @@ export default async function PortalHome() {
   const data: HomeData = {
     clientName: client?.name ?? '',
     tier: (client?.tiers as unknown as { name: string } | null)?.name ?? null,
-    productCount: filed?.length ?? 0,
+    productCount: (filed ?? []).filter(offeredLoose).length,
     outstanding: (due ?? []).reduce((a, i) => a + gross(i), 0),
     dueCount: (due ?? []).length,
     overdueCount: overdue.length,
@@ -87,8 +90,13 @@ export default async function PortalHome() {
           orderNumber: (parcel.orders as unknown as { number: string } | null)?.number ?? null,
         }
       : null,
-    groups: groups ?? [],
-    departments: buildTree((categories ?? []) as CategoryRow[], filed ?? [])
+    groups: (groups ?? []).slice(0, 4).map((g) => ({
+      slug: g.slug, name: g.name, brand: g.brand, image_url: g.image_url,
+    })),
+    departments: buildTree(
+      (categories ?? []) as CategoryRow[], filed ?? [],
+      ((groups ?? []) as unknown as { categories: { slug: string } | null }[])
+        .map((g) => ({ categorySlug: g.categories?.slug ?? null })))
       .filter((n) => n.total > 0)
       .map((n) => ({ slug: n.slug, name: n.name, total: n.total })),
   };

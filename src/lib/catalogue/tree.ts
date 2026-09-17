@@ -16,9 +16,22 @@ export interface Node {
   children: Node[];
 }
 
-// Only these two fields are read, and saying so lets a screen that needs
-// nothing but the counts fetch two columns instead of nine.
-type Filed = Pick<CatalogueItem, 'category_slug' | 'image_url'>;
+// Only these three fields are read, and saying so lets a screen that needs
+// nothing but the counts fetch three columns instead of ten.
+type Filed = Pick<CatalogueItem, 'category_slug' | 'image_url' | 'configurator_only'>;
+
+/** A configurator, as the tree needs to count it: the collection it sits in. */
+export interface FiledGroup { categorySlug: string | null }
+
+/**
+ * Whether a customer can order this product on its own.
+ *
+ * In a collection served by builders — groupsets — the loose products are
+ * fixed-spec versions of what the builder makes properly, and offering both
+ * reads as two different things. They stay in the catalogue for staff; they
+ * are not listed for a customer, or counted as if they were.
+ */
+export const offeredLoose = (p: Filed) => !p.configurator_only;
 
 /**
  * Builds the group → collection tree with product counts.
@@ -31,18 +44,30 @@ type Filed = Pick<CatalogueItem, 'category_slug' | 'image_url'>;
  * what IQ supplies, which is worth more than hiding the gaps. Empty ones are
  * marked rather than removed, so the page can show them as clearly not-yet-
  * stocked instead of looking broken when clicked.
+ *
+ * Counts are of what a customer is offered, not of what exists. A builder
+ * counts as one, because it is one thing to click; a loose product in a
+ * collection served by builders counts as none, because it is not listed.
  */
-export function buildTree(categories: CategoryRow[], products: Filed[]): Node[] {
+export function buildTree(
+  categories: CategoryRow[], products: Filed[], groups: FiledGroup[] = [],
+): Node[] {
   const bySlug = new Map(categories.map((c) => [c.slug, c]));
   const byId = new Map(categories.map((c) => [c.id, c]));
 
   const direct = new Map<string, { own: number; cover: string | null }>();
   for (const p of products) {
-    if (!p.category_slug) continue;
+    if (!p.category_slug || !offeredLoose(p)) continue;
     const entry = direct.get(p.category_slug) ?? { own: 0, cover: null };
     entry.own += 1;
     if (!entry.cover && p.image_url) entry.cover = p.image_url;
     direct.set(p.category_slug, entry);
+  }
+  for (const g of groups) {
+    if (!g.categorySlug) continue;
+    const entry = direct.get(g.categorySlug) ?? { own: 0, cover: null };
+    entry.own += 1;
+    direct.set(g.categorySlug, entry);
   }
 
   const childrenOf = new Map<string | null, CategoryRow[]>();
