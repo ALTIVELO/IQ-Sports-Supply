@@ -16,6 +16,9 @@ export interface NavBadges {
 type Item = { href: string; label: string; roles?: Role[]; badge?: keyof NavBadges };
 
 const ITEMS: Item[] = [
+  // Profit is not everybody's business: the packing bench works the queues,
+  // not the margins.
+  { href: '/staff/dashboard', label: 'Dashboard', roles: ['admin', 'accounts'] },
   { href: '/staff/order', label: 'Order desk' },
   { href: '/staff/orders', label: 'Orders' },
   { href: '/staff/supplier', label: 'Supplier', badge: 'backorderUnits' },
