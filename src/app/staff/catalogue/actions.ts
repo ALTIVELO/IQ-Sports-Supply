@@ -17,9 +17,33 @@ export async function saveProduct(input: {
   if (!sku || !name) return { ok: false, error: 'SKU and product name are both required' };
 
   let productId = input.id;
+  let revived = false;
+
+  if (!productId) {
+    // A SKU that already exists cannot be inserted again — it is unique, and
+    // case-insensitively so. Typing one in usually means the product was
+    // withdrawn and is wanted back, and the alternative is a raw duplicate-key
+    // error naming a product the screen does not show. So take it as an edit.
+    // Escaped: ilike is a pattern match, and `_` is a perfectly ordinary
+    // character in a part number. Unescaped, BP_L05 would match BPXL05 too and
+    // maybeSingle() would then fail on the second row rather than find the one
+    // product meant.
+    const pattern = sku.replace(/([\\%_])/g, '\\$1');
+    const { data: match } = await sb.from('products')
+      .select('id, active').ilike('sku', pattern).maybeSingle();
+    if (match) {
+      productId = match.id;
+      revived = !match.active;
+    }
+  }
+
   if (productId) {
     const { error } = await sb.from('products')
-      .update({ sku, name, brand: input.brand.trim() || null }).eq('id', productId);
+      .update({
+        sku, name, brand: input.brand.trim() || null,
+        ...(revived ? { active: true } : {}),
+      })
+      .eq('id', productId);
     if (error) return { ok: false, error: error.message };
   } else {
     const { data, error } = await sb.from('products')
@@ -54,7 +78,13 @@ export async function saveProduct(input: {
   }
 
   revalidatePath('/staff/catalogue');
-  return { ok: true, message: input.id ? 'Product updated' : 'Product added' };
+  revalidatePath('/portal', 'layout');
+  return {
+    ok: true,
+    message: revived
+      ? `${sku} was withdrawn and is back on sale, with these prices`
+      : input.id ? 'Product updated' : 'Product added',
+  };
 }
 
 export async function setProductActive(id: string, active: boolean): Promise<ActionResult> {

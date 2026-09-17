@@ -106,6 +106,10 @@ export default function ImportScreen({
   const [plans, setPlans] = useState<Record<string, Plan>>({});
   const [effectiveFrom, setEffectiveFrom] = useState(today());
   const [deactivateMissing, setDeactivateMissing] = useState(false);
+  // On by default: pricing something is as clear a statement of intent to sell
+  // it as there is, and the alternative is an import that lands on a withdrawn
+  // product in silence.
+  const [reactivateWithdrawn, setReactivateWithdrawn] = useState(true);
   const [preview, setPreview] = useState<CataloguePreview | null>(null);
   const [message, setMessage] = useState<Msg>(null);
   const [dragging, setDragging] = useState(false);
@@ -267,7 +271,8 @@ export default function ImportScreen({
   function doApply() {
     startTransition(async () => {
       const r = await applyCatalogue({
-        sheets: buildSheets(), effectiveFrom, filename, deactivateMissing,
+        sheets: buildSheets(), effectiveFrom, filename,
+        deactivateMissing, reactivateWithdrawn,
       });
       setMessage(r.ok
         ? { tone: 'success', text: r.message ?? 'Applied' }
@@ -488,13 +493,22 @@ export default function ImportScreen({
                     Upload next quarter early — prices switch over on this date on their own.
                   </span>
                 </label>
-                <label className="flex items-center gap-1.5 text-[12px]">
-                  <input
-                    type="checkbox" checked={deactivateMissing}
-                    onChange={(e) => setDeactivateMissing(e.target.checked)}
-                  />
-                  Mark SKUs missing from the sheet inactive
-                </label>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1.5 text-[12px]">
+                    <input
+                      type="checkbox" checked={reactivateWithdrawn}
+                      onChange={(e) => setReactivateWithdrawn(e.target.checked)}
+                    />
+                    Bring back any withdrawn SKU this file prices
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[12px]">
+                    <input
+                      type="checkbox" checked={deactivateMissing}
+                      onChange={(e) => setDeactivateMissing(e.target.checked)}
+                    />
+                    Mark SKUs missing from the sheet inactive
+                  </label>
+                </div>
                 <Button small kind="ghost" onClick={doPreview} disabled={pending}>
                   {pending ? 'Checking…' : 'Preview changes'}
                 </Button>
@@ -534,6 +548,8 @@ function PreviewCards({ preview }: { preview: CataloguePreview }) {
 
       {preview.tiers.map((t) => <TierCard key={t.tierId} preview={t} />)}
 
+      {preview.withdrawn.length > 0 && <Withdrawn withdrawn={preview.withdrawn} />}
+
       {preview.newSkus.length > 0 && (
         <Card>
           <Bucket title={`New SKUs to be created (${preview.newSkus.length})`}>
@@ -559,6 +575,40 @@ function PreviewCards({ preview }: { preview: CataloguePreview }) {
         </Card>
       )}
     </>
+  );
+}
+
+/**
+ * SKUs in the file that the catalogue already has, withdrawn.
+ *
+ * A withdrawn product was sold once, so it could not be deleted — the SKU is
+ * still taken and customers cannot see it. Landing prices on one silently is
+ * the worst outcome available: the import reports success, and the product
+ * everybody expected to appear does not. So it is named here, before applying.
+ */
+function Withdrawn({ withdrawn }: { withdrawn: { sku: string; name: string }[] }) {
+  const one = withdrawn.length === 1;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center gap-3 mb-2">
+        <Tag tone="red">Withdrawn</Tag>
+        <span className="text-[12px]">
+          <strong>{withdrawn.length}</strong> SKU{one ? '' : 's'} in this file
+          {one ? ' is' : ' are'} in the catalogue but withdrawn
+        </span>
+      </div>
+      <p className="text-[12px] text-mute mb-2 max-w-3xl">
+        {one ? 'It was' : 'They were'} sold at least once, so {one ? 'it' : 'they'} could
+        not be deleted — only taken off sale. Pricing {one ? 'it' : 'them'} here is a
+        fair sign {one ? 'it is' : 'they are'} wanted again, so &ldquo;bring back any
+        withdrawn SKU this file prices&rdquo; is ticked above. Untick it and the prices
+        still land, but {one ? 'it stays' : 'they stay'} off sale.
+      </p>
+      <p className="text-[12px] num">
+        {withdrawn.slice(0, 40).map((w) => w.sku).join(' · ')}
+        {withdrawn.length > 40 ? ` … and ${withdrawn.length - 40} more` : ''}
+      </p>
+    </Card>
   );
 }
 

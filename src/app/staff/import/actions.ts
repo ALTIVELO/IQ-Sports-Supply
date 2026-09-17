@@ -172,7 +172,10 @@ export async function previewCatalogue(
 
   const [{ data: tiers }, { data: products }] = await Promise.all([
     sb.from('tiers').select('id, name').order('sort'),
-    sb.from('products').select('id, sku, name').eq('active', true),
+    // Withdrawn products included. They still hold the SKU, so a preview that
+    // cannot see them calls a SKU new that the import will not create, and
+    // says nothing about the one place the prices are actually going.
+    sb.from('products').select('id, sku, name, active').limit(10000),
   ]);
 
   const { rows, invalid } = mergeSheets(sheets);
@@ -248,7 +251,14 @@ export async function previewCatalogue(
       costs,
       newSkus: rows.filter((r) => !bySku.has(norm(r.sku)))
         .map((r) => ({ sku: r.sku, name: r.name || r.sku })),
-      missing: (products ?? []).filter((p) => !inFile.has(norm(p.sku)))
+      withdrawn: rows
+        .map((r) => bySku.get(norm(r.sku)))
+        .filter((p) => p !== undefined && !p.active)
+        .map((p) => ({ sku: p!.sku, name: p!.name })),
+      // Withdrawn products are not "missing from the file" — they are gone on
+      // purpose, and listing them here would bury the ones that matter.
+      missing: (products ?? [])
+        .filter((p) => p.active && !inFile.has(norm(p.sku)))
         .map((p) => ({ sku: p.sku, name: p.name })),
       invalid,
     },
@@ -267,6 +277,15 @@ export async function applyCatalogue(input: {
   effectiveFrom: string;
   filename: string;
   deactivateMissing: boolean;
+  /**
+   * Put a withdrawn SKU back in the catalogue when this file prices it.
+   *
+   * Without this an import lands on a withdrawn product in total silence: the
+   * prices go in, the product stays invisible, and the only clue is that the
+   * new SKU you expected never appears. Pricing something is as clear a
+   * statement of intent to sell it as there is.
+   */
+  reactivateWithdrawn: boolean;
 }): Promise<ActionResult> {
   const user = await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
@@ -278,8 +297,24 @@ export async function applyCatalogue(input: {
   const { data: tiers } = await sb.from('tiers').select('id, name').order('sort');
   const priced = tiersPriced(valid, tiers ?? []);
 
-  const { data: existing } = await sb.from('products').select('id, sku');
+  const { data: existing } = await sb.from('products')
+    .select('id, sku, active').limit(10000);
   const bySku = new Map((existing ?? []).map((p) => [norm(p.sku), p.id]));
+  const withdrawn = new Map(
+    (existing ?? []).filter((p) => !p.active).map((p) => [norm(p.sku), p.id]));
+
+  // ── withdrawn SKUs this file prices ──
+  const backInStock = valid
+    .map((r) => withdrawn.get(norm(r.sku)))
+    .filter((id): id is string => Boolean(id));
+
+  let revived = 0;
+  if (input.reactivateWithdrawn && backInStock.length) {
+    const { error } = await sb.from('products')
+      .update({ active: true }).in('id', backInStock);
+    if (error) return { ok: false, error: `Bringing withdrawn SKUs back failed: ${error.message}` };
+    revived = backInStock.length;
+  }
 
   // ── new SKUs ──
   const toCreate = valid.filter((r) => !bySku.has(norm(r.sku)));
@@ -378,6 +413,10 @@ export async function applyCatalogue(input: {
   revalidatePath('/staff/import');
 
   const parts = [`${added} new SKU${added === 1 ? '' : 's'}`];
+  if (revived) parts.push(`${revived} brought back from withdrawn`);
+  else if (backInStock.length) {
+    parts.push(`${backInStock.length} still withdrawn and so not on sale`);
+  }
   if (priceRows) {
     parts.push(`${priceRows} price${priceRows === 1 ? '' : 's'} across `
       + `${priced.length} tier${priced.length === 1 ? '' : 's'}`);

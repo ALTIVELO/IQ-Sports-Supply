@@ -71,6 +71,14 @@ export interface CataloguePreview {
   /** Null when the file carries no cost column at all. */
   costs: CostPreview | null;
   newSkus: { sku: string; name: string }[];
+  /**
+   * In the catalogue but withdrawn, and priced by this file.
+   *
+   * A withdrawn SKU is one that was sold once and so could not be deleted. It
+   * is invisible to customers, which makes it the worst possible thing for an
+   * import to land on silently: the prices go in, and the product stays gone.
+   */
+  withdrawn: { sku: string; name: string }[];
   /** In the system but absent from the file — reported only, never deleted. */
   missing: { sku: string; name: string }[];
   invalid: { row: number; reason: string }[];
