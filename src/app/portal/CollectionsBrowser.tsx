@@ -6,7 +6,7 @@ import { buildTree, type CategoryRow } from '@/lib/catalogue/tree';
 import CollectionGrid from './CollectionGrid';
 import ProductRow from './ProductRow';
 import BasketBar from './BasketBar';
-import type { CatalogueItem } from './page';
+import type { CatalogueItem } from '@/lib/types';
 
 /**
  * The catalogue's front door: the top-level groups — bikes, frames, parts,

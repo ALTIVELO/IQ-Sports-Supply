@@ -101,7 +101,7 @@ export async function deleteProducts(ids: string[]): Promise<DeleteResult> {
     (data ?? {}) as { deleted?: number; withdrawn?: string[] };
 
   revalidatePath('/staff/catalogue');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
 
   const parts: string[] = [];
   if (deleted) parts.push(`${deleted} product${deleted === 1 ? '' : 's'} deleted`);

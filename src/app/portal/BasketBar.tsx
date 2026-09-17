@@ -6,7 +6,7 @@ import { Button, Notice } from '@/components/ui';
 import { money } from '@/lib/format';
 import { useCart } from './CartContext';
 import { placeClientOrder } from './actions';
-import type { CatalogueItem } from './page';
+import type { CatalogueItem } from '@/lib/types';
 
 /**
  * The sticky basket. Rendered on every catalogue page, so the running total

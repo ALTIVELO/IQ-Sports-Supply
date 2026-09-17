@@ -50,7 +50,7 @@ export async function saveGroup(input: unknown): Promise<ActionResult> {
   }
 
   revalidatePath('/staff/groups');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return { ok: true, message: id ? 'Group saved' : `${name} created` };
 }
 
@@ -60,7 +60,7 @@ export async function setGroupActive(id: string, active: boolean): Promise<Actio
   const { error } = await sb.from('product_groups').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/staff/groups');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return { ok: true, message: active ? 'Group is live' : 'Group hidden from customers' };
 }
 
@@ -72,7 +72,7 @@ export async function deleteGroup(id: string): Promise<ActionResult> {
   const { error } = await sb.from('product_groups').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/staff/groups');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return { ok: true, message: 'Group deleted. No products were affected.' };
 }
 
@@ -100,7 +100,7 @@ export async function saveStep(input: unknown): Promise<ActionResult> {
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/staff/groups');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return { ok: true, message: id ? 'Choice saved' : `"${fields.name}" added` };
 }
 
@@ -110,7 +110,7 @@ export async function deleteStep(id: string): Promise<ActionResult> {
   const { error } = await sb.from('product_group_steps').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/staff/groups');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return { ok: true, message: 'Choice removed' };
 }
 
@@ -135,7 +135,7 @@ export async function addOptions(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/staff/groups');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return {
     ok: true,
     message: `${productIds.length} option${productIds.length === 1 ? '' : 's'} added`,
@@ -151,7 +151,7 @@ export async function updateOption(
     .update({ label: label.trim() || null, sort }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/staff/groups');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return { ok: true };
 }
 
@@ -161,6 +161,6 @@ export async function deleteOption(id: string): Promise<ActionResult> {
   const { error } = await sb.from('product_group_options').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/staff/groups');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return { ok: true, message: 'Option removed' };
 }

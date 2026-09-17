@@ -17,6 +17,16 @@ export type OrderEventType =
   | 'placed' | 'invoice_sent' | 'payment_received'
   | 'supplier_ordered' | 'stock_arrived' | 'packed' | 'shipped';
 
+/**
+ * One product as a client sees it: their own tier's price, and nothing about
+ * stock beyond whether we can send it. Shaped by the client_catalogue view.
+ */
+export interface CatalogueItem {
+  id: string; sku: string; name: string; brand: string | null;
+  price: number; in_stock: boolean; image_url: string | null;
+  category_slug: string | null; category_name: string | null;
+}
+
 export interface Settings {
   id: number;
   company: string;

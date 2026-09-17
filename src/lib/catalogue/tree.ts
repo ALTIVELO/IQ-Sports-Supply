@@ -1,4 +1,4 @@
-import type { CatalogueItem } from '@/app/portal/page';
+import type { CatalogueItem } from '@/lib/types';
 
 /** A category row as the portal reads it. */
 export interface CategoryRow {
@@ -16,6 +16,10 @@ export interface Node {
   children: Node[];
 }
 
+// Only these two fields are read, and saying so lets a screen that needs
+// nothing but the counts fetch two columns instead of nine.
+type Filed = Pick<CatalogueItem, 'category_slug' | 'image_url'>;
+
 /**
  * Builds the group → collection tree with product counts.
  *
@@ -28,7 +32,7 @@ export interface Node {
  * marked rather than removed, so the page can show them as clearly not-yet-
  * stocked instead of looking broken when clicked.
  */
-export function buildTree(categories: CategoryRow[], products: CatalogueItem[]): Node[] {
+export function buildTree(categories: CategoryRow[], products: Filed[]): Node[] {
   const bySlug = new Map(categories.map((c) => [c.slug, c]));
   const byId = new Map(categories.map((c) => [c.id, c]));
 

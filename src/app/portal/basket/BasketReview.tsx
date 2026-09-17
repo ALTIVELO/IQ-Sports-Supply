@@ -7,7 +7,7 @@ import ProductImage from '@/components/ProductImage';
 import { useCart } from '../CartContext';
 import type { Address } from '../account/AddressBook';
 import { placeClientOrder } from '../actions';
-import type { CatalogueItem } from '../page';
+import type { CatalogueItem } from '@/lib/types';
 
 /**
  * The basket, line by line, before committing to it.
@@ -79,7 +79,7 @@ export default function BasketReview({
                 className="text-[13px] font-semibold bg-ink text-white rounded px-4 py-2">
             Track this order
           </Link>
-          <Link href="/portal"
+          <Link href="/portal/catalogue"
                 className="text-[13px] font-semibold border border-line bg-white rounded px-4 py-2">
             Back to the catalogue
           </Link>
@@ -97,7 +97,7 @@ export default function BasketReview({
         <Card>
           <Empty>
             Your basket is empty.{' '}
-            <Link href="/portal" className="text-flame-text font-semibold">
+            <Link href="/portal/catalogue" className="text-flame-text font-semibold">
               Browse the catalogue
             </Link>.
           </Empty>
@@ -116,7 +116,7 @@ export default function BasketReview({
             {lines.reduce((a, l) => a + l.qty, 0)} items
           </p>
         </div>
-        <Link href="/portal" className="text-[12px] text-flame-text font-semibold">
+        <Link href="/portal/catalogue" className="text-[12px] text-flame-text font-semibold">
           ← Keep shopping
         </Link>
       </div>

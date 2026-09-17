@@ -2,7 +2,7 @@ import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
 import BasketReview from './BasketReview';
 import type { Address } from '../account/AddressBook';
-import type { CatalogueItem } from '../page';
+import type { CatalogueItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 

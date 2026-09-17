@@ -8,7 +8,7 @@ import CollectionGrid from '../../CollectionGrid';
 import CollectionSearch from './CollectionSearch';
 import GroupCards, { type GroupCard } from '../../GroupCards';
 import BasketBar from '../../BasketBar';
-import type { CatalogueItem } from '../../page';
+import type { CatalogueItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -127,7 +127,7 @@ export default async function CollectionPage({
             <Empty>
               We supply {node.name.toLowerCase()}, but none are listed here yet. Ask us
               what we can get — or{' '}
-              <Link href="/portal" className="text-flame-text font-semibold">
+              <Link href="/portal/catalogue" className="text-flame-text font-semibold">
                 browse the rest of the catalogue
               </Link>.
             </Empty>
@@ -154,7 +154,7 @@ function Shell({
     <div className="space-y-4">
       <div>
         <nav className="flex flex-wrap items-center gap-1.5 text-[12px]" aria-label="Breadcrumb">
-          <Link href="/portal" className="text-flame-text font-semibold">Catalogue</Link>
+          <Link href="/portal/catalogue" className="text-flame-text font-semibold">Catalogue</Link>
           {trail.map((t) => (
             <span key={t.slug} className="flex items-center gap-1.5">
               <span className="text-line" aria-hidden>/</span>

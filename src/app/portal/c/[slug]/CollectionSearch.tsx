@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Card, Empty } from '@/components/ui';
 import ProductRow from '../../ProductRow';
-import type { CatalogueItem } from '../../page';
+import type { CatalogueItem } from '@/lib/types';
 
 /** Filters within one collection. Large collections need it: bottom brackets
  *  alone runs to fifty-odd part codes. */

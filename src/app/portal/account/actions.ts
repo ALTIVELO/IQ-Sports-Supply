@@ -53,7 +53,7 @@ export async function saveMyDetails(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/portal/account');
-  revalidatePath('/portal');
+  revalidatePath('/portal', 'layout');
   return { ok: true, message: 'Your details have been saved' };
 }
 

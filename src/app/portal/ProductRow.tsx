@@ -3,7 +3,7 @@
 import { Card, Money, Tag } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
 import { useCart } from './CartContext';
-import type { CatalogueItem } from './page';
+import type { CatalogueItem } from '@/lib/types';
 
 /** One catalogue line: photo, identity, price, and the quantity stepper. */
 export default function ProductRow({ product }: { product: CatalogueItem }) {

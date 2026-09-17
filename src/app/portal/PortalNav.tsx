@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const ITEMS = [
-  ['/portal', 'Catalogue'],
+  ['/portal', 'Home'],
+  ['/portal/catalogue', 'Catalogue'],
   ['/portal/orders', 'Current orders'],
   ['/portal/history', 'Order history'],
   ['/portal/invoices', 'Invoices'],

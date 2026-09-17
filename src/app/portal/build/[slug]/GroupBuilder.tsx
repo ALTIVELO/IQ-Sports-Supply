@@ -73,7 +73,7 @@ export default function GroupBuilder({
       <Card>
         <Empty>
           This product is not available to configure just now.{' '}
-          <Link href="/portal" className="text-flame-text font-semibold">
+          <Link href="/portal/catalogue" className="text-flame-text font-semibold">
             Back to the catalogue
           </Link>.
         </Empty>
