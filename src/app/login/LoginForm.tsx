@@ -5,6 +5,7 @@ import { supabaseBrowser } from '@/lib/supabase/client';
 import { Button, Notice } from '@/components/ui';
 import { signInError } from '@/lib/login/signInError';
 import { passwordSignInError } from '@/lib/login/password';
+import { prepareSignIn } from './actions';
 
 /**
  * Two ways in, and the link is still the default one.
@@ -36,6 +37,12 @@ export default function LoginForm({ next, initialError }: {
 
     const redirectTo =
       `${window.location.origin}/auth/callback` + (next ? `?next=${encodeURIComponent(next)}` : '');
+
+    // An approved client who has never signed in has no account yet, and a
+    // link for an address with no account depends on signups being open — which
+    // a trade portal should not leave open. This makes the account first where
+    // the address is one of ours, and does nothing at all otherwise.
+    await prepareSignIn(email.trim());
 
     const { error } = await supabaseBrowser().auth.signInWithOtp({
       email: email.trim(),

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { supabaseServer } from './supabase/server';
 import { supabaseAdmin } from './supabase/admin';
 import type { Role } from './types';
+import { clientToLink } from './login/matchClient';
 
 export interface SessionUser {
   id: string;
@@ -40,10 +41,22 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const role = profile.role as Role;
 
-  const [{ data: client }, { data: opsLocs }] = await Promise.all([
+  const [{ data: found }, { data: opsLocs }] = await Promise.all([
     sb.from('clients').select('id').eq('auth_user_id', user.id).maybeSingle(),
     sb.from('ops_locations').select('location_id').eq('profile_id', user.id),
   ]);
+
+  // handle_new_user() attaches a client record to its user at signup. That
+  // fires once, and only if the record already existed carrying a matching
+  // address — so an account approved afterwards, an address corrected since,
+  // or a hosted setup that would not take the trigger all leave an approved
+  // customer signed in with nothing to see and no way out of /pending.
+  //
+  // So the link is repaired here, on every sign-in, rather than at one moment
+  // nobody can go back to. It only ever claims a record with no user yet.
+  const address = profile.email ?? user.email ?? null;
+  const client = found
+    ?? (role === 'client' && address ? await linkClientByEmail(user.id, address) : null);
 
   let locationIds: string[] = (opsLocs ?? []).map((r) => r.location_id);
   if (role === 'admin' || role === 'accounts') {
@@ -131,28 +144,38 @@ async function ensureProfile(
       .select('role, full_name, email, must_change_password')
       .single();
 
-    // Staff are never linked to a trade account, whatever the address.
-    if (email && role === 'client') {
-      // Matched exactly, case-insensitively — not with ilike, whose _ and %
-      // wildcards would let john_smith@x.com claim johnXsmith@x.com's account.
-      // And only ever claims a record that has no user yet, so it cannot take
-      // over a client who has already signed in.
-      const { data: candidates } = await admin
-        .from('clients')
-        .select('id, email')
-        .is('auth_user_id', null);
-
-      const target = (candidates ?? []).find(
-        (c) => c.email?.trim().toLowerCase() === email.trim().toLowerCase(),
-      );
-      if (target) {
-        await admin.from('clients').update({ auth_user_id: userId }).eq('id', target.id);
-      }
-    }
-
     return created ?? null;
   } catch {
     // No service-role key configured, or the insert was refused.
+    return null;
+  }
+}
+
+/**
+ * Attaches the approved client record carrying this address, if there is one.
+ *
+ * Which record that is, and whether there is one at all, is clientToLink's
+ * decision — the same one the sign-in preparation makes. Needs the service
+ * role: RLS quite rightly does not let a customer attach themselves to a trade
+ * account.
+ */
+export async function linkClientByEmail(
+  userId: string, email: string,
+): Promise<{ id: string } | null> {
+  try {
+    const admin = supabaseAdmin();
+    const { data: candidates } = await admin
+      .from('clients').select('id, email, active').is('auth_user_id', null);
+
+    const target = clientToLink(candidates ?? [], email);
+    if (!target) return null;
+
+    const { error } = await admin
+      .from('clients').update({ auth_user_id: userId }).eq('id', target.id);
+    return error ? null : { id: target.id };
+  } catch {
+    // No service-role key configured. The customer lands on /pending, which
+    // now says what happened rather than telling them to apply again.
     return null;
   }
 }
