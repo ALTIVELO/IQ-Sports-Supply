@@ -1,4 +1,4 @@
-import { requireClient } from '@/lib/auth';
+——import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
 import { buildTree, offeredLoose, type CategoryRow } from '@/lib/catalogue/tree';
 import HomeScreen, { type HomeData } from './HomeScreen';
