@@ -16,6 +16,21 @@
 -- lines and the screen says so.
 -- ============================================================================
 
+-- Dropped by name first. 0023 changes what sales_totals returns, and CREATE OR
+-- REPLACE cannot change a return type — so re-applying the whole migration set
+-- over a database that already has 0023 would stop here without this.
+do $$
+declare r record;
+begin
+  for r in
+    select oid::regprocedure::text as sig from pg_proc
+     where pronamespace = 'public'::regnamespace
+       and proname in ('sales_totals', 'sales_over_time', 'top_clients')
+  loop
+    execute format('drop function if exists %s', r.sig);
+  end loop;
+end $$;
+
 /** Headline figures for a period. One row, always. */
 create or replace function public.sales_totals(p_from date, p_to date)
 returns table (

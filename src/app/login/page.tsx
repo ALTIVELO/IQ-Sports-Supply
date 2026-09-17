@@ -22,7 +22,8 @@ export default async function LoginPage({
 
         <h1 className="text-[26px] font-semibold tracking-[-0.02em]">Sign in</h1>
         <p className="text-[13px] text-mute mt-2 mb-6">
-          We will email you a one-time link. There is no password to remember.
+          We will email you a one-time link — nothing to remember. If you have set a
+          password, you can use that instead.
         </p>
 
         <LoginForm next={next} initialError={error} />

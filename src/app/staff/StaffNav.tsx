@@ -86,9 +86,19 @@ export default function StaffNav({
         <div className="mt-auto px-5 pt-4 text-[11px] text-[#7C93A6] break-all">
           <div className="capitalize text-[#AEBDC9] font-semibold">{role}</div>
           {email}
-          <form action="/api/signout" method="post" className="mt-2">
-            <button className="text-[11px] text-[#7C93A6] hover:text-white underline">Sign out</button>
-          </form>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            <Link
+              href="/staff/account" onClick={() => setOpen(false)}
+              className="text-[11px] text-[#7C93A6] hover:text-white underline"
+            >
+              Your sign-in
+            </Link>
+            <form action="/api/signout" method="post">
+              <button className="text-[11px] text-[#7C93A6] hover:text-white underline">
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </nav>
 

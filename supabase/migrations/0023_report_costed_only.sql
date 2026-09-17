@@ -148,6 +148,8 @@ begin
    where o.status <> 'cancelled'
      and o.date between p_from and p_to
    group by cl.id, cl.name
-   order by 5 desc, 4 desc
+   -- Name last, so two clients level on both figures keep a stable order
+   -- rather than swapping places between one page load and the next.
+   order by 5 desc, 4 desc, cl.name
    limit greatest(1, coalesce(p_limit, 5));
 end $$;

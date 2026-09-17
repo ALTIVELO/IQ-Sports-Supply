@@ -4131,6 +4131,21 @@ select o.id           as option_id,
 -- lines and the screen says so.
 -- ============================================================================
 
+-- Dropped by name first. 0023 changes what sales_totals returns, and CREATE OR
+-- REPLACE cannot change a return type — so re-applying the whole migration set
+-- over a database that already has 0023 would stop here without this.
+do $$
+declare r record;
+begin
+  for r in
+    select oid::regprocedure::text as sig from pg_proc
+     where pronamespace = 'public'::regnamespace
+       and proname in ('sales_totals', 'sales_over_time', 'top_clients')
+  loop
+    execute format('drop function if exists %s', r.sig);
+  end loop;
+end $$;
+
 /** Headline figures for a period. One row, always. */
 create or replace function public.sales_totals(p_from date, p_to date)
 returns table (
@@ -4393,9 +4408,46 @@ begin
    where o.status <> 'cancelled'
      and o.date between p_from and p_to
    group by cl.id, cl.name
-   order by 5 desc, 4 desc
+   -- Name last, so two clients level on both figures keep a stable order
+   -- rather than swapping places between one page load and the next.
+   order by 5 desc, 4 desc, cl.name
    limit greatest(1, coalesce(p_limit, 5));
 end $$;
+
+
+-- ###########################################################################
+-- 0024_password_login.sql
+-- ###########################################################################
+
+-- ============================================================================
+-- 0024: does this person have a password?
+--
+-- A password is an addition here, never a replacement: the emailed sign-in
+-- link keeps working for everybody, which is what makes "I have forgotten it"
+-- a non-event rather than a phone call, and means nobody locks themselves out
+-- of a trade account at five to five on a Friday.
+--
+-- Supabase's client API will set a password but will not say whether one
+-- exists, and the account screens need to know which sentence to show. The
+-- fact lives in auth.users.encrypted_password, which no client may read — so
+-- this reports the one bit of it that is the caller's own business, about the
+-- caller only.
+-- ============================================================================
+
+create or replace function public.has_password()
+returns boolean
+language sql stable security definer set search_path = public, auth as $$
+  select coalesce(
+    (select coalesce(u.encrypted_password, '') <> ''
+       from auth.users u
+      where u.id = auth.uid()),
+    false);
+$$;
+
+comment on function public.has_password() is
+  'Whether the signed-in user can sign in with a password as well as a link. '
+  'Answers about the caller and nobody else, and returns a boolean rather than '
+  'anything derived from the hash.';
 
 
 -- ###########################################################################

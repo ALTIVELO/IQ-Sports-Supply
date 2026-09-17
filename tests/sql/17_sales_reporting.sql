@@ -173,21 +173,21 @@ declare r record; v_before numeric;
 begin
   select revenue into v_before from sales_totals((current_date - 30)::date, current_date);
 
-  -- Three of the costed widget and one of the widget nobody has costed, on
-  -- one order. Throwing the whole order away to punish one line would lose
-  -- far more than it protects.
+  -- One of the costed widget and one of the widget nobody has costed, on one
+  -- order. Throwing the whole order away to punish one line would lose far
+  -- more than it protects.
   perform import_historic_order(
     (select id from clients where name='MDI Ltd'), (current_date - 2)::date,
     jsonb_build_array(
-      jsonb_build_object('sku','RP-1','qty',3,'unit_price',100.00),
+      jsonb_build_object('sku','RP-1','qty',1,'unit_price',100.00),
       jsonb_build_object('sku','RP-2','qty',1,'unit_price',100.00)),
     'REP-E', null);
 
   select * into r from sales_totals((current_date - 30)::date, current_date);
-  perform assert_eq(r.revenue, v_before + 300.00, 'only the costed lines add revenue');
-  perform assert_eq(r.cost, 600.00::numeric, 'and only their cost');
-  perform assert_eq(r.profit, 400.00::numeric, 'leaving a margin that is true');
-  perform assert_eq(r.orders, 3, 'the order counts once, on the strength of its costed lines');
+  perform assert_eq(r.revenue, v_before + 100.00, 'only the costed line adds revenue');
+  perform assert_eq(r.cost, 480.00::numeric, 'and only its cost');
+  perform assert_eq(r.profit, 320.00::numeric, 'leaving a margin that is true');
+  perform assert_eq(r.orders, 3, 'the order counts once, on the strength of its costed line');
   perform assert_eq(r.excluded_lines, 2, 'two lines have now been set aside');
   perform assert_eq(r.excluded_revenue, 200.00::numeric, 'worth two hundred between them');
 end $$;
@@ -205,6 +205,13 @@ begin
   perform assert_eq(r.client_name, 'Second Shop Ltd', 'the best one leads');
   perform assert_eq(r.profit, 200.00::numeric, 'with the profit it left');
   perform assert_eq(r.revenue, 500.00::numeric, 'and what it spent');
+
+  -- Only the costed lines, here too: MDI bought four hundred pounds' worth
+  -- across three orders and two hundred of it cannot be costed.
+  select * into r from top_clients((current_date - 30)::date, current_date, 5) offset 1;
+  perform assert_eq(r.client_name, 'MDI Ltd', 'and the other follows');
+  perform assert_eq(r.revenue, 300.00::numeric, 'counted over what we can cost');
+  perform assert_eq(r.profit, 120.00::numeric, 'as is the profit beside it');
 
   perform assert_eq(
     (select count(*)::integer from top_clients((current_date - 30)::date, current_date, 1)),

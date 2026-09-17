@@ -1,5 +1,6 @@
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
+import PasswordCard from '@/components/PasswordCard';
 import DetailsForm from './DetailsForm';
 import AddressBook, { type Address } from './AddressBook';
 
@@ -30,7 +31,7 @@ export default async function AccountPage() {
   const user = await requireClient();
   const sb = await supabaseServer();
 
-  const [{ data: client }, { data: addresses }] = await Promise.all([
+  const [{ data: client }, { data: addresses }, { data: hasPassword }] = await Promise.all([
     sb.from('clients')
       .select(`name, trading_name, contact_name, email, phone, vat_no, company_number,
                eori_no, address, invoicing_address, vat_exempt, tiers(name)`)
@@ -39,6 +40,7 @@ export default async function AccountPage() {
       .select('id, label, recipient, address, is_default')
       .eq('client_id', user.clientId).eq('active', true)
       .order('is_default', { ascending: false }).order('created_at'),
+    sb.rpc('has_password'),
   ]);
 
   const tier = (client?.tiers as unknown as { name: string } | null)?.name;
@@ -55,6 +57,7 @@ export default async function AccountPage() {
 
       <DetailsForm client={(client ?? {}) as ClientDetails} />
       <AddressBook addresses={(addresses ?? []) as Address[]} />
+      <PasswordCard email={user.email} hasPassword={Boolean(hasPassword)} />
     </div>
   );
 }
