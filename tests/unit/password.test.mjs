@@ -2,8 +2,8 @@
 // The messages matter as much as the rules: somebody locked out of a trade
 // account on a Friday afternoon needs to be told what to do next, not what
 // was invalid.
-const { validatePassword, passwordSignInError, setPasswordError, MIN_LENGTH } =
-  await import('../../.test-build/login/password.js');
+const { validatePassword, passwordSignInError, setPasswordError, MIN_LENGTH,
+        temporaryPassword } = await import('../../.test-build/login/password.js');
 
 let fail = 0;
 const ok = (label, got) => {
@@ -82,5 +82,38 @@ rejects('a provider asking for a fresh sign-in says how',
 rejects('an expired session', setPasswordError({ status: 401 }), ['expired']);
 rejects('and the fallback still says what to do',
   setPasswordError({}), ['try again']);
+
+// ── the one staff read out ────────────────────────────────────────────────
+// It gets said down a telephone and typed by somebody who has never seen it
+// written, so the characters that look like each other are not in it.
+{
+  const sample = Array.from({ length: 400 }, () => temporaryPassword());
+  const shape = sample.every((p) => /^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/.test(p));
+  const ambiguous = sample.some((p) => /[O0Il1]/.test(p));
+  const accepted = sample.every((p) => validatePassword(p, p) === null);
+  const distinct = new Set(sample).size === sample.length;
+
+  for (const [label, good] of [
+    ['three groups of four, hyphenated', shape],
+    ['nothing that looks like something else', !ambiguous],
+    ['long enough to pass our own rules', accepted],
+    ['and a different one every time', distinct],
+  ]) {
+    if (!good) fail++;
+    console.log(`${good ? 'PASS ' : 'FAIL '} ${label}`);
+  }
+}
+
+// Every position is filled from the alphabet, not just the first — a generator
+// that reused one draw would still pass the shape check above.
+{
+  let i = 0;
+  const counted = temporaryPassword(() => (i++) % 53);
+  const unique = new Set(counted.replace(/-/g, '')).size;
+  const good = unique === 12;
+  if (!good) fail++;
+  console.log(`${good ? 'PASS ' : 'FAIL '} every character is drawn separately`
+    + (good ? '' : `  (got ${counted})`));
+}
 
 process.exit(fail ? 1 : 0);

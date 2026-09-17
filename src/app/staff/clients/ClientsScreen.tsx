@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
-import { saveClient, setClientActive } from './actions';
+import { saveClient, setClientActive, setTemporaryPassword } from './actions';
 
 interface ClientRow {
   id: string; name: string; tier_id: string; email: string | null; phone: string | null;
@@ -23,6 +23,9 @@ export default function ClientsScreen({
   const [editId, setEditId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
+  // Held in the page rather than emailed: a password in an inbox outlives the
+  // reason it was sent. It is on screen until the page is left.
+  const [issued, setIssued] = useState<{ name: string; password: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const tierName = (id: string) => tiers.find((t) => t.id === id)?.name ?? '—';
@@ -59,6 +62,10 @@ export default function ClientsScreen({
   return (
     <div className="space-y-4">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
+      {issued && (
+        <Issued name={issued.name} password={issued.password}
+                onDone={() => setIssued(null)} />
+      )}
 
       {!open ? (
         <Button small kind="ghost" onClick={() => setOpen(true)}>Add a client</Button>
@@ -137,6 +144,26 @@ export default function ClientsScreen({
                     <td className="text-right whitespace-nowrap">
                       <div className="flex gap-1.5 justify-end">
                         <Button small kind="ghost" onClick={() => edit(c)}>Edit</Button>
+                        {c.active && (
+                          <Button
+                            small kind="ghost" disabled={pending}
+                            title="Sets a password to read out, which they must change on arrival"
+                            onClick={() =>
+                              startTransition(async () => {
+                                setMessage(null);
+                                setIssued(null);
+                                const r = await setTemporaryPassword(c.id);
+                                if (r.ok && r.password) {
+                                  setIssued({ name: c.name, password: r.password });
+                                } else {
+                                  setMessage({ tone: 'error', text: r.error ?? 'Failed' });
+                                }
+                              })
+                            }
+                          >
+                            Temporary password
+                          </Button>
+                        )}
                         <Button
                           small kind="ghost" disabled={pending}
                           onClick={() =>
@@ -163,5 +190,35 @@ export default function ClientsScreen({
         held here — that link is made automatically.
       </p>
     </div>
+  );
+}
+
+/**
+ * The password, shown once.
+ *
+ * Read it out, do not send it. It is on screen until this card is dismissed or
+ * the page is left, and there is no way to see it again afterwards — setting
+ * another one is a button away, and a password you can retrieve later is one
+ * that survives the call it was meant for.
+ */
+export function Issued({ name, password, onDone }: {
+  name: string; password: string; onDone: () => void;
+}) {
+  return (
+    <Card accent className="space-y-2">
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="text-[14px] font-semibold">Temporary password for {name}</h2>
+        <Button small kind="ghost" className="ml-auto" onClick={onDone}>Done</Button>
+      </div>
+      <div className="num text-[22px] font-semibold tracking-[0.04em] select-all
+                      bg-parch border border-line rounded px-3 py-2 inline-block">
+        {password}
+      </div>
+      <p className="text-[12px] text-mute max-w-2xl">
+        Read it out to them — do not email it. They sign in with their address and this,
+        and the first thing they will see is a screen asking them to choose their own.
+        It is not shown again after you leave this page; if it goes astray, set another.
+      </p>
+    </Card>
   );
 }

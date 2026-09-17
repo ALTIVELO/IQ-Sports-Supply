@@ -60,6 +60,40 @@ export function validatePassword(
   return null;
 }
 
+/**
+ * The alphabet a temporary password is built from.
+ *
+ * No O/0, no I/l/1: this gets read down a telephone and typed by somebody who
+ * has never seen it written, and a customer who cannot tell an l from a 1 is a
+ * support call rather than a sign-in.
+ */
+const SAFE = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+
+/**
+ * A password to read out once.
+ *
+ * Twelve characters in three groups, which is enough entropy for something
+ * that only has to survive until its owner changes it, and short enough to say
+ * out loud without losing your place. The hyphens are part of it, so it is
+ * fifteen characters to type and comfortably over the minimum.
+ */
+export function temporaryPassword(
+  random: (max: number) => number = randomIndex,
+): string {
+  const pick = () => SAFE[random(SAFE.length)];
+  const group = () => Array.from({ length: 4 }, pick).join('');
+  return `${group()}-${group()}-${group()}`;
+}
+
+/** Unbiased, and from the platform's CSPRNG rather than Math.random. */
+function randomIndex(max: number): number {
+  const limit = Math.floor(0xffffffff / max) * max;
+  const buf = new Uint32Array(1);
+  let n = 0;
+  do { crypto.getRandomValues(buf); n = buf[0]; } while (n >= limit);
+  return n % max;
+}
+
 /** What went wrong signing in with a password, said usefully. */
 export function passwordSignInError(error: AuthLike): string {
   const code = error.code ?? '';

@@ -12,6 +12,8 @@ export interface SessionUser {
   clientId: string | null;
   /** Fulfilment sites an ops user is assigned to; admin/accounts see all. */
   locationIds: string[];
+  /** Signed in on a temporary password, and going nowhere until it changes. */
+  mustChangePassword: boolean;
 }
 
 const STAFF: Role[] = ['admin', 'accounts', 'ops'];
@@ -23,7 +25,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!user) return null;
 
   let { data: profile } = await sb
-    .from('profiles').select('role, full_name, email').eq('id', user.id).maybeSingle();
+    .from('profiles').select('role, full_name, email, must_change_password')
+    .eq('id', user.id).maybeSingle();
 
   // Normally handle_new_user() creates this row on signup. Some hosted setups
   // will not let that trigger be installed on auth.users, and without a profile
@@ -55,13 +58,26 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     fullName: profile.full_name,
     clientId: client?.id ?? null,
     locationIds,
+    mustChangePassword: Boolean(profile.must_change_password),
   };
+}
+
+/**
+ * Where a temporary password sends you, and nowhere else.
+ *
+ * Both guards call this before anything else they check. A password somebody
+ * else chose and read out loud should survive exactly one sign-in, so every
+ * guarded screen is a closed door until it is replaced.
+ */
+function requirePasswordChanged(user: SessionUser) {
+  if (user.mustChangePassword) redirect('/password');
 }
 
 /** Guard for the staff app. */
 export async function requireStaff(roles: Role[] = STAFF): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) redirect('/login');
+  requirePasswordChanged(user);
   if (!roles.includes(user.role)) redirect(user.role === 'client' ? '/portal' : '/login');
   return user;
 }
@@ -73,6 +89,7 @@ export async function requireStaff(roles: Role[] = STAFF): Promise<SessionUser> 
 export async function requireClient(): Promise<SessionUser & { clientId: string }> {
   const user = await getSessionUser();
   if (!user) redirect('/login');
+  requirePasswordChanged(user);
   if (!user.clientId) redirect('/pending');
   return user as SessionUser & { clientId: string };
 }
@@ -88,7 +105,10 @@ export const isStaff = (role: Role) => STAFF.includes(role);
 async function ensureProfile(
   userId: string,
   email: string | null,
-): Promise<{ role: string; full_name: string | null; email: string | null } | null> {
+): Promise<{
+  role: string; full_name: string | null; email: string | null;
+  must_change_password: boolean;
+} | null> {
   try {
     const admin = supabaseAdmin();
 
@@ -96,7 +116,8 @@ async function ensureProfile(
     // an upsert with role 'client', which would quietly demote an existing
     // admin any time their own RLS read came back empty.
     const { data: existing } = await admin
-      .from('profiles').select('role, full_name, email').eq('id', userId).maybeSingle();
+      .from('profiles').select('role, full_name, email, must_change_password')
+      .eq('id', userId).maybeSingle();
     if (existing) return existing;
 
     // An allowlisted address is staff from its first sign-in. This mirrors
@@ -107,7 +128,7 @@ async function ensureProfile(
     const { data: created } = await admin
       .from('profiles')
       .upsert({ id: userId, email, role }, { onConflict: 'id' })
-      .select('role, full_name, email')
+      .select('role, full_name, email, must_change_password')
       .single();
 
     // Staff are never linked to a trade account, whatever the address.
