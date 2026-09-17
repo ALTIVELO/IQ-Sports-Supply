@@ -1,4 +1,4 @@
-——import { requireClient } from '@/lib/auth';
+import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
 import { buildTree, offeredLoose, type CategoryRow } from '@/lib/catalogue/tree';
 import HomeScreen, { type HomeData } from './HomeScreen';
@@ -31,7 +31,7 @@ export default async function PortalHome() {
       sb.from('orders')
         .select(`id, number, date, status,
                  order_lines(id, qty, unit_price),
-                 invoices(id, shipped, superseded)`)
+                 invoices(id, shipped, delivered, superseded)`)
         .eq('client_id', user.clientId)
         .order('date', { ascending: false })
         .limit(6),
@@ -63,11 +63,12 @@ export default async function PortalHome() {
   const overdue = (due ?? []).filter((i) => i.due_date < today);
 
   // A cancelled order is still listed, struck through, but it is not one of the
-  // orders on their way to you.
+  // orders on their way to you. "On their way" now runs to delivered, not just
+  // shipped — a parcel in transit is still in progress.
   const inProgress = (orders ?? []).filter((o) => {
     if (o.status === 'cancelled') return false;
     const live = o.invoices.filter((i) => !i.superseded);
-    return live.length === 0 || live.some((i) => !i.shipped);
+    return live.length === 0 || live.some((i) => !i.delivered);
   });
 
   const parcel = shipped?.[0];
