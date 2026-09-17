@@ -57,6 +57,10 @@ export function guessMapping(header: string[], fields: string[]): ColumnMapping 
     image_url: /\b(image|photo|picture|img)\s*(url|link)?\b/i,
     category: /\b(categor(y|ies)|collection|group|type|department|section)\b/i,
     currency: /\b(currency|ccy|curr)\b/i,
+    // "Model" is what a bike list calls the thing the sizes belong to.
+    variant_group: /\b(variant\s*group|model\s*(code|group|key)?|style|parent(\s*sku)?)\b/i,
+    variant_label: /\b(size|frame\s*size|variant)\b/i,
+    price_note: /\b(price\s*note|note|excludes|exclusions)\b/i,
     client: /\b(client|customer|account|company|buyer)\b/i,
     date: /\b(date|ordered|placed|when)\b/i,
     reference: /\b(ref(erence)?|order\s*(no|number|ref)?|our\s*ref|invoice\s*(no|number)?)\b/i,

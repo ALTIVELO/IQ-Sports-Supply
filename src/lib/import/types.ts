@@ -22,6 +22,12 @@ export interface CatalogueRow {
    * existed.
    */
   currency?: string;
+  /** Shared by every size of one bike; absent for a product sold as one thing. */
+  variant_group?: string;
+  /** This row's size: S, M, 440. */
+  variant_label?: string;
+  /** What this price does not include — import duty, VAT. */
+  price_note?: string;
   /**
    * What this costs us. Absent where the sheet has no cost for this row; NaN
    * where it has something there that is not a number, which is an error and
@@ -118,6 +124,11 @@ export interface ColumnMapping {
   category?: string;
   /** GBP or EUR, per row. */
   currency?: string;
+  /** Which bike a size belongs to, and which size it is. */
+  variant_group?: string;
+  variant_label?: string;
+  /** What the price excludes, in the supplier's own words. */
+  price_note?: string;
   /** What we pay our supplier. */
   cost?: string;
   email?: string; tier?: string; vat_no?: string; address?: string; phone?: string;

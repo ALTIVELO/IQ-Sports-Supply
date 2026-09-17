@@ -16,9 +16,10 @@ export interface Node {
   children: Node[];
 }
 
-// Only these three fields are read, and saying so lets a screen that needs
-// nothing but the counts fetch three columns instead of ten.
-type Filed = Pick<CatalogueItem, 'category_slug' | 'image_url' | 'configurator_only'>;
+// Only these four fields are read, and saying so lets a screen that needs
+// nothing but the counts fetch four columns instead of ten.
+type Filed = Pick<CatalogueItem,
+  'category_slug' | 'image_url' | 'configurator_only' | 'variant_group'>;
 
 /** A configurator, as the tree needs to count it: the collection it sits in. */
 export interface FiledGroup { categorySlug: string | null }
@@ -47,7 +48,10 @@ export const offeredLoose = (p: Filed) => !p.configurator_only;
  *
  * Counts are of what a customer is offered, not of what exists. A builder
  * counts as one, because it is one thing to click; a loose product in a
- * collection served by builders counts as none, because it is not listed.
+ * collection served by builders counts as none, because it is not listed; and
+ * a bike built in five frame sizes counts as one, because the listing shows it
+ * once and a tile reading "5 items" for one bike is a promise of a range that
+ * is not there.
  */
 export function buildTree(
   categories: CategoryRow[], products: Filed[], groups: FiledGroup[] = [],
@@ -56,10 +60,17 @@ export function buildTree(
   const byId = new Map(categories.map((c) => [c.id, c]));
 
   const direct = new Map<string, { own: number; cover: string | null }>();
+  const counted = new Set<string>();
   for (const p of products) {
     if (!p.category_slug || !offeredLoose(p)) continue;
     const entry = direct.get(p.category_slug) ?? { own: 0, cover: null };
-    entry.own += 1;
+    // Sizes of one bike are one item. Keyed with the collection as well as the
+    // group, so a range split across two collections is not silently halved.
+    const key = p.variant_group && `${p.category_slug}\u0000${p.variant_group}`;
+    if (!key || !counted.has(key)) {
+      entry.own += 1;
+      if (key) counted.add(key);
+    }
     if (!entry.cover && p.image_url) entry.cover = p.image_url;
     direct.set(p.category_slug, entry);
   }

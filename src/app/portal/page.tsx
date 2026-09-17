@@ -51,7 +51,7 @@ export default async function PortalHome() {
 
       // Two columns, not nine: this only needs to count what is filed where.
       sb.from('client_catalogue')
-        .select('category_slug, image_url, configurator_only').limit(2000),
+        .select('category_slug, image_url, configurator_only, variant_group').limit(2000),
 
       sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),
     ]);

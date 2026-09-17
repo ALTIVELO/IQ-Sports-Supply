@@ -27,6 +27,13 @@ export interface CatalogueItem {
   category_slug: string | null; category_name: string | null;
   /** Its collection is served by builders, so it is not offered on its own. */
   configurator_only: boolean;
+  /** What this price does not include — duty, VAT — or null when it includes all of it. */
+  price_note: string | null;
+  /** Set when this product is one size of a bike; shared by every size of it. */
+  variant_group: string | null;
+  /** This product's size, as the customer picks it. */
+  variant_label: string | null;
+  variant_sort: number | null;
 }
 
 export interface Settings {
@@ -55,6 +62,10 @@ export interface Product {
   id: string; sku: string; name: string; brand: string | null; active: boolean;
   /** The money this product's cost and every tier price are quoted in. */
   currency: string;
+  price_note: string | null;
+  variant_group: string | null;
+  variant_label: string | null;
+  variant_sort: number | null;
 }
 
 export interface Client {

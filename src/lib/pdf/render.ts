@@ -27,6 +27,24 @@ const FULL_SELECT = `*, orders(number, ship_to),
              invoice_lines(sku, name, qty, unit_price)`;
 
 /**
+ * What the prices on these lines do not include, deduplicated.
+ *
+ * Read off the products rather than snapshotted with the line, because the
+ * note is about how the supplier quotes rather than about what was agreed —
+ * if it was wrong when the order was placed, the reissued invoice should say
+ * the right thing. Silence here is the ordinary case and prints nothing.
+ */
+async function priceNotesFor(
+  db: ReturnType<typeof supabaseAdmin>, skus: string[],
+): Promise<string[]> {
+  if (!skus.length) return [];
+  const { data } = await db.from('products').select('price_note').in('sku', skus);
+  return [...new Set((data ?? [])
+    .map((p) => (p.price_note ?? '').trim())
+    .filter(Boolean))];
+}
+
+/**
  * Gathers everything an invoice or packing list needs to render.
  *
  * Throws DocDataError rather than returning null for anything that is a fault
@@ -88,6 +106,7 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     // formatter reads as sterling — the assumption every invoice raised before
     // it was written under.
     currency: inv.currency,
+    priceNotes: await priceNotesFor(db, lines.map((l) => l.sku)),
     lines: [...lines].sort((a, b) => a.sku.localeCompare(b.sku)),
     clientName: client.name,
     clientAddress: client.invoicing_address ?? client.address,

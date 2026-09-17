@@ -57,6 +57,9 @@ const FIXED_FIELDS: Record<ImportScope, Field[]> = {
     { key: 'category', label: 'Category', required: false },
     { key: 'image_url', label: 'Image URL', required: false },
     { key: 'currency', label: 'Currency', required: false },
+    { key: 'variant_group', label: 'Model (groups sizes)', required: false },
+    { key: 'variant_label', label: 'Size', required: false },
+    { key: 'price_note', label: 'Price note', required: false },
     { key: 'cost', label: 'Our cost', required: false },
   ],
   clients: [
@@ -243,6 +246,9 @@ export default function ImportScreen({
             category: r.category ?? '',
             image_url: r.image_url ?? '',
             currency: r.currency ?? '',
+            variant_group: r.variant_group ?? '',
+            variant_label: r.variant_label ?? '',
+            price_note: r.price_note ?? '',
             cost: r.cost ? toNumber(r.cost) : undefined,
             prices,
           };

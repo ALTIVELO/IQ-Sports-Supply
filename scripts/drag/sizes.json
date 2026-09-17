@@ -1,0 +1,403 @@
+{
+ "28 Sterrato CF 9.5 Gen.2": {
+  "sizes": [
+   "XS",
+   "S",
+   "M",
+   "L",
+   "XL",
+   "XXL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Stearrato CF G2 9.5 28\"",
+  "handle": "bicycle-drag-28-sterrato-cf-g2-9-5"
+ },
+ "28 Sterrato CF 5.0 Gen.2": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL",
+   "XXL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Stearrato CF G2 5.0 28\"",
+  "handle": "bicycle-drag-28-sterrato-cf-g2-5-0"
+ },
+ "28 Sterrato 9.0 Gen. 2": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Sterrato G2 9.0 28\"",
+  "handle": "drag-sterrato-g2-9-0-28"
+ },
+ "28 Sterrato 7.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Sterrato 7.0",
+  "handle": "bicycle-drag-28-sterrato-7-2"
+ },
+ "28 Sterrato 5.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Sterrato 5.0 28\"",
+  "handle": "bicycle-drag-28-sterrato-5-1"
+ },
+ "28 Sterrato 3.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Sterrato 3.0",
+  "handle": "bicycle-drag-28-sterrato-3-0"
+ },
+ "28 Master Pro": {
+  "sizes": [
+   "XXS",
+   "S",
+   "M",
+   "L",
+   "XL",
+   "XXL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Master Pro 28\"",
+  "handle": "bicycle-drag-28-master-pro"
+ },
+ "28 Master Comp": {
+  "sizes": [
+   "XXS",
+   "S",
+   "M",
+   "L",
+   "XL",
+   "XXL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Master Comp 28\"",
+  "handle": "bicycle-drag-28-master-comp"
+ },
+ "28 Corsa CX Pro": {
+  "sizes": [
+   "XS",
+   "S",
+   "M"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Corsa CX PRO 28\"",
+  "handle": "bicycle-drag-28-corsa-cx-pro"
+ },
+ "Raijin 7.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Raijin 7.0 29\"",
+  "handle": "bike-drag-29-raijin-7-0-x01"
+ },
+ "Raijin 5.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Raijin 5.0 29\"",
+  "handle": "bicycle-drag-29-raijin-5-0"
+ },
+ "Raijin Frameset": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Raijin Frameset",
+  "handle": "29-raijin-frameset"
+ },
+ "Fujin 7.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Fujin 7.0 29\"",
+  "handle": "bike-drag-29-fujin-7-0"
+ },
+ "Fujin 5.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Fujin 5.0 29\"",
+  "handle": "bicycle-drag-29-fujin-5-0"
+ },
+ "Fujin 3.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Fujin 3.0 29\"",
+  "handle": "bicycle-drag-29-fujin-3-0"
+ },
+ "Ronin CF 7.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL",
+   "XXL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Ronin CF 7.0 29\"",
+  "handle": "bicycle-drag-29-ronin-cf-7-0"
+ },
+ "Ronin CF 5.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL",
+   "XXL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Ronin CF 5.0 29\"",
+  "handle": "bicycle-drag-29-ronin-cf-5-0"
+ },
+ "Ronin CF 3.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL",
+   "XXL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Ronin CF 3.0 29\"",
+  "handle": "bicycle-drag-29-ronin-cf-3-0"
+ },
+ "Outlaw Mho 9.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Outlaw Mho 9.0 29\"",
+  "handle": "bicycle-drag-29-outlaw-mho-9-0"
+ },
+ "Outlaw Mho 7.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Outlaw Mho 7.0 29\"",
+  "handle": "bicycle-drag-29-outlaw-mho-7-1"
+ },
+ "Outlaw Mho 5.0": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Outlaw Mho 5.0 29\"",
+  "handle": "bicycle-drag-29-outlaw-mho-5-0"
+ },
+ "29 Icosa Nona 5.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Icosa Nona 5.0 29\"",
+  "handle": "drag-icosa-nona-5-0-29"
+ },
+ "29 Icosa Nona 3.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "geometry",
+  "site_title": "Drag Icosa Nona 3.0 29\"",
+  "handle": "drag-icosa-nona-3-0-29"
+ },
+ "27.5/29 Trigger 7.1": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Trigger 7.1 29\"",
+  "handle": "bicycle-drag-29-trigger-7-2"
+ },
+ "27.5/29 Trigger 5.2": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Trigger 5.2 29\"",
+  "handle": "drag-trigger-5-2-29"
+ },
+ "26/27.5/29 Grace 5.0": {
+  "sizes": [
+   "S",
+   "M"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Grace 5.0 27.5\"",
+  "handle": "bicycle-drag-27-5-grace-5-0"
+ },
+ "26 Tundra": {
+  "sizes": [
+   "M",
+   "L"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Tundra Comp 26\"",
+  "handle": "bicycle-drag-26-tundra-comp"
+ },
+ "26 C2 G2 Fun": {
+  "sizes": [
+   "M",
+   "L"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag C2 G2 Fun 26\"",
+  "handle": "bike-drag-26-c2-g2-fun-x4-18"
+ },
+ "26 C1 Team": {
+  "sizes": [
+   "M",
+   "L"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag C1 G2 Team 26\"",
+  "handle": "bicycle-drag-26-c1-team-g2-dark-blue-silver"
+ },
+ "26 C1 Fun": {
+  "sizes": [
+   "M",
+   "L"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag C1 G2 Fun 26\"",
+  "handle": "bicycle-drag-26-c1-fun-g2-1-ac-18"
+ },
+ "26 C1 Ride": {
+  "sizes": [
+   "M",
+   "L"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag C1 Ride 26\"",
+  "handle": "bicycle-drag-26-c1-ride"
+ },
+ "28 Storm 7.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Storm 7.0 28\"",
+  "handle": "28-storm-7-0-t-rx400-20-hdb-l-520-equip-dark-blue-blue"
+ },
+ "28 Storm 3.0": {
+  "sizes": [
+   "S",
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Storm 3.0 28\"",
+  "handle": "28-storm-3-0-r2000-c-28-l-520-equip-drk-blue-blue"
+ },
+ "28 Grand Canyon Man 7.0 \u0422\u0415": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Grand Canyon 7.0 28\"",
+  "handle": "bicycle-drag-28-grand-canyon-7-0-te"
+ },
+ "28 Grand Canyon Lady 7.0 \u0422\u0415": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Grand Canyon 7.0 28\"",
+  "handle": "bicycle-drag-28-grand-canyon-7-0-te"
+ },
+ "28 Grand Canyon Man 5.0 Pro": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Grand Canyon Pro 28\"",
+  "handle": "bicycle-drag-28-grand-canyon-pro"
+ },
+ "28 Grand Canyon Lady 5.0 Pro": {
+  "sizes": [
+   "M",
+   "L",
+   "XL"
+  ],
+  "source": "stock listing",
+  "site_title": "Drag Grand Canyon Pro 28\"",
+  "handle": "bicycle-drag-28-grand-canyon-pro"
+ },
+ "Escape Advanced": {
+  "sizes": [
+   "S",
+   "M",
+   "L"
+  ],
+  "source": "stock listing",
+  "site_title": "Bicycle Drag 29 Escape Advanced",
+  "handle": "bicycle-drag-29-escape-advanced"
+ }
+}

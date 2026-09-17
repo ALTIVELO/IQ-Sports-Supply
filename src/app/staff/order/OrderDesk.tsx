@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Button, Card, Money, Notice, Tag } from '@/components/ui';
 import { placeOrder } from '../actions';
+import { totalsByCurrency } from '@/lib/orders/split';
 import type { DeskProduct } from './page';
 
 interface ClientRow {
@@ -77,15 +78,14 @@ export default function OrderDesk({
   const patch = (i: number, next: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...next } : l)));
 
-  const net = lines.reduce((a, l) => a + l.qty * l.unitPrice, 0);
   const effectiveVat = client?.vat_exempt ? 0 : vatRate;
-  const vat = (net * effectiveVat) / 100;
 
-  // One order, one currency — the database refuses anything else, and finding
-  // that out at the moment of placing a forty-line order is no use to anybody.
-  const currencies = [...new Set(lines.map((l) => l.currency))];
-  const currency = currencies[0] ?? 'GBP';
-  const mixed = currencies.length > 1;
+  // An order and an invoice can each only ask for one currency, so a mixed
+  // order is raised as one per currency. Totalled that way here, because that
+  // is what each invoice will say.
+  const totals = totalsByCurrency(
+    lines, (l) => l.currency, (l) => l.qty * l.unitPrice, effectiveVat);
+  const split = totals.length > 1;
 
   /** What this order will short at the chosen location, before it is placed. */
   const shortfall = lines
@@ -281,12 +281,12 @@ export default function OrderDesk({
             </div>
           )}
 
-          {mixed && (
+          {split && (
             <div className="mt-3">
-              <Notice>
-                This order has {currencies.join(' and ')} lines on it. An order is invoiced
-                in one currency, so take one out and raise it separately — the total below
-                is not a figure until you do.
+              <Notice tone="info">
+                This has {totals.map((t) => t.currency).join(' and ')} lines on it, so it
+                will be raised as {totals.length} orders with {totals.length} invoices, one
+                per currency. Both go to the same client at the same address.
               </Notice>
             </div>
           )}
@@ -318,16 +318,26 @@ export default function OrderDesk({
 
           {lines.length > 0 && (
             <div className="flex flex-wrap justify-end items-center gap-5 mt-3.5">
-              <div className="num text-[13px] text-mute">
-                Net <Money value={net} currency={currency} />
-                {' '}· VAT ({effectiveVat}%) <Money value={vat} currency={currency} />
-              </div>
-              <div className={`num text-[24px] font-semibold tracking-[-0.02em]
-                               ${mixed ? 'text-mute line-through' : ''}`}>
-                <Money value={net + vat} currency={currency} />
-              </div>
-              <Button kind="accent" onClick={submit} disabled={pending || mixed || !locationId}>
-                {pending ? 'Placing…' : 'Place order'}
+              {totals.map((t) => (
+                <div key={t.currency} className="flex items-center gap-4">
+                  {split && (
+                    <span className="text-[11px] font-semibold text-mute uppercase tracking-wide">
+                      {t.currency}
+                    </span>
+                  )}
+                  <div className="num text-[13px] text-mute">
+                    Net <Money value={t.net} currency={t.currency} />
+                    {' '}· VAT ({effectiveVat}%) <Money value={t.vat} currency={t.currency} />
+                  </div>
+                  <div className="num text-[24px] font-semibold tracking-[-0.02em]">
+                    <Money value={t.net + t.vat} currency={t.currency} />
+                  </div>
+                </div>
+              ))}
+              <Button kind="accent" onClick={submit} disabled={pending || !locationId}>
+                {pending
+                  ? 'Placing…'
+                  : split ? `Place ${totals.length} orders` : 'Place order'}
               </Button>
             </div>
           )}

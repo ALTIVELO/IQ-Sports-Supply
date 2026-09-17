@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Button, Notice } from '@/components/ui';
-import { money } from '@/lib/format';
+import { currencyOf, money } from '@/lib/format';
+import { totalsByCurrency } from '@/lib/orders/split';
 import { useCart } from './CartContext';
 import { placeClientOrder } from './actions';
 import type { CatalogueItem } from '@/lib/types';
@@ -20,7 +21,8 @@ export default function BasketBar({
   products, vatRate,
 }: { products: CatalogueItem[]; vatRate: number }) {
   const { quantities, clear, totalItems, ready } = useCart();
-  const [placed, setPlaced] = useState<{ number: string; warning?: string } | null>(null);
+  const [placed, setPlaced] = useState<
+    { orders: { number: string; currency: string }[]; warning?: string } | null>(null);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
 
@@ -33,8 +35,17 @@ export default function BasketBar({
     [quantities, byId],
   );
 
-  const net = lines.reduce((a, l) => a + l.qty * Number(l.product.price), 0);
-  const vat = (net * vatRate) / 100;
+  // Per currency, because a basket holding both is raised as two orders with
+  // two invoices, and one added-up figure would be a number nobody is billed.
+  const totals = useMemo(
+    () => totalsByCurrency(
+      lines,
+      (l) => currencyOf(l.product.currency),
+      (l) => l.qty * Number(l.product.price),
+      vatRate,
+    ),
+    [lines, vatRate],
+  );
 
   function checkout() {
     setError('');
@@ -43,7 +54,7 @@ export default function BasketBar({
         lines.map((l) => ({ product_id: l.product.id, qty: l.qty })),
       );
       if (r.ok) {
-        setPlaced({ number: r.orderNumber ?? '', warning: r.warning });
+        setPlaced({ orders: r.orders ?? [], warning: r.warning });
         clear();
       } else {
         setError(r.error ?? 'Could not place your order');
@@ -56,9 +67,15 @@ export default function BasketBar({
       <div className="fixed inset-x-0 bottom-0 z-20 bg-white border-t border-flame shadow-[0_-4px_16px_rgba(18,22,25,0.10)]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3.5">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-[14px] font-semibold">Order {placed.number} placed</span>
+            <span className="text-[14px] font-semibold">
+              {placed.orders.length > 1 ? 'Orders ' : 'Order '}
+              {placed.orders.map((o) => o.number).join(' and ')} placed
+            </span>
             <span className="text-[12px] text-mute">
-              Your invoice has been raised. Nothing is dispatched until payment reaches us.
+              {placed.orders.length > 1
+                ? `One per currency, ${placed.orders.length} invoices raised. `
+                : 'Your invoice has been raised. '}
+              Nothing is dispatched until payment reaches us.
             </span>
             <div className="ml-auto flex gap-2">
               <Link
@@ -89,13 +106,20 @@ export default function BasketBar({
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3">
           <div className="text-[12px] text-mute">
             <span className="num font-semibold text-ink">{totalItems}</span> item
-            {totalItems === 1 ? '' : 's'} ·{' '}
-            <span className="num">Net {money(net)}</span>
-            {vatRate > 0 && <span className="num"> · VAT {money(vat)}</span>}
+            {totalItems === 1 ? '' : 's'}
+            {totals.length > 1 && <> · {totals.length} orders, one per currency</>}
           </div>
-          <div className="num text-[20px] font-semibold ml-auto">{money(net + vat)}</div>
+          <div className="ml-auto flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            {totals.map((t) => (
+              <span key={t.currency} className="num text-[20px] font-semibold">
+                {money(t.net + t.vat, t.currency)}
+              </span>
+            ))}
+          </div>
           <Button kind="accent" onClick={checkout} disabled={pending}>
-            {pending ? 'Placing…' : 'Place order'}
+            {pending
+              ? 'Placing…'
+              : totals.length > 1 ? `Place ${totals.length} orders` : 'Place order'}
           </Button>
         </div>
       </div>

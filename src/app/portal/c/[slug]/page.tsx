@@ -40,7 +40,8 @@ export default async function CollectionPage({
          { data: groupRows }] =
     await Promise.all([
       sb.from('client_catalogue')
-        .select(`id, sku, name, brand, price, in_stock, image_url,
+        .select(`id, sku, name, brand, price, currency, price_note, in_stock, image_url,
+               variant_group, variant_label, variant_sort,
                category_slug, category_name, configurator_only`)
         .order('sku').limit(2000),
       sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),

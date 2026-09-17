@@ -1,7 +1,7 @@
 // Matching a price list's columns to our pricing tiers, and finding the one
 // column that says what we pay. Getting the second wrong is the expensive
 // mistake: a selling price read as a cost makes every margin look healthy.
-const { guessCatalogueColumns, unclaimedMoneyColumns } =
+const { guessMapping, guessCatalogueColumns, unclaimedMoneyColumns } =
   await import('../../.test-build/import/parse.js');
 
 let fail = 0;
@@ -124,5 +124,26 @@ check('and neither is one already read as our cost',
 check('a sheet with nothing money-shaped on it reports nothing',
   unclaimedMoneyColumns(['SKU', 'Description', 'Category'], { sku: 'A', name: 'B' }),
   []);
+
+// ── the columns a bike list carries ───────────────────────────────────────
+const col = (header, field) => guessMapping(header, ['sku', field])?.[field];
+
+check('a Size column is the frame size',
+  col(['SKU', 'Size'], 'variant_label'), 'B');
+check('so is "Frame size"', col(['SKU', 'Frame size'], 'variant_label'), 'B');
+check('a Model column groups the sizes',
+  col(['SKU', 'Model'], 'variant_group'), 'B');
+check('so does "Parent SKU"', col(['Code', 'Parent SKU'], 'variant_group'), 'B');
+check('a Price note is found', col(['SKU', 'Price note'], 'price_note'), 'B');
+
+// Both columns on one sheet, which is the shape the bike list actually has.
+const bikes = guessMapping(
+  ['Name', 'SKU', 'Brand', 'Category', 'Currency', 'Model', 'Size', 'Price note', 'Our cost'],
+  ['sku', 'name', 'brand', 'category', 'currency', 'variant_group', 'variant_label',
+   'price_note', 'cost']);
+check('a whole bike list maps in one pass',
+  [bikes.sku, bikes.name, bikes.currency, bikes.variant_group, bikes.variant_label,
+   bikes.price_note],
+  ['B', 'A', 'E', 'F', 'G', 'H']);
 
 process.exit(fail ? 1 : 0);

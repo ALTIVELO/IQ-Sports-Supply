@@ -50,6 +50,14 @@ export interface DocData {
   vatRate: number;
   /** The money this invoice demands. Taken from the order, never converted. */
   currency?: string;
+  /**
+   * What the prices on this invoice do not include, where any line says so.
+   *
+   * Import duty is the case this exists for: it is levied on the buyer, after
+   * this document, and by somebody else. A price that quietly excludes it is
+   * a price the customer will later find was not the price.
+   */
+  priceNotes?: string[];
   lines: DocLine[];
   clientName: string;
   /** Billing address: the legal invoicing address where one is given. */
@@ -150,6 +158,10 @@ export function InvoiceDocument({ d }: { d: DocData }) {
         </View>
 
         {d.note ? <Text style={{ marginTop: 10, color: MUTE }}>{d.note}</Text> : null}
+
+        {(d.priceNotes ?? []).map((note) => (
+          <Text key={note} style={{ marginTop: 6, color: MUTE }}>{note}</Text>
+        ))}
 
         <Text style={s.footer} fixed>
           {d.company} · {d.companyAddress}

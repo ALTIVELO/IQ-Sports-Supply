@@ -9,6 +9,7 @@ import type { Address } from '../account/AddressBook';
 import { placeClientOrder } from '../actions';
 import type { CatalogueItem } from '@/lib/types';
 import { currencyOf } from '@/lib/format';
+import { totalsByCurrency } from '@/lib/orders/split';
 
 /**
  * The basket, line by line, before committing to it.
@@ -26,7 +27,8 @@ export default function BasketReview({
   products: CatalogueItem[]; vatRate: number; paymentDays: number; addresses: Address[];
 }) {
   const { quantities, setQty, add, clear, ready } = useCart();
-  const [placed, setPlaced] = useState<{ number: string; warning?: string } | null>(null);
+  const [placed, setPlaced] = useState<
+    { orders: { number: string; currency: string }[]; warning?: string } | null>(null);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
   const [addressId, setAddressId] = useState(
@@ -49,19 +51,27 @@ export default function BasketReview({
     [quantities, byId],
   );
 
-  // An order is placed in one currency, so a basket has to be in one too.
-  // Adding euro-priced goods to a sterling basket is an easy thing to do by
-  // accident from a catalogue that holds both, and the total it would produce
-  // is not a number that means anything.
-  const currencies = useMemo(
-    () => [...new Set(lines.map((l) => currencyOf(l.product.currency)))],
+  // An order is raised and invoiced in one currency, so a basket holding both
+  // becomes two orders. Rather than refuse it, the totals below are shown per
+  // currency — which is what the customer is actually about to be billed —
+  // and the split happens on placing.
+  const totals = useMemo(
+    () => totalsByCurrency(
+      lines,
+      (l) => currencyOf(l.product.currency),
+      (l) => l.qty * Number(l.product.price),
+      vatRate,
+    ),
+    [lines, vatRate],
+  );
+  const split = totals.length > 1;
+
+  // What the prices in this basket do not include — DRAG quote ex-works, so
+  // duty and VAT are still to come. One line however many products carry it.
+  const priceNotes = useMemo(
+    () => [...new Set(lines.map((l) => l.product.price_note?.trim()).filter(Boolean))],
     [lines],
   );
-  const currency = currencies[0] ?? 'GBP';
-  const mixed = currencies.length > 1;
-
-  const net = lines.reduce((a, l) => a + l.qty * Number(l.product.price), 0);
-  const vat = (net * vatRate) / 100;
 
   function checkout() {
     setError('');
@@ -70,7 +80,7 @@ export default function BasketReview({
         lines.map((l) => ({ product_id: l.product.id, qty: l.qty })),
         addressId,
       );
-      if (r.ok) { setPlaced({ number: r.orderNumber ?? '', warning: r.warning }); clear(); }
+      if (r.ok) { setPlaced({ orders: r.orders ?? [], warning: r.warning }); clear(); }
       else setError(r.error ?? 'Could not place your order');
     });
   }
@@ -79,11 +89,22 @@ export default function BasketReview({
     return (
       <Card accent>
         <h1 className="text-[22px] font-semibold tracking-[-0.02em]">
-          Order {placed.number} placed
+          {placed.orders.length > 1 ? 'Orders ' : 'Order '}
+          {placed.orders.map((o) => o.number).join(' and ')} placed
         </h1>
+        {placed.orders.length > 1 && (
+          <p className="text-[13px] text-mute mt-2 leading-relaxed">
+            Your basket held more than one currency, so it was raised as{' '}
+            {placed.orders.length} orders — {placed.orders.map((o) =>
+              `${o.number} in ${o.currency}`).join(', ')} — each with its own invoice.
+            An invoice can only ask for one currency, and a total that added them
+            together would be a figure nobody owes.
+          </p>
+        )}
         <p className="text-[13px] text-mute mt-2 leading-relaxed">
-          Your invoice has been raised, due {paymentDays} days from today. Your order has
-          gone straight to our supplier. Nothing is dispatched until payment reaches us.
+          {placed.orders.length > 1 ? 'Both invoices have' : 'Your invoice has'} been
+          raised, due {paymentDays} days from today. Your order has gone straight to our
+          supplier. Nothing is dispatched until payment reaches us.
         </p>
         {placed.warning && <div className="mt-3"><Notice tone="info">{placed.warning}</Notice></div>}
         <div className="flex flex-wrap gap-2 mt-4">
@@ -140,13 +161,17 @@ export default function BasketReview({
           {missing === 1 ? ' has' : ' have'} been left out of this order.
         </Notice>
       )}
-      {mixed && (
-        <Notice>
-          This basket has {currencies.join(' and ')} prices in it. An order is raised and
-          invoiced in a single currency, so please place these as separate orders — take
-          one currency out of the basket and the total below will add up again.
+      {split && (
+        <Notice tone="info">
+          This basket holds {totals.map((t) => t.currency).join(' and ')} prices, so it
+          will be raised as {totals.length} orders with {totals.length} invoices, one per
+          currency. Nothing is converted and nothing is charged twice — the totals below
+          are what each invoice will ask for.
         </Notice>
       )}
+      {priceNotes.map((note) => (
+        <Notice tone="info" key={note}>{note}</Notice>
+      ))}
       <Notice tone="info">
         Everything is ordered from our supplier as soon as you place this order.
         We will confirm dates with you once we have them.
@@ -161,11 +186,14 @@ export default function BasketReview({
               <div className="min-w-0 flex-1 basis-[calc(100%-4.5rem)] sm:basis-0">
                 <div className="num text-[12px] font-semibold text-mute">{product.sku}</div>
                 <div className="text-[13px] font-medium">{product.name}</div>
-                {product.category_name && (
-                  <div className="mt-1">
-                    <Tag tone="line">{product.category_name}</Tag>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {/* The size is what was ordered, so it is named on the line
+                      rather than left inside the product name. */}
+                  {product.variant_label && (
+                    <Tag tone="accent">Size {product.variant_label}</Tag>
+                  )}
+                  {product.category_name && <Tag tone="line">{product.category_name}</Tag>}
+                </div>
               </div>
 
               <div className="num text-[12px] text-mute w-[80px] text-right">
@@ -261,23 +289,42 @@ export default function BasketReview({
       </Card>
 
       <Card>
-        <div className="flex flex-wrap items-center justify-end gap-x-8 gap-y-2">
-          <div className="num text-[13px] text-mute text-right">
-            <div>Net <Money value={net} currency={currency} /></div>
-            {vatRate > 0 && <div>VAT ({vatRate}%) <Money value={vat} currency={currency} /></div>}
-          </div>
-          <div className={`num text-[24px] font-semibold tracking-[-0.02em]
-                           ${mixed ? 'text-mute line-through' : ''}`}>
-            <Money value={net + vat} currency={currency} />
+        <div className="flex flex-wrap items-end justify-end gap-x-8 gap-y-3">
+          {/* One block per invoice, stacked, so two currencies read as two
+              bills rather than as one long sum across the row. */}
+          <div className="flex-1 min-w-0 space-y-2">
+            {totals.map((t) => (
+              <div key={t.currency}
+                   className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1">
+                {split && (
+                  <span className="text-[11px] font-semibold text-mute uppercase tracking-wide
+                                   mr-auto">
+                    {t.currency} invoice
+                  </span>
+                )}
+                <div className="num text-[13px] text-mute text-right">
+                  <div>Net <Money value={t.net} currency={t.currency} /></div>
+                  {vatRate > 0 && (
+                    <div>VAT ({vatRate}%) <Money value={t.vat} currency={t.currency} /></div>
+                  )}
+                </div>
+                <div className="num text-[24px] font-semibold tracking-[-0.02em]
+                                min-w-[130px] text-right">
+                  <Money value={t.net + t.vat} currency={t.currency} />
+                </div>
+              </div>
+            ))}
           </div>
           <Button kind="accent" onClick={checkout}
-                  disabled={pending || mixed || addresses.length === 0}>
-            {pending ? 'Placing…' : 'Place order'}
+                  disabled={pending || addresses.length === 0}>
+            {pending
+              ? 'Placing…'
+              : split ? `Place ${totals.length} orders` : 'Place order'}
           </Button>
         </div>
         <p className="text-[11px] text-mute mt-2 text-right">
-          An invoice is raised immediately, due {paymentDays} days from today. Nothing is
-          dispatched until payment is received.
+          {split ? 'An invoice per currency is' : 'An invoice is'} raised immediately, due{' '}
+          {paymentDays} days from today. Nothing is dispatched until payment is received.
         </p>
       </Card>
 

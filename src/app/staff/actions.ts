@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireStaff } from '@/lib/auth';
 import { trackingUrlFor } from '@/lib/format';
+import { splitByCurrency } from '@/lib/orders/split';
 import {
   notifyOrderPlaced, notifySupplierOrder, notifyShipped, notifyDelivered,
 } from '@/lib/notifications';
@@ -50,6 +51,14 @@ export interface DraftLine { product_id: string; qty: number; unit_price?: numbe
  * happen inside place_order() as one transaction; the emails follow, and a
  * failed send never rolls back a placed order.
  */
+/**
+ * Takes an order at the counter.
+ *
+ * A mixed-currency order becomes one order per currency, as it does in the
+ * portal: an order and an invoice can each only ask for one currency, so the
+ * split has to happen somewhere, and doing it here saves the person on the
+ * phone re-keying half the lines.
+ */
 export async function placeOrder(input: {
   clientId: string;
   locationId: string;
@@ -59,26 +68,58 @@ export async function placeOrder(input: {
   await requireStaff();
   const sb = await supabaseServer();
 
-  const { data: orderId, error } = await sb.rpc('place_order', {
-    p_client_id: input.clientId,
-    p_location_id: input.locationId,
-    p_lines: input.lines.map((l) => ({
-      product_id: l.product_id,
-      qty: l.qty,
-      unit_price: l.unit_price ?? null,
-    })),
-    p_notes: input.notes ?? null,
-  });
+  // From the catalogue, never from the screen: what decides how many orders
+  // are raised must not be something a browser can set.
+  const { data: priced } = await sb.from('products')
+    .select('id, currency').in('id', input.lines.map((l) => l.product_id));
+  const currencyOfProduct = new Map((priced ?? []).map((p) => [p.id, p.currency ?? 'GBP']));
 
-  if (error) return { ok: false, error: error.message };
+  const parts = splitByCurrency(input.lines, (id) => currencyOfProduct.get(id));
 
-  const warning = await notify(
-    () => notifyOrderPlaced(orderId as string), 'The order confirmation');
+  const placed: string[] = [];
+  const warnings: string[] = [];
+
+  for (const { currency, lines: forCurrency } of parts) {
+    const { data: orderId, error } = await sb.rpc('place_order', {
+      p_client_id: input.clientId,
+      p_location_id: input.locationId,
+      p_lines: forCurrency.map((l) => ({
+        product_id: l.product_id,
+        qty: l.qty,
+        unit_price: l.unit_price ?? null,
+      })),
+      p_notes: input.notes ?? null,
+    });
+
+    if (error) {
+      // Whatever went through stands, and saying so is the point: re-keying
+      // the whole order would place the first one twice.
+      if (!placed.length) return { ok: false, error: error.message };
+      return {
+        ok: true, orderId: placed[0],
+        warning: `The ${currency} lines did not go through — ${error.message}. `
+               + `${placed.length} order${placed.length === 1 ? '' : 's'} `
+               + 'in the other currency was raised and stands.',
+      };
+    }
+
+    placed.push(orderId as string);
+    const w = await notify(
+      () => notifyOrderPlaced(orderId as string), 'The order confirmation');
+    if (w) warnings.push(w);
+  }
 
   revalidatePath('/staff/orders');
   revalidatePath('/staff/supplier');
   revalidatePath('/staff/invoices');
-  return { ok: true, orderId: orderId as string, warning };
+  return {
+    ok: true,
+    orderId: placed[0],
+    message: placed.length > 1
+      ? `Raised as ${placed.length} orders, one per currency, each with its own invoice`
+      : undefined,
+    warning: warnings[0],
+  };
 }
 
 // ── invoices ────────────────────────────────────────────────────────────────

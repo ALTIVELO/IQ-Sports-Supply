@@ -23,7 +23,8 @@ const CATEGORIES = [
 ];
 
 const product = (slug, over = {}) =>
-  ({ category_slug: slug, image_url: null, configurator_only: false, ...over });
+  ({ category_slug: slug, image_url: null, configurator_only: false,
+     variant_group: null, ...over });
 
 // Six fixed-spec bundles in a collection served by builders, four rotors that
 // are ordinary products, and one jersey filed nowhere near either.
@@ -82,5 +83,31 @@ check('findNode reports the groups above what it found',
   findNode(tree, 'rotors').trail.map((t) => t.slug), ['components']);
 check('and returns null for a slug that is not there',
   findNode(tree, 'nonsense'), null);
+
+// ── a bike counts once, not once per frame size ───────────────────────────
+// A tile reading "5 items" for one bike promises a range that is not there,
+// and the listing below it shows one line, so the two would disagree.
+const sizes = (group, labels, category = 'rotors') =>
+  labels.map((variant_label) => product(category, { variant_group: group, variant_label }));
+
+const withBikes = buildTree(CATEGORIES, [
+  ...sizes('STORM', ['S', 'M', 'L', 'XL']),
+  ...sizes('RONIN', ['M', 'L']),
+  product('rotors'),
+]);
+const rotors = findNode(withBikes, 'rotors').node;
+check('two bikes and a part count as three, not seven', rotors.total, 3);
+check('and the count rolls up as three too',
+  findNode(withBikes, 'components').node.total, 3);
+
+// Keyed by collection as well as group, so a range split across two shelves
+// is counted on each rather than silently halved.
+const acrossTwo = buildTree(CATEGORIES, [
+  ...sizes('STORM', ['S', 'M'], 'rotors'),
+  ...sizes('STORM', ['L', 'XL'], 'clothing'),
+]);
+check('a range filed in two collections counts in both',
+  [findNode(acrossTwo, 'rotors').node.total, findNode(acrossTwo, 'clothing').node.total],
+  [1, 1]);
 
 process.exit(fail ? 1 : 0);

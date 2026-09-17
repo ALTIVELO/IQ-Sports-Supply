@@ -95,7 +95,10 @@ function categoryFor(type, name) {
 }
 
 function parseArgs(argv) {
-  const args = { markup: [], retailFromRrp: false, prefix: 'DRAG', currency: 'GBP' };
+  const args = {
+    markup: [], retailFromRrp: false, prefix: 'DRAG', currency: 'GBP',
+    sizes: null, priceNote: '',
+  };
   const [input, output, ...rest] = argv;
   args.input = input; args.output = output;
   for (let i = 0; i < rest.length; i += 1) {
@@ -107,11 +110,14 @@ function parseArgs(argv) {
     } else if (rest[i] === '--retail-from-rrp') args.retailFromRrp = true;
     else if (rest[i] === '--prefix') args.prefix = rest[++i];
     else if (rest[i] === '--currency') args.currency = rest[++i].toUpperCase();
+    else if (rest[i] === '--sizes') args.sizes = rest[++i];
+    else if (rest[i] === '--price-note') args.priceNote = rest[++i];
     else throw new Error(`Unknown argument ${rest[i]}`);
   }
   if (!args.input || !args.output || !args.markup.length) {
     throw new Error('usage: convert-shopify-export.mjs <in.csv> <out.csv> '
-      + '--markup "Distributor=10,Shop=15,Club=20" [--retail-from-rrp] [--prefix DRAG]');
+      + '--markup "Distributor=10,Shop=15,Club=20" [--retail-from-rrp] [--prefix DRAG] '
+      + '[--currency EUR] [--sizes sizes.json] [--price-note "…"]');
   }
   return args;
 }
@@ -120,7 +126,12 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const source = parseCsv(readFileSync(args.input, 'utf8'));
 
-  const notes = { uncosted: [], duplicates: [], uncategorised: [] };
+  // Which bikes are built in more than one frame, keyed by the title on the
+  // price list. Read from a file rather than guessed: a size range invented
+  // here would have the catalogue offering a frame DRAG do not make.
+  const sizes = args.sizes ? JSON.parse(readFileSync(args.sizes, 'utf8')) : {};
+
+  const notes = { uncosted: [], duplicates: [], uncategorised: [], sized: 0, unsized: 0 };
   const seen = new Map();
   const out = [];
 
@@ -151,30 +162,46 @@ function main() {
     if (!category) notes.uncategorised.push(sku);
     if (cost === null) notes.uncosted.push(`${sku} — ${name}`);
 
-    const row = {
-      Name: name,
-      SKU: sku,
-      Brand: tidy(r.Vendor) || '',
-      Category: category,
-      // A column, not a footnote: every figure on this row is in it, and the
-      // importer sets the product's currency from it. Nothing is converted
-      // anywhere, so a list in the supplier's own money stays in it.
-      Currency: args.currency,
-      'Our cost': cost === null ? '' : cost.toFixed(2),
-    };
-    for (const tier of args.markup) {
-      row[tier.name] = cost === null ? '' : (cost * (1 + tier.rate)).toFixed(2);
-    }
-    row.Retail = args.retailFromRrp && rrp !== null ? rrp.toFixed(2) : '';
-    // Carried through untouched: the export is where the pictures come from,
-    // and a column dropped here is a catalogue of grey placeholders.
-    row['Image URL'] = tidy(r['Image Src']);
+    // A bike built in five frames is five rows sharing one model, because the
+    // frame is what gets ordered, stocked and shipped. One row for a bike that
+    // comes one way, as before.
+    const range = sizes[tidy(r.Title)]?.sizes ?? [];
+    if (range.length > 1) notes.sized += 1; else notes.unsized += 1;
+    const frames = range.length > 1 ? range : [null];
 
-    out.push(row);
+    for (const frame of frames) {
+      const row = {
+        Name: frame ? `${name} — ${frame}` : name,
+        SKU: frame ? `${sku}-${frame}` : sku,
+        Brand: tidy(r.Vendor) || '',
+        Category: category,
+        // A column, not a footnote: every figure on this row is in it, and the
+        // importer sets the product's currency from it. Nothing is converted
+        // anywhere, so a list in the supplier's own money stays in it.
+        Currency: args.currency,
+        // Both or neither: a model with no size is a size nobody can pick.
+        Model: frame ? sku : '',
+        Size: frame ?? '',
+        'Price note': args.priceNote,
+        // Every frame of one bike is one price on this list. Where DRAG price
+        // a size differently they will send a row for it, and this passes that
+        // through unchanged rather than averaging anything.
+        'Our cost': cost === null ? '' : cost.toFixed(2),
+      };
+      for (const tier of args.markup) {
+        row[tier.name] = cost === null ? '' : (cost * (1 + tier.rate)).toFixed(2);
+      }
+      row.Retail = args.retailFromRrp && rrp !== null ? rrp.toFixed(2) : '';
+      // Carried through untouched: the export is where the pictures come from,
+      // and a column dropped here is a catalogue of grey placeholders.
+      row['Image URL'] = tidy(r['Image Src']);
+
+      out.push(row);
+    }
   }
 
-  const header = ['Name', 'SKU', 'Brand', 'Category', 'Currency', 'Our cost',
-    ...args.markup.map((t) => t.name), 'Retail', 'Image URL'];
+  const header = ['Name', 'SKU', 'Brand', 'Category', 'Currency', 'Model', 'Size',
+    'Price note', 'Our cost', ...args.markup.map((t) => t.name), 'Retail', 'Image URL'];
   const csv = [header.join(','),
     ...out.map((r) => header.map((h) => csvCell(r[h])).join(','))].join('\n') + '\n';
   // Byte-order mark: without it both Excel and the importer's own reader fall
@@ -183,10 +210,14 @@ function main() {
 
   // ── what happened ──
   const priced = out.filter((r) => r['Our cost'] !== '');
-  console.log(`${out.length} products written to ${args.output}`);
+  console.log(`${out.length} rows written to ${args.output} `
+            + `(${notes.sized + notes.unsized} bikes)`);
   console.log(`  columns: ${header.join(' · ')}`);
   console.log(`  ${priced.length} costed, ${out.length - priced.length} without a cost`);
   console.log(`  every figure in ${args.currency}`);
+  console.log(`  ${notes.sized} bikes with a frame-size range, `
+            + `${notes.unsized} sold one way`);
+  if (args.priceNote) console.log(`  price note: ${args.priceNote}`);
   for (const tier of args.markup) {
     console.log(`  ${tier.name.padEnd(12)} cost + ${(tier.rate * 100).toFixed(0)}%`);
   }

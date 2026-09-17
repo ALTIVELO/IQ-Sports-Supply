@@ -6,6 +6,7 @@ import { buildTree, offeredLoose,
          type CategoryRow, type FiledGroup } from '@/lib/catalogue/tree';
 import CollectionGrid from './CollectionGrid';
 import ProductRow from './ProductRow';
+import { groupVariants } from '@/lib/catalogue/variants';
 import BasketBar from './BasketBar';
 import type { CatalogueItem } from '@/lib/types';
 
@@ -38,11 +39,16 @@ export default function CollectionsBrowser({
   const offered = useMemo(() => products.filter(offeredLoose), [products]);
   const unfiled = useMemo(() => offered.filter((p) => !p.category_slug), [offered]);
 
+  // Matched a size at a time and then folded, so searching "storm" finds the
+  // bike once rather than four times, and searching a single size's SKU still
+  // finds the bike that size belongs to.
   const results = useMemo(() => {
     const s = query.trim().toLowerCase();
     if (!s) return [];
-    return offered
-      .filter((p) => `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(s))
+    const hit = offered
+      .filter((p) => `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(s));
+    const wanted = new Set(hit.map((p) => p.variant_group ?? p.id));
+    return groupVariants(offered.filter((p) => wanted.has(p.variant_group ?? p.id)))
       .slice(0, 120);
   }, [query, offered]);
 
@@ -72,7 +78,7 @@ export default function CollectionsBrowser({
             <Card><Empty>Nothing matches that search.</Empty></Card>
           ) : (
             <div className="space-y-2">
-              {results.map((p) => <ProductRow key={p.id} product={p} />)}
+              {results.map((g) => <ProductRow key={g.key} group={g} />)}
             </div>
           )}
         </section>

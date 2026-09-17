@@ -9,6 +9,7 @@ import { SUSPICIOUS_DELTA, type CatalogueRow, type CataloguePreview,
          type HistoricOrderRow } from '@/lib/import/types';
 import type { ActionResult } from '../actions';
 import { classifyProduct } from '@/lib/catalogue/categories';
+import { knownSize } from '@/lib/catalogue/variants';
 
 const norm = (sku: string) => sku.trim().toLowerCase();
 
@@ -109,6 +110,21 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
         invalid.push({ row: line, reason: `${sku}: "${row.currency}" is not a currency we hold` });
       }
 
+      // A model with no size is a size nobody can pick; a size with no model
+      // is a size of nothing. Either alone is a half-filled column, and the
+      // product would import as a bike in its own right without saying so.
+      const group = row.variant_group?.trim() || undefined;
+      const label = row.variant_label?.trim() || undefined;
+      if (Boolean(group) !== Boolean(label)) {
+        invalid.push({
+          row: line,
+          reason: group
+            ? `${sku} gives a model but no size`
+            : `${sku} gives a size but no model to put it under`,
+        });
+        continue;
+      }
+
       const prices = Object.fromEntries(
         Object.entries(row.prices).filter(([, v]) => Number.isFinite(v) && v >= 0),
       );
@@ -136,10 +152,37 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
             category: existing.category || row.category,
             image_url: existing.image_url || row.image_url,
             currency: existing.currency ?? currency ?? undefined,
+            variant_group: existing.variant_group ?? group,
+            variant_label: existing.variant_label ?? label,
+            price_note: existing.price_note || row.price_note?.trim() || undefined,
             cost: cost ?? existing.cost,
             prices: { ...existing.prices, ...prices },
           }
-        : { ...row, sku, cost, prices, currency: currency ?? undefined });
+        : {
+            ...row, sku, cost, prices,
+            currency: currency ?? undefined,
+            variant_group: group, variant_label: label,
+            price_note: row.price_note?.trim() || undefined,
+          });
+    }
+  }
+
+  // The database refuses two products claiming one size of one model, and it
+  // would do so halfway through writing the import. Better to say which rows
+  // clash while nothing has been written.
+  const takenSize = new Map<string, string>();
+  for (const row of merged.values()) {
+    if (!row.variant_group || !row.variant_label) continue;
+    const key = `${row.variant_group.toLowerCase()}\u0000${row.variant_label.toLowerCase()}`;
+    const already = takenSize.get(key);
+    if (already) {
+      invalid.push({
+        row: 0,
+        reason: `${already} and ${row.sku} are both `
+              + `${row.variant_group} size ${row.variant_label}`,
+      });
+    } else {
+      takenSize.set(key, row.sku);
     }
   }
 
@@ -351,7 +394,9 @@ export async function applyCatalogue(input: {
   const priced = tiersPriced(valid, tiers ?? []);
 
   const { data: existing } = await sb.from('products')
-    .select('id, sku, active, currency').limit(10000);
+    .select('id, sku, active, currency, variant_group, variant_label, price_note')
+    .limit(10000);
+  const byNormSku = new Map((existing ?? []).map((p) => [norm(p.sku), p]));
   const bySku = new Map((existing ?? []).map((p) => [norm(p.sku), p.id]));
   const withdrawn = new Map(
     (existing ?? []).filter((p) => !p.active).map((p) => [norm(p.sku), p.id]));
@@ -370,6 +415,21 @@ export async function applyCatalogue(input: {
   }
 
   // ── new SKUs ──
+  // Where a size is one the scale knows — XS through XXL — the catalogue
+  // orders it without help. Where it is not, the only thing that knows the
+  // order is the file, so the file's order is kept.
+  const sortOf = new Map<string, number>();
+  const byGroup = new Map<string, CatalogueRow[]>();
+  for (const r of valid) {
+    if (r.variant_group) {
+      byGroup.set(r.variant_group, [...(byGroup.get(r.variant_group) ?? []), r]);
+    }
+  }
+  for (const members of byGroup.values()) {
+    if (members.every((m) => knownSize(m.variant_label))) continue;
+    members.forEach((m, i) => sortOf.set(norm(m.sku), i));
+  }
+
   const toCreate = valid.filter((r) => !bySku.has(norm(r.sku)));
   let added = 0;
   if (toCreate.length) {
@@ -401,6 +461,10 @@ export async function applyCatalogue(input: {
           // Silence means sterling, which is what every list said before the
           // column existed.
           currency: r.currency ?? 'GBP',
+          variant_group: r.variant_group ?? null,
+          variant_label: r.variant_label ?? null,
+          variant_sort: sortOf.get(norm(r.sku)) ?? null,
+          price_note: r.price_note ?? null,
         };
       }))
       .select('id, sku');
@@ -425,6 +489,33 @@ export async function applyCatalogue(input: {
     const { error } = await sb.from('products').update({ currency }).in('id', ids);
     if (error) return { ok: false, error: `Setting currency to ${currency} failed: ${error.message}` };
     redenominated += ids.length;
+  }
+
+  // ── sizes and price notes on products we already had ──
+  // A re-issued list is how a bike gains its size range, or how a supplier
+  // changes what their price excludes. Row by row rather than batched: these
+  // differ per product, and a wrong batch would file every bike under one
+  // model.
+  let resized = 0;
+  for (const r of valid) {
+    const id = bySku.get(norm(r.sku));
+    const before = byNormSku.get(norm(r.sku));
+    if (!id || !before) continue;
+    const patch: Record<string, unknown> = {};
+    if (r.variant_group && r.variant_label
+        && (before.variant_group !== r.variant_group
+            || before.variant_label !== r.variant_label)) {
+      patch.variant_group = r.variant_group;
+      patch.variant_label = r.variant_label;
+      patch.variant_sort = sortOf.get(norm(r.sku)) ?? null;
+    }
+    if (r.price_note !== undefined && (before.price_note ?? '') !== r.price_note) {
+      patch.price_note = r.price_note || null;
+    }
+    if (!Object.keys(patch).length) continue;
+    const { error } = await sb.from('products').update(patch).eq('id', id);
+    if (error) return { ok: false, error: `Updating ${r.sku} failed: ${error.message}` };
+    resized += 1;
   }
 
   // ── sell prices ──
@@ -499,6 +590,7 @@ export async function applyCatalogue(input: {
   if (redenominated) {
     parts.push(`${redenominated} moved to a different currency`);
   }
+  if (resized) parts.push(`${resized} updated`);
 
   return { ok: true, message: `Applied — ${parts.join(', ')}, effective ${input.effectiveFrom}` };
 }
