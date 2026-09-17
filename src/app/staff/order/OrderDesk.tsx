@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Button, Card, Money, Notice, Tag } from '@/components/ui';
 import { placeOrder } from '../actions';
 import { totalsByCurrency } from '@/lib/orders/split';
+import CollectionPicker from '@/components/CollectionPicker';
+import { groupCollections, idsUnderSlug, type CategoryLite } from '@/lib/catalogue/collections';
 import type { DeskProduct } from './page';
 
 interface ClientRow {
@@ -21,14 +23,15 @@ interface DraftLine {
 }
 
 export default function OrderDesk({
-  clients, locations, tiers, products, vatRate,
+  clients, locations, tiers, products, categories, vatRate,
 }: {
   clients: ClientRow[]; locations: Named[]; tiers: Named[];
-  products: DeskProduct[]; vatRate: number;
+  products: DeskProduct[]; categories: CategoryLite[]; vatRate: number;
 }) {
   const [clientId, setClientId] = useState('');
   const [locationId, setLocationId] = useState('');
   const [query, setQuery] = useState('');
+  const [collection, setCollection] = useState<string | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
   const [placed, setPlaced] = useState<{ id: string; warning?: string } | null>(null);
@@ -52,13 +55,40 @@ export default function OrderDesk({
   const stockAt = (p: DeskProduct, loc: string) => p.stock[loc] ?? 0;
   const totalStock = (p: DeskProduct) => Object.values(p.stock).reduce((a, b) => a + b, 0);
 
+  // Counted over the whole catalogue, not over what is currently listed, so
+  // the numbers on the chips are what a collection holds rather than what is
+  // left after a search.
+  const collections = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of products) {
+      if (p.category_id) counts.set(p.category_id, (counts.get(p.category_id) ?? 0) + 1);
+    }
+    return groupCollections(categories, counts);
+  }, [products, categories]);
+  const unfiled = useMemo(
+    () => products.filter((p) => !p.category_id).length, [products]);
+
+  /**
+   * What to offer, from a collection, a search, or both.
+   *
+   * Browsing is the case the desk was missing: somebody on the phone asks what
+   * gravel bikes there are, and a search box cannot answer that. A collection
+   * lists more than a search does, because scrolling a shelf is the point.
+   */
   const results = useMemo(() => {
-    const s = query.trim().toLowerCase();
-    if (!s) return [];
-    return products
-      .filter((p) => `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(s))
-      .slice(0, 8);
-  }, [query, products]);
+    const term = query.trim().toLowerCase();
+    const inCollection = collection === null
+      ? products
+      : collection === 'none'
+        ? products.filter((p) => !p.category_id)
+        : products.filter((p) => p.category_id
+            && idsUnderSlug(categories, collection).includes(p.category_id));
+
+    if (!term) return collection === null ? [] : inCollection.slice(0, 60);
+    return inCollection
+      .filter((p) => `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(term))
+      .slice(0, collection === null ? 8 : 60);
+  }, [query, collection, products, categories]);
 
   function addLine(p: DeskProduct) {
     setLines((ls) => {
@@ -200,8 +230,27 @@ export default function OrderDesk({
             onChange={(e) => setQuery(e.target.value)}
           />
 
+          {client && (
+            <div className="mt-2.5">
+              <CollectionPicker
+                groups={collections}
+                uncategorised={unfiled}
+                value={collection}
+                onChange={setCollection}
+                label="Browse"
+              />
+            </div>
+          )}
+
+          {collection && results.length === 0 && (
+            <p className="text-[12px] text-mute mt-2">
+              Nothing in this collection{query ? ' matches that search' : ' yet'}.
+            </p>
+          )}
+
           {results.length > 0 && (
-            <div className="border border-line rounded mt-1.5 overflow-hidden">
+            <div className={`border border-line rounded mt-1.5 overflow-hidden
+                             ${collection ? 'max-h-[420px] overflow-y-auto' : ''}`}>
               {results.map((p) => {
                 const here = stockAt(p, locationId);
                 const elsewhere = totalStock(p) - here;
@@ -213,6 +262,14 @@ export default function OrderDesk({
                   >
                     <span className="num font-semibold min-w-[110px]">{p.sku}</span>
                     <span className="flex-1 min-w-0 truncate">{p.name}</span>
+                    {/* The size, called out rather than left inside the name:
+                        it is the thing being picked off the shelf. */}
+                    {p.variant_label && (
+                      <span className="text-[11px] font-semibold border border-line rounded
+                                       px-[6px] py-[1px] whitespace-nowrap">
+                        {p.variant_label}
+                      </span>
+                    )}
                     <span className={`num text-[12px] ${here > 0 ? 'text-success' : 'text-danger'}`}>
                       {here > 0 ? `${here} here` : 'back order'}
                     </span>

@@ -8,12 +8,16 @@ import { saveProduct, setProductActive, deleteProducts } from './actions';
 import { setStock, createTransfer, receiveTransfer } from '../actions';
 import { categoriseUncategorised, setProductCategory } from '../import/actions';
 import ImageCell from './ImageCell';
+import CollectionPicker, { collectionName } from '@/components/CollectionPicker';
+import { catalogueHref, type CollectionGroup } from '@/lib/catalogue/collections';
 
 interface Product {
   id: string; sku: string; name: string; brand: string | null;
   active: boolean; category_id: string | null; image_url: string | null;
   /** The money this product's cost and every tier price are quoted in. */
   currency: string;
+  /** Its frame size, where it is one size of a bike. */
+  variant_label: string | null;
 }
 interface Named { id: string; name: string }
 interface CategoryOption {
@@ -28,7 +32,8 @@ interface Transfer {
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
 
 export default function CatalogueScreen({
-  products, tiers, locations, prices, costs, stock, transfers, categories, canDelete, query, tab,
+  products, tiers, locations, prices, costs, stock, transfers, categories,
+  collections, uncategorisedTotal, collection, canDelete, query, tab,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
@@ -36,10 +41,20 @@ export default function CatalogueScreen({
   costs: Record<string, number>;
   stock: Record<string, Record<string, number>>;
   transfers: Transfer[]; categories: CategoryOption[];
+  collections: CollectionGroup[];
+  uncategorisedTotal: number;
+  /** The collection being shown, 'none' for the unfiled, or null for all of it. */
+  collection: string | null;
   canDelete: boolean; query: string; tab: 'catalogue' | 'transfers';
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<Msg>(null);
+
+  // Both filters live in the URL, so a collection survives a reload and can be
+  // sent to somebody — and so the query that fetches 500 rows is the one doing
+  // the filtering, rather than 500 arbitrary rows being filtered on screen.
+  const go = (next: { collection?: string | null; q?: string }) =>
+    router.push(catalogueHref({ collection, q: query }, next));
 
   return (
     <div className="space-y-4">
@@ -61,7 +76,19 @@ export default function CatalogueScreen({
       {tab === 'catalogue' ? (
         <>
           <ProductEditor tiers={tiers} onMessage={setMessage} />
-          <form className="flex gap-2">
+
+          <CollectionPicker
+            groups={collections}
+            uncategorised={uncategorisedTotal}
+            value={collection}
+            onChange={(slug) => go({ collection: slug })}
+          />
+
+          <form className="flex flex-wrap items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  go({ q: new FormData(e.currentTarget).get('q') as string });
+                }}>
             <input
               name="q" defaultValue={query} placeholder="Search SKU, name or brand…"
               className="max-w-[280px]"
@@ -69,6 +96,22 @@ export default function CatalogueScreen({
             <button className="text-[12px] font-semibold border border-line rounded px-[10px] py-[5px] bg-white hover:bg-parch">
               Search
             </button>
+            {/* Says what is on screen, because a collection chosen two scrolls
+                up is otherwise invisible from down among the rows. */}
+            {(collection || query) && (
+              <span className="text-[12px] text-mute">
+                {products.length === 500 ? 'First 500 of ' : `${products.length} `}
+                SKU{products.length === 1 ? '' : 's'}
+                {collection && <> in <strong className="text-ink">
+                  {collectionName(categories, collection)}</strong></>}
+                {query && <> matching &ldquo;{query}&rdquo;</>}
+                {' · '}
+                <button type="button" onClick={() => go({ collection: null, q: '' })}
+                        className="underline hover:text-ink">
+                  show everything
+                </button>
+              </span>
+            )}
           </form>
           <StockMatrix
             products={products} tiers={tiers} locations={locations}
@@ -244,7 +287,14 @@ function StockMatrix({
     }));
 
   if (!products.length) {
-    return <Card><Empty>No products match. Add SKUs above, or bulk-load them on the Import screen.</Empty></Card>;
+    return (
+      <Card>
+        <Empty>
+          Nothing here. Pick another collection above, add a SKU, or bulk-load
+          them on the Import screen.
+        </Empty>
+      </Card>
+    );
   }
 
   return (
@@ -351,7 +401,18 @@ function StockMatrix({
                     />
                   </td>
                   <td className="num font-semibold whitespace-nowrap">{p.sku}</td>
-                  <td className="min-w-[200px]">{p.name}</td>
+                  <td className="min-w-[200px]">
+                    {p.name}
+                    {/* Named separately as well as inside the name: staff
+                        scanning a stock column need to see which frame a row
+                        is without reading to the end of every product name. */}
+                    {p.variant_label && (
+                      <span className="ml-1.5 text-[11px] font-semibold border border-line
+                                       rounded px-[6px] py-[1px] whitespace-nowrap">
+                        {p.variant_label}
+                      </span>
+                    )}
+                  </td>
                   <td className="text-mute">{p.brand}</td>
                   <td>
                     <select
