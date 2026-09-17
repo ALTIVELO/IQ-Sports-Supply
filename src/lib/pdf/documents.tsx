@@ -48,6 +48,8 @@ export interface DocData {
   date: string;
   dueDate: string;
   vatRate: number;
+  /** The money this invoice demands. Taken from the order, never converted. */
+  currency?: string;
   lines: DocLine[];
   clientName: string;
   /** Billing address: the legal invoicing address where one is given. */
@@ -131,19 +133,19 @@ export function InvoiceDocument({ d }: { d: DocData }) {
             <Text style={s.cSku}>{l.sku}</Text>
             <Text style={s.cName}>{l.name}</Text>
             <Text style={s.cQty}>{l.qty}</Text>
-            <Text style={s.cUnit}>{money(l.unit_price)}</Text>
-            <Text style={s.cLine}>{money(l.qty * Number(l.unit_price))}</Text>
+            <Text style={s.cUnit}>{money(l.unit_price, d.currency)}</Text>
+            <Text style={s.cLine}>{money(l.qty * Number(l.unit_price), d.currency)}</Text>
           </View>
         ))}
 
         <View style={s.totals}>
-          <View style={s.totRow}><Text>Net</Text><Text>{money(net)}</Text></View>
+          <View style={s.totRow}><Text>Net</Text><Text>{money(net, d.currency)}</Text></View>
           <View style={s.totRow}>
-            <Text>VAT {Number(d.vatRate)}%</Text><Text>{money(vat)}</Text>
+            <Text>VAT {Number(d.vatRate)}%</Text><Text>{money(vat, d.currency)}</Text>
           </View>
           <View style={s.grand}>
             <Text style={s.grandText}>Total</Text>
-            <Text style={s.grandText}>{money(gross)}</Text>
+            <Text style={s.grandText}>{money(gross, d.currency)}</Text>
           </View>
         </View>
 

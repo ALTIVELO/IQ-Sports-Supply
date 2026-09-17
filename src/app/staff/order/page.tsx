@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 
 export interface DeskProduct {
   id: string; sku: string; name: string; brand: string | null;
+  /** The money this product's prices are in. One order holds one of these. */
+  currency: string;
   /** Price per tier, so switching client repricing is instant. */
   prices: Record<string, number>;
   /** Stock per location — staff see every site so they can switch or transfer. */
@@ -23,7 +25,7 @@ export default async function OrderDeskPage() {
         .select('id, name, tier_id, address, vat_exempt, default_location_id, email')
         .eq('active', true).order('name'),
       sb.from('locations').select('id, name').eq('active', true).order('name'),
-      sb.from('products').select('id, sku, name, brand').eq('active', true).order('sku'),
+      sb.from('products').select('id, sku, name, brand, currency').eq('active', true).order('sku'),
       sb.from('tier_prices').select('product_id, tier_id, price, effective_from')
         .lte('effective_from', new Date().toISOString().slice(0, 10))
         .order('effective_from', { ascending: false }),

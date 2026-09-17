@@ -8,6 +8,7 @@ import { useCart } from '../CartContext';
 import type { Address } from '../account/AddressBook';
 import { placeClientOrder } from '../actions';
 import type { CatalogueItem } from '@/lib/types';
+import { currencyOf } from '@/lib/format';
 
 /**
  * The basket, line by line, before committing to it.
@@ -47,6 +48,17 @@ export default function BasketReview({
     () => Object.keys(quantities).filter((id) => !byId.has(id)).length,
     [quantities, byId],
   );
+
+  // An order is placed in one currency, so a basket has to be in one too.
+  // Adding euro-priced goods to a sterling basket is an easy thing to do by
+  // accident from a catalogue that holds both, and the total it would produce
+  // is not a number that means anything.
+  const currencies = useMemo(
+    () => [...new Set(lines.map((l) => currencyOf(l.product.currency)))],
+    [lines],
+  );
+  const currency = currencies[0] ?? 'GBP';
+  const mixed = currencies.length > 1;
 
   const net = lines.reduce((a, l) => a + l.qty * Number(l.product.price), 0);
   const vat = (net * vatRate) / 100;
@@ -128,6 +140,13 @@ export default function BasketReview({
           {missing === 1 ? ' has' : ' have'} been left out of this order.
         </Notice>
       )}
+      {mixed && (
+        <Notice>
+          This basket has {currencies.join(' and ')} prices in it. An order is raised and
+          invoiced in a single currency, so please place these as separate orders — take
+          one currency out of the basket and the total below will add up again.
+        </Notice>
+      )}
       <Notice tone="info">
         Everything is ordered from our supplier as soon as you place this order.
         We will confirm dates with you once we have them.
@@ -150,7 +169,7 @@ export default function BasketReview({
               </div>
 
               <div className="num text-[12px] text-mute w-[80px] text-right">
-                <Money value={Number(product.price)} /> each
+                <Money value={Number(product.price)} currency={product.currency} /> each
               </div>
 
               <div className="flex items-center gap-1">
@@ -173,7 +192,7 @@ export default function BasketReview({
               </div>
 
               <div className="num text-[15px] font-semibold w-[90px] text-right">
-                <Money value={qty * Number(product.price)} />
+                <Money value={qty * Number(product.price)} currency={product.currency} />
               </div>
 
               <button onClick={() => setQty(product.id, 0)}
@@ -244,14 +263,15 @@ export default function BasketReview({
       <Card>
         <div className="flex flex-wrap items-center justify-end gap-x-8 gap-y-2">
           <div className="num text-[13px] text-mute text-right">
-            <div>Net <Money value={net} /></div>
-            {vatRate > 0 && <div>VAT ({vatRate}%) <Money value={vat} /></div>}
+            <div>Net <Money value={net} currency={currency} /></div>
+            {vatRate > 0 && <div>VAT ({vatRate}%) <Money value={vat} currency={currency} /></div>}
           </div>
-          <div className="num text-[24px] font-semibold tracking-[-0.02em]">
-            <Money value={net + vat} />
+          <div className={`num text-[24px] font-semibold tracking-[-0.02em]
+                           ${mixed ? 'text-mute line-through' : ''}`}>
+            <Money value={net + vat} currency={currency} />
           </div>
           <Button kind="accent" onClick={checkout}
-                  disabled={pending || addresses.length === 0}>
+                  disabled={pending || mixed || addresses.length === 0}>
             {pending ? 'Placing…' : 'Place order'}
           </Button>
         </div>

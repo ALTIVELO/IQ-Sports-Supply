@@ -56,6 +56,7 @@ export function guessMapping(header: string[], fields: string[]): ColumnMapping 
     qty: /\b(qty|quantity|stock|on\s*hand|units)\b/i,
     image_url: /\b(image|photo|picture|img)\s*(url|link)?\b/i,
     category: /\b(categor(y|ies)|collection|group|type|department|section)\b/i,
+    currency: /\b(currency|ccy|curr)\b/i,
     client: /\b(client|customer|account|company|buyer)\b/i,
     date: /\b(date|ordered|placed|when)\b/i,
     reference: /\b(ref(erence)?|order\s*(no|number|ref)?|our\s*ref|invoice\s*(no|number)?)\b/i,

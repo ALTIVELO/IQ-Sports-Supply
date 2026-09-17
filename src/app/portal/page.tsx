@@ -22,14 +22,14 @@ export default async function PortalHome() {
       sb.from('clients').select('name, tiers(name)').eq('id', user.clientId).single(),
 
       sb.from('invoices')
-        .select('id, number, due_date, vat_rate, invoice_lines(qty, unit_price)')
+        .select('id, number, due_date, vat_rate, currency, invoice_lines(qty, unit_price)')
         .eq('client_id', user.clientId)
         .eq('superseded', false).eq('paid', false)
         .in('type', PAYABLE)
         .order('due_date'),
 
       sb.from('orders')
-        .select(`id, number, date, status,
+        .select(`id, number, date, status, currency,
                  order_lines(id, qty, unit_price),
                  invoices(id, shipped, delivered, superseded)`)
         .eq('client_id', user.clientId)
@@ -77,7 +77,13 @@ export default async function PortalHome() {
     clientName: client?.name ?? '',
     tier: (client?.tiers as unknown as { name: string } | null)?.name ?? null,
     productCount: (filed ?? []).filter(offeredLoose).length,
-    outstanding: (due ?? []).reduce((a, i) => a + gross(i), 0),
+    // Per currency. One entry is the ordinary case and reads exactly as the
+    // single figure did; two means two debts, and adding them would state a
+    // balance that is owed to nobody.
+    outstanding: [...(due ?? []).reduce((m, i) => {
+      const code = i.currency ?? 'GBP';
+      return m.set(code, (m.get(code) ?? 0) + gross(i));
+    }, new Map<string, number>())].map(([currency, value]) => ({ currency, value })),
     dueCount: (due ?? []).length,
     overdueCount: overdue.length,
     earliestOverdue: overdue[0]?.due_date ?? null,

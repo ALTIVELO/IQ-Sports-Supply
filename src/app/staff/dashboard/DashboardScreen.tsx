@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, Money, Notice, Tag } from '@/components/ui';
 import { PERIODS, type PeriodKey } from '@/lib/reporting/period';
+import { CURRENCY_SYMBOL, currencyOf } from '@/lib/format';
 import { SalesChart, OrdersChart, Legend, type Bucket } from './Charts';
 
 export interface Totals {
@@ -18,6 +19,10 @@ export interface TopClient {
 
 export interface DashboardData {
   period: PeriodKey;
+  /** The currency every figure below is in. Nothing here sums across two. */
+  currency: string;
+  /** The currencies there is anything to report on, so the tabs know to appear. */
+  currencies: string[];
   description: string;
   previousLabel: string;
   now: Totals;
@@ -30,7 +35,9 @@ const margin = (t: Totals) => (t.revenue > 0 ? (t.profit / t.revenue) * 100 : 0)
 
 export default function DashboardScreen({ data }: { data: DashboardData }) {
   const router = useRouter();
-  const { now, before } = data;
+  const { now, before, currency } = data;
+  const go = (period: PeriodKey, money: string) =>
+    router.push(`/staff/dashboard?period=${period}&currency=${money}`);
 
   return (
     <div className="space-y-5">
@@ -39,7 +46,7 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
         {PERIODS.map((p) => (
           <button
             key={p.key}
-            onClick={() => router.push(`/staff/dashboard?period=${p.key}`)}
+            onClick={() => go(p.key, currency)}
             className={`text-[12px] font-semibold rounded px-[10px] py-[5px] border
               ${data.period === p.key
                 ? 'bg-ink text-white border-ink'
@@ -49,12 +56,32 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
           </button>
         ))}
         <span className="text-[12px] text-mute ml-1">{data.description}</span>
+
+        {/* Only where there is a second currency to switch to. One report per
+            currency: a total that added euros to pounds would be a rate we
+            never transacted at, quoted as fact. */}
+        {data.currencies.length > 1 && (
+          <div className="flex gap-1 ml-auto">
+            {data.currencies.map((code) => (
+              <button
+                key={code}
+                onClick={() => go(data.period, code)}
+                className={`text-[12px] font-semibold rounded px-[10px] py-[5px] border
+                  ${currency === code
+                    ? 'bg-ink text-white border-ink'
+                    : 'bg-white border-line hover:bg-parch'}`}
+              >
+                {CURRENCY_SYMBOL[currencyOf(code)]} {code}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Revenue" value={<Money value={now.revenue} />}
+        <Stat label="Revenue" value={<Money value={now.revenue} currency={currency} />}
               now={now.revenue} before={before.revenue} against={data.previousLabel} />
-        <Stat label="Profit" value={<Money value={now.profit} />}
+        <Stat label="Profit" value={<Money value={now.profit} currency={currency} />}
               now={now.profit} before={before.profit} against={data.previousLabel} />
         <Stat label="Margin"
               value={<>{margin(now).toFixed(1)}<span className="text-[16px]">%</span></>}
@@ -64,7 +91,7 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
               now={now.orders} before={before.orders} against={data.previousLabel} />
       </div>
 
-      {now.excludedLines > 0 && <Excluded totals={now} />}
+      {now.excludedLines > 0 && <Excluded totals={now} currency={currency} />}
 
       <Card>
         <div className="flex flex-wrap items-baseline gap-3 mb-1">
@@ -72,7 +99,7 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
           <span className="text-[12px] text-mute ml-auto">Net of VAT, by order date</span>
         </div>
         <div className="mb-3"><Legend /></div>
-        <SalesChart data={data.buckets} />
+        <SalesChart data={data.buckets} currency={currency} />
       </Card>
 
       <Card>
@@ -100,9 +127,15 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
                   <tr key={b.bucket} className={b.orders === 0 ? 'text-mute' : ''}>
                     <td className="num whitespace-nowrap">{b.label}</td>
                     <td className="num text-right">{b.orders || '—'}</td>
-                    <td className="num text-right"><Money value={b.revenue} /></td>
-                    <td className="num text-right text-mute"><Money value={b.cost} /></td>
-                    <td className="num text-right font-semibold"><Money value={b.profit} /></td>
+                    <td className="num text-right">
+                      <Money value={b.revenue} currency={currency} />
+                    </td>
+                    <td className="num text-right text-mute">
+                      <Money value={b.cost} currency={currency} />
+                    </td>
+                    <td className="num text-right font-semibold">
+                      <Money value={b.profit} currency={currency} />
+                    </td>
                     <td className="num text-right">
                       {b.revenue > 0 ? `${((b.profit / b.revenue) * 100).toFixed(1)}%` : '—'}
                     </td>
@@ -133,7 +166,7 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
                       <td>{c.name}</td>
                       <td className="num text-right">{c.orders}</td>
                       <td className="num text-right font-semibold">
-                        <Money value={c.profit} />
+                        <Money value={c.profit} currency={currency} />
                       </td>
                     </tr>
                   ))}
@@ -156,7 +189,7 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
  * its readers. So the gap is named, in lines and in money, every time there
  * is one.
  */
-function Excluded({ totals }: { totals: Totals }) {
+function Excluded({ totals, currency }: { totals: Totals; currency: string }) {
   const one = totals.excludedLines === 1;
   const share = totals.revenue + totals.excludedRevenue > 0
     ? (totals.excludedRevenue / (totals.revenue + totals.excludedRevenue)) * 100
@@ -165,7 +198,9 @@ function Excluded({ totals }: { totals: Totals }) {
   return (
     <Notice tone={share >= 20 ? 'error' : 'info'}>
       Not counted above: {totals.excludedLines} order line{one ? '' : 's'} worth{' '}
-      <strong className="num"><Money value={totals.excludedRevenue} /></strong>
+      <strong className="num">
+        <Money value={totals.excludedRevenue} currency={currency} />
+      </strong>
       {share >= 1 && <> — {share.toFixed(0)}% of what was ordered</>}. We have no cost
       for {one ? 'it' : 'them'}, so {one ? 'it is' : 'they are'} left out of revenue and
       profit rather than counted as costing nothing.{' '}

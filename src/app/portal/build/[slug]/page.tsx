@@ -31,7 +31,7 @@ export default async function GroupPage({ params }: { params: Promise<{ slug: st
       // Priced and stocked for this client by client_catalogue's own RLS, so
       // the figures here are the ones their order would be billed at.
       sb.from('client_group_options')
-        .select(`option_id, step_id, product_id, label, sort, sku, price, in_stock,
+        .select(`option_id, step_id, product_id, label, sort, sku, price, currency, in_stock,
                  image_url, axis1_value, axis2_value`)
         .eq('group_id', group.id).order('sort'),
       sb.from('clients').select('vat_exempt').eq('id', user.clientId).single(),

@@ -1,7 +1,20 @@
 /** Presentation helpers, matching the prototype's formatting exactly. */
 
-export const money = (n: number | string | null | undefined) =>
-  '£' +
+/** The currencies we trade in. Prices are held in one of these, never converted. */
+export type Currency = 'GBP' | 'EUR';
+
+export const CURRENCY_SYMBOL: Record<Currency, string> = { GBP: '£', EUR: '€' };
+
+/** Falls back to sterling rather than throwing: a missing code must not blank a price. */
+export const currencyOf = (code: string | null | undefined): Currency =>
+  code === 'EUR' ? 'EUR' : 'GBP';
+
+// en-GB grouping for both, so a euro price reads €1,234.50 the way the rest of
+// the screen reads. This is a UK trade counter quoting euros, not a German one.
+export const money = (
+  n: number | string | null | undefined, currency: string | null | undefined = 'GBP',
+) =>
+  CURRENCY_SYMBOL[currencyOf(currency)] +
   (Number(n) || 0).toLocaleString('en-GB', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

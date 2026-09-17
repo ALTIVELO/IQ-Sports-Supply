@@ -14,7 +14,7 @@ export default async function CurrentOrders() {
 
   const { data: orders } = await sb
     .from('orders')
-    .select(`id, number, date, status,
+    .select(`id, number, date, status, currency,
              order_lines(id, sku, name, qty, unit_price, alloc_qty, bo_qty),
              invoices(id, number, type, paid, packed, shipped, delivered, superseded, carrier, tracking_number, tracking_url),
              order_events(id, order_id, type, created_at, meta)`)
@@ -65,7 +65,7 @@ export default async function CurrentOrders() {
                 <span className="num ml-auto font-semibold text-[14px]">
                   {/* The figure is struck, not the word after it: nothing is
                       owed on a cancelled order. */}
-                  <Money value={total} className={cancelled ? 'line-through' : ''} />{' '}
+                  <Money value={total} currency={o.currency} className={cancelled ? 'line-through' : ''} />{' '}
                   <span className="text-mute font-normal text-[12px]">net</span>
                 </span>
               </div>
@@ -90,7 +90,9 @@ export default async function CurrentOrders() {
                           <td className={`num text-right ${l.bo_qty ? 'font-semibold' : 'text-mute'}`}>
                             {l.bo_qty || '—'}
                           </td>
-                          <td className="num text-right"><Money value={Number(l.unit_price)} /></td>
+                          <td className="num text-right">
+                            <Money value={Number(l.unit_price)} currency={o.currency} />
+                          </td>
                         </tr>
                       ))}
                     </tbody>

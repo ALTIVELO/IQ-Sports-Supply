@@ -23,7 +23,7 @@ export type OrderEventType =
  */
 export interface CatalogueItem {
   id: string; sku: string; name: string; brand: string | null;
-  price: number; in_stock: boolean; image_url: string | null;
+  price: number; currency: string; in_stock: boolean; image_url: string | null;
   category_slug: string | null; category_name: string | null;
   /** Its collection is served by builders, so it is not offered on its own. */
   configurator_only: boolean;
@@ -51,7 +51,11 @@ export interface Settings {
 
 export interface Tier { id: string; name: string; sort: number }
 export interface Location { id: string; name: string; address: string | null; active: boolean }
-export interface Product { id: string; sku: string; name: string; brand: string | null; active: boolean }
+export interface Product {
+  id: string; sku: string; name: string; brand: string | null; active: boolean;
+  /** The money this product's cost and every tier price are quoted in. */
+  currency: string;
+}
 
 export interface Client {
   id: string; name: string; tier_id: string; email: string | null; phone: string | null;
@@ -62,6 +66,8 @@ export interface Client {
 export interface Order {
   id: string; number: string; client_id: string; date: string; status: OrderStatus;
   fulfilment_location_id: string; notes: string | null;
+  /** Taken from the first line placed; every other line must agree. */
+  currency: string;
 }
 
 export interface OrderLine {
@@ -77,7 +83,7 @@ export interface Invoice {
   shipped: boolean; shipped_at: string | null;
   delivered: boolean; delivered_at: string | null;
   carrier: string | null; tracking_number: string | null; tracking_url: string | null;
-  location_id: string; superseded: boolean;
+  location_id: string; superseded: boolean; currency: string;
   xero_id: string | null; xero_status: XeroStatus; xero_error: string | null; exported: boolean;
 }
 

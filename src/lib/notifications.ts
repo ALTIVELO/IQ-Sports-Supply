@@ -24,7 +24,7 @@ export async function notifyOrderPlaced(orderId: string) {
 
   const { data: invoice } = await db
     .from('invoices')
-    .select('id, number, date, due_date, vat_rate')
+    .select('id, number, date, due_date, vat_rate, currency')
     .eq('order_id', orderId).eq('type', 'full').eq('superseded', false)
     .maybeSingle();
   if (!invoice) return;
@@ -45,6 +45,7 @@ export async function notifyOrderPlaced(orderId: string) {
     date: invoice.date,
     dueDate: invoice.due_date,
     vatRate: Number(invoice.vat_rate),
+    currency: invoice.currency,
     lines,
     backordered: lines.filter((l) => l.bo_qty > 0).map((l) => ({ sku: l.sku, name: l.name, qty: l.bo_qty })),
     portalUrl: `${appUrl()}/portal/orders`,

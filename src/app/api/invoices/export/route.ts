@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const sb = await supabaseServer();
 
   let q = sb.from('invoices')
-    .select(`number, date, due_date, vat_rate,
+    .select(`number, date, due_date, vat_rate, currency,
              clients(name, email), orders(number),
              invoice_lines(sku, name, qty, unit_price)`)
     .eq('superseded', false)

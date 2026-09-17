@@ -15,7 +15,7 @@ export default async function OrderHistory({
 
   const { data: orders } = await sb
     .from('orders')
-    .select(`id, number, date, status,
+    .select(`id, number, date, status, currency,
              order_lines(id, sku, name, qty, unit_price, bo_qty),
              invoices(id, number, paid, shipped, delivered, superseded)`)
     .eq('client_id', user.clientId)
@@ -77,7 +77,7 @@ export default async function OrderHistory({
                         ? <Tag tone="line">Shipped</Tag>
                         : <Tag tone="line">In progress</Tag>}
                   <span className={`num ml-auto font-semibold ${cancelled ? 'line-through' : ''}`}>
-                    <Money value={total} />
+                    <Money value={total} currency={o.currency} />
                   </span>
                 </summary>
 
@@ -97,9 +97,11 @@ export default async function OrderHistory({
                           <td className="num">{l.sku}</td>
                           <td>{l.name}</td>
                           <td className="num text-right">{l.qty}</td>
-                          <td className="num text-right"><Money value={Number(l.unit_price)} /></td>
                           <td className="num text-right">
-                            <Money value={l.qty * Number(l.unit_price)} />
+                            <Money value={Number(l.unit_price)} currency={o.currency} />
+                          </td>
+                          <td className="num text-right">
+                            <Money value={l.qty * Number(l.unit_price)} currency={o.currency} />
                           </td>
                         </tr>
                       ))}

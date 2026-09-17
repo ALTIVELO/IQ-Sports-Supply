@@ -12,6 +12,23 @@ import { classifyProduct } from '@/lib/catalogue/categories';
 
 const norm = (sku: string) => sku.trim().toLowerCase();
 
+/**
+ * Reads a currency cell.
+ *
+ * Returns undefined for silence — most price lists have no such column and
+ * are sterling — and null for something there that we cannot read, which is
+ * reported as a bad row. Guessing sterling from an unreadable cell would put
+ * a euro price list into the system under the wrong symbol, and every margin
+ * taken off it afterwards would be wrong by the rate.
+ */
+function readCurrency(raw: string | undefined): 'GBP' | 'EUR' | null | undefined {
+  const text = (raw ?? '').trim().toUpperCase();
+  if (!text) return undefined;
+  if (['GBP', '£', 'POUND', 'POUNDS', 'STERLING', 'GBP £'].includes(text)) return 'GBP';
+  if (['EUR', '€', 'EURO', 'EUROS', 'EUR €'].includes(text)) return 'EUR';
+  return null;
+}
+
 // ── saved column mappings ───────────────────────────────────────────────────
 
 export async function loadTemplates(): Promise<
@@ -87,6 +104,11 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
         invalid.push({ row: line, reason: `Unreadable cost for ${sku}` });
       }
 
+      const currency = readCurrency(row.currency);
+      if (currency === null) {
+        invalid.push({ row: line, reason: `${sku}: "${row.currency}" is not a currency we hold` });
+      }
+
       const prices = Object.fromEntries(
         Object.entries(row.prices).filter(([, v]) => Number.isFinite(v) && v >= 0),
       );
@@ -94,6 +116,18 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
         ? row.cost : undefined;
 
       const existing = merged.get(key);
+
+      // Two tabs pricing one SKU in two currencies is not a merge, it is a
+      // contradiction: one of the two numbers is about to be read as the
+      // other's money. Say so rather than letting the last tab win.
+      if (existing?.currency && currency && existing.currency !== currency) {
+        invalid.push({
+          row: line,
+          reason: `${sku} is priced in both ${existing.currency} and ${currency}`,
+        });
+        continue;
+      }
+
       merged.set(key, existing
         ? {
             ...existing,
@@ -101,10 +135,11 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
             brand: existing.brand || row.brand,
             category: existing.category || row.category,
             image_url: existing.image_url || row.image_url,
+            currency: existing.currency ?? currency ?? undefined,
             cost: cost ?? existing.cost,
             prices: { ...existing.prices, ...prices },
           }
-        : { ...row, sku, cost, prices });
+        : { ...row, sku, cost, prices, currency: currency ?? undefined });
     }
   }
 
@@ -147,13 +182,13 @@ async function costsAsAt(
 }
 
 function describeChange(
-  sku: string, name: string, old: number | undefined, next: number,
+  sku: string, name: string, old: number | undefined, next: number, currency: string,
 ): PriceChange | null {
   if (old !== undefined && Math.abs(old - next) < 0.005) return null;
   const from = old ?? 0;
   const deltaPct = from === 0 ? 100 : ((next - from) / from) * 100;
   return {
-    sku, name, oldPrice: from, newPrice: next, deltaPct,
+    sku, name, oldPrice: from, newPrice: next, deltaPct, currency,
     // Priced from nothing is not a swing, it is a first price.
     suspicious: old !== undefined && Math.abs(deltaPct) > SUSPICIOUS_DELTA,
   };
@@ -175,7 +210,7 @@ export async function previewCatalogue(
     // Withdrawn products included. They still hold the SKU, so a preview that
     // cannot see them calls a SKU new that the import will not create, and
     // says nothing about the one place the prices are actually going.
-    sb.from('products').select('id, sku, name, active').limit(10000),
+    sb.from('products').select('id, sku, name, active, currency').limit(10000),
   ]);
 
   const { rows, invalid } = mergeSheets(sheets);
@@ -202,7 +237,13 @@ export async function previewCatalogue(
       const product = bySku.get(norm(row.sku));
       if (!product) { created += 1; continue; }
 
-      const change = describeChange(product.sku, product.name, current.get(product.id), price);
+      const change = describeChange(
+        product.sku, product.name, current.get(product.id), price,
+        // What the file says this row is in, or failing that what the product
+        // already is: the old figure is in the latter and the new one in the
+        // former, and where they differ the currency card says so on its own.
+        row.currency ?? product.currency ?? 'GBP',
+      );
       if (change) changed.push(change); else unchanged += 1;
     }
 
@@ -222,7 +263,10 @@ export async function previewCatalogue(
     for (const row of withCost) {
       const product = bySku.get(norm(row.sku));
       if (!product) { created += 1; continue; }
-      const change = describeChange(product.sku, product.name, current.get(product.id), row.cost!);
+      const change = describeChange(
+        product.sku, product.name, current.get(product.id), row.cost!,
+        row.currency ?? product.currency ?? 'GBP',
+      );
       if (change) changed.push(change); else unchanged += 1;
     }
 
@@ -236,6 +280,7 @@ export async function previewCatalogue(
         belowCost.push({
           sku: row.sku, name: nameOf(row), tierName: tier.name,
           price, cost: row.cost!,
+          currency: row.currency ?? bySku.get(norm(row.sku))?.currency ?? 'GBP',
         });
       }
     }
@@ -257,6 +302,14 @@ export async function previewCatalogue(
         .map((p) => ({ sku: p!.sku, name: p!.name })),
       // Withdrawn products are not "missing from the file" — they are gone on
       // purpose, and listing them here would bury the ones that matter.
+      currencyChanges: rows.flatMap((r) => {
+        const product = bySku.get(norm(r.sku));
+        if (!product || !r.currency || r.currency === (product.currency ?? 'GBP')) return [];
+        return [{
+          sku: product.sku, name: product.name,
+          from: product.currency ?? 'GBP', to: r.currency,
+        }];
+      }),
       missing: (products ?? [])
         .filter((p) => p.active && !inFile.has(norm(p.sku)))
         .map((p) => ({ sku: p.sku, name: p.name })),
@@ -298,7 +351,7 @@ export async function applyCatalogue(input: {
   const priced = tiersPriced(valid, tiers ?? []);
 
   const { data: existing } = await sb.from('products')
-    .select('id, sku, active').limit(10000);
+    .select('id, sku, active, currency').limit(10000);
   const bySku = new Map((existing ?? []).map((p) => [norm(p.sku), p.id]));
   const withdrawn = new Map(
     (existing ?? []).filter((p) => !p.active).map((p) => [norm(p.sku), p.id]));
@@ -345,12 +398,33 @@ export async function applyCatalogue(input: {
           // Only accept a real URL; a sheet often carries a filename here,
           // which would render as a broken image.
           image_url: image && /^https?:\/\//i.test(image) ? image : null,
+          // Silence means sterling, which is what every list said before the
+          // column existed.
+          currency: r.currency ?? 'GBP',
         };
       }))
       .select('id, sku');
     if (error) return { ok: false, error: `Creating new SKUs failed: ${error.message}` };
     for (const p of inserted ?? []) bySku.set(norm(p.sku), p.id);
     added = inserted?.length ?? 0;
+  }
+
+  // ── currency ──
+  // Applied before the prices it denominates, so a run that fails partway
+  // never leaves euro figures sitting under a sterling symbol.
+  const currencyNow = new Map((existing ?? []).map((p) => [norm(p.sku), p.currency ?? 'GBP']));
+  const redenominate = new Map<string, string[]>();
+  for (const r of valid) {
+    const id = bySku.get(norm(r.sku));
+    const was = currencyNow.get(norm(r.sku));
+    if (!id || !r.currency || was === undefined || was === r.currency) continue;
+    redenominate.set(r.currency, [...(redenominate.get(r.currency) ?? []), id]);
+  }
+  let redenominated = 0;
+  for (const [currency, ids] of redenominate) {
+    const { error } = await sb.from('products').update({ currency }).in('id', ids);
+    if (error) return { ok: false, error: `Setting currency to ${currency} failed: ${error.message}` };
+    redenominated += ids.length;
   }
 
   // ── sell prices ──
@@ -422,6 +496,9 @@ export async function applyCatalogue(input: {
       + `${priced.length} tier${priced.length === 1 ? '' : 's'}`);
   }
   if (costBatch.length) parts.push(`${costBatch.length} cost${costBatch.length === 1 ? '' : 's'}`);
+  if (redenominated) {
+    parts.push(`${redenominated} moved to a different currency`);
+  }
 
   return { ok: true, message: `Applied — ${parts.join(', ')}, effective ${input.effectiveFrom}` };
 }

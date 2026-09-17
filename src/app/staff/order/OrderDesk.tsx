@@ -16,6 +16,7 @@ interface DraftLine {
   productId: string; sku: string; name: string; qty: number; unitPrice: number;
   /** The tier price, kept so an override is visible as an override. */
   tierPrice: number;
+  currency: string;
 }
 
 export default function OrderDesk({
@@ -65,7 +66,10 @@ export default function OrderDesk({
         return ls.map((l) => (l.productId === p.id ? { ...l, qty: l.qty + 1 } : l));
       }
       const price = priceFor(p);
-      return [...ls, { productId: p.id, sku: p.sku, name: p.name, qty: 1, unitPrice: price, tierPrice: price }];
+      return [...ls, {
+        productId: p.id, sku: p.sku, name: p.name, qty: 1,
+        unitPrice: price, tierPrice: price, currency: p.currency,
+      }];
     });
     setQuery('');
   }
@@ -76,6 +80,12 @@ export default function OrderDesk({
   const net = lines.reduce((a, l) => a + l.qty * l.unitPrice, 0);
   const effectiveVat = client?.vat_exempt ? 0 : vatRate;
   const vat = (net * effectiveVat) / 100;
+
+  // One order, one currency — the database refuses anything else, and finding
+  // that out at the moment of placing a forty-line order is no use to anybody.
+  const currencies = [...new Set(lines.map((l) => l.currency))];
+  const currency = currencies[0] ?? 'GBP';
+  const mixed = currencies.length > 1;
 
   /** What this order will short at the chosen location, before it is placed. */
   const shortfall = lines
@@ -209,7 +219,9 @@ export default function OrderDesk({
                     {elsewhere > 0 && (
                       <span className="num text-[12px] text-mute">{elsewhere} elsewhere</span>
                     )}
-                    <span className="num font-semibold"><Money value={priceFor(p)} /></span>
+                    <span className="num font-semibold">
+                      <Money value={priceFor(p)} currency={p.currency} />
+                    </span>
                   </button>
                 );
               })}
@@ -246,11 +258,13 @@ export default function OrderDesk({
                         />
                         {l.unitPrice !== l.tierPrice && (
                           <span className="text-[10px] text-flame-text font-semibold">
-                            override · tier <Money value={l.tierPrice} />
+                            override · tier <Money value={l.tierPrice} currency={l.currency} />
                           </span>
                         )}
                       </td>
-                      <td className="num text-right"><Money value={l.qty * l.unitPrice} /></td>
+                      <td className="num text-right">
+                        <Money value={l.qty * l.unitPrice} currency={l.currency} />
+                      </td>
                       <td>
                         <button
                           aria-label={`Remove ${l.sku}`}
@@ -264,6 +278,16 @@ export default function OrderDesk({
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {mixed && (
+            <div className="mt-3">
+              <Notice>
+                This order has {currencies.join(' and ')} lines on it. An order is invoiced
+                in one currency, so take one out and raise it separately — the total below
+                is not a figure until you do.
+              </Notice>
             </div>
           )}
 
@@ -295,12 +319,14 @@ export default function OrderDesk({
           {lines.length > 0 && (
             <div className="flex flex-wrap justify-end items-center gap-5 mt-3.5">
               <div className="num text-[13px] text-mute">
-                Net <Money value={net} /> · VAT ({effectiveVat}%) <Money value={vat} />
+                Net <Money value={net} currency={currency} />
+                {' '}· VAT ({effectiveVat}%) <Money value={vat} currency={currency} />
               </div>
-              <div className="num text-[24px] font-semibold tracking-[-0.02em]">
-                <Money value={net + vat} />
+              <div className={`num text-[24px] font-semibold tracking-[-0.02em]
+                               ${mixed ? 'text-mute line-through' : ''}`}>
+                <Money value={net + vat} currency={currency} />
               </div>
-              <Button kind="accent" onClick={submit} disabled={pending || !locationId}>
+              <Button kind="accent" onClick={submit} disabled={pending || mixed || !locationId}>
                 {pending ? 'Placing…' : 'Place order'}
               </Button>
             </div>

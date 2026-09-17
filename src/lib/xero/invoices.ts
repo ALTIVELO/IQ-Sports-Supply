@@ -31,7 +31,11 @@ export async function pushInvoiceToXero(invoiceId: string) {
         Contact: { Name: client.name, EmailAddress: client.email ?? undefined },
         Date: inv.date,
         DueDate: inv.due_date,
-        CurrencyCode: 'GBP',
+        // The invoice's own currency, not the org's. Xero rejects a currency
+        // the organisation has not added, and that rejection is the right
+        // outcome: a euro invoice posted as sterling would understate the
+        // debtor by the rate and nothing downstream would ever notice.
+        CurrencyCode: inv.currency ?? 'GBP',
         Status: 'AUTHORISED',
         LineAmountTypes: 'Exclusive',
         LineItems: lines.map((l) => ({
@@ -99,6 +103,8 @@ export async function syncPaymentStatus(): Promise<{ checked: number; paid: stri
 export function xeroCsv(
   invoices: {
     number: string; date: string; due_date: string; vat_rate: number;
+    /** Absent against a database without the currency migration; read as GBP. */
+    currency?: string | null;
     clients: { name: string; email: string | null };
     orders: { number: string };
     invoice_lines: { sku: string; name: string; qty: number; unit_price: number }[];
@@ -116,7 +122,7 @@ export function xeroCsv(
         inv.date, inv.due_date, l.sku, l.name, l.qty, Number(l.unit_price).toFixed(2),
         settings.xero_account_code,
         Number(inv.vat_rate) > 0 ? settings.tax_type_std : settings.tax_type_zero,
-        'GBP',
+        inv.currency ?? 'GBP',
       ]);
     }
   }

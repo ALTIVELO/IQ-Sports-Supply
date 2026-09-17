@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import { CURRENCY_SYMBOL, currencyOf } from '@/lib/format';
 
 /**
  * The dashboard's two charts, drawn as inline SVG.
@@ -25,14 +26,16 @@ export interface Bucket {
   orders: number; revenue: number; cost: number; profit: number;
 }
 
-const money = (n: number) =>
-  `£${n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (n: number, currency: string) =>
+  `${CURRENCY_SYMBOL[currencyOf(currency)]}`
+  + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** £4,200 on an axis is noise; £4.2k is the number. */
-function compact(n: number) {
-  if (n >= 1_000_000) return `£${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}m`;
-  if (n >= 1_000) return `£${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
-  return `£${Math.round(n)}`;
+function compact(n: number, currency: string) {
+  const sym = CURRENCY_SYMBOL[currencyOf(currency)];
+  if (n >= 1_000_000) return `${sym}${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}m`;
+  if (n >= 1_000) return `${sym}${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  return `${sym}${Math.round(n)}`;
 }
 
 /** The multiples of a power of ten that read as a deliberate axis step. */
@@ -146,7 +149,9 @@ function Row({ colour, name, value }: { colour?: string; name: string; value: st
   );
 }
 
-export function SalesChart({ data }: { data: Bucket[] }) {
+export function SalesChart({ data, currency = 'GBP' }: {
+  data: Bucket[]; currency?: string;
+}) {
   const [active, setActive] = useState<number | null>(null);
   const clip = useId();
   const height = 260;
@@ -171,9 +176,9 @@ export function SalesChart({ data }: { data: Bucket[] }) {
       tooltip={hot && (
         <>
           <div className="font-semibold mb-1">{hot.label}</div>
-          <Row name="revenue" value={money(hot.revenue)} />
-          <Row colour={PROFIT_FILL} name="profit" value={money(hot.profit)} />
-          <Row colour={COST_FILL} name="to supplier" value={money(hot.cost)} />
+          <Row name="revenue" value={money(hot.revenue, currency)} />
+          <Row colour={PROFIT_FILL} name="profit" value={money(hot.profit, currency)} />
+          <Row colour={COST_FILL} name="to supplier" value={money(hot.cost, currency)} />
           <Row name={hot.orders === 1 ? 'order' : 'orders'} value={String(hot.orders)} />
         </>
       )}
@@ -194,7 +199,7 @@ export function SalesChart({ data }: { data: Bucket[] }) {
             x={PAD.left - 8} y={y(t) + 4} textAnchor="end"
             fontSize={11} fill={AXIS_TEXT} className="num"
           >
-            {compact(t)}
+            {compact(t, currency)}
           </text>
         </g>
       ))}
@@ -234,7 +239,7 @@ export function SalesChart({ data }: { data: Bucket[] }) {
           x={g.x(peak) + g.barW / 2} y={y(data[peak].revenue) - 7}
           textAnchor="middle" fontSize={11} fontWeight={600} fill="#121619" className="num"
         >
-          {compact(data[peak].revenue)}
+          {compact(data[peak].revenue, currency)}
         </text>
       )}
 
@@ -253,8 +258,8 @@ export function SalesChart({ data }: { data: Bucket[] }) {
       ) : null))}
 
       <Hits data={data} g={g} height={height} onActive={setActive}
-            describe={(d) => `${d.label}: revenue ${money(d.revenue)}, `
-              + `profit ${money(d.profit)}, ${d.orders} orders`} />
+            describe={(d) => `${d.label}: revenue ${money(d.revenue, currency)}, `
+              + `profit ${money(d.profit, currency)}, ${d.orders} orders`} />
     </Frame>
   );
 }

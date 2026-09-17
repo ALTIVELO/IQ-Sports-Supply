@@ -10,6 +10,7 @@ rm -rf .test-build
 # tree.ts imports a type from a Next page; the emit is still correct.
 $TSC src/lib/catalogue/*.ts --outDir .test-build/catalogue >/dev/null 2>&1
 $TSC src/lib/app-url.ts     --outDir .test-build/lib       >/dev/null 2>&1
+$TSC src/lib/format.ts      --outDir .test-build/lib       >/dev/null 2>&1
 $TSC src/lib/login/*.ts     --outDir .test-build/login     >/dev/null 2>&1
 $TSC src/lib/import/*.ts    --outDir .test-build/import    >/dev/null 2>&1
 $TSC src/lib/reporting/*.ts --outDir .test-build/reporting >/dev/null 2>&1
@@ -22,6 +23,13 @@ $TSC src/app/staff/dashboard/Charts.tsx --jsx react-jsx \
 # specifiers is safe and keeps the source free of build-shaped imports.
 find .test-build -name '*.js' -print0 |
   xargs -0 sed -i -E "s#(from '\\.[^']*)'#\\1.js'#g"
+
+# Next resolves "@/lib/x" through tsconfig paths; Node does not. Everything
+# compiled here lands one directory below .test-build, so the alias is the
+# same relative hop every time. Done after the rule above so the specifier it
+# writes is not then given a second .js.
+find .test-build -name '*.js' -print0 |
+  xargs -0 sed -i -E "s#from '@/lib/([a-z-]+)'#from '../lib/\\1.js'#g"
 
 fail=0
 for f in tests/unit/*.test.mjs; do

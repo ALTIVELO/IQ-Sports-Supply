@@ -23,6 +23,7 @@ interface Inv {
 }
 export interface OrderData {
   id: string; number: string; date: string; status: string; notes: string | null;
+  currency: string;
   cancelled_reason: string | null;
   clients: { id: string; name: string };
   locations: { name: string } | null;
@@ -124,15 +125,17 @@ export default function OrderRow({ order, products, costOf, canAmend, canDelete 
         ))}
         <span className="num ml-auto text-[13px] flex items-baseline gap-3">
           <span className="font-semibold">
-            <Money value={total} /> <span className="text-mute font-normal">net</span>
+            <Money value={total} currency={order.currency} />{' '}
+            <span className="text-mute font-normal">net</span>
           </span>
           {costed.length > 0 && (
             <>
               <span className="text-mute">
-                <Money value={supplier} /> <span className="font-normal">to supplier</span>
+                <Money value={supplier} currency={order.currency} />{' '}
+                <span className="font-normal">to supplier</span>
               </span>
               <span className={profit >= 0 ? 'text-success font-semibold' : 'text-danger font-semibold'}>
-                <Money value={profit} />{' '}
+                <Money value={profit} currency={order.currency} />{' '}
                 <span className="font-normal">({marginPct.toFixed(0)}%)</span>
               </span>
             </>
@@ -168,16 +171,19 @@ export default function OrderRow({ order, products, costOf, canAmend, canDelete 
                         {l.bo_qty || '—'}
                       </td>
                       <td className="num text-right text-mute">{l.po_qty || '—'}</td>
-                      <td className="num text-right"><Money value={Number(l.unit_price)} /></td>
+                      <td className="num text-right">
+                        <Money value={Number(l.unit_price)} currency={order.currency} />
+                      </td>
                       <td className="num text-right text-mute">
                         {costOf[l.id] === undefined
-                          ? '—' : <Money value={costOf[l.id]} />}
+                          ? '—' : <Money value={costOf[l.id]} currency={order.currency} />}
                       </td>
                       <td className="num text-right">
                         {costOf[l.id] === undefined ? (
                           <span className="text-mute">—</span>
                         ) : (
-                          <LineMargin price={Number(l.unit_price)} cost={costOf[l.id]} qty={l.qty} />
+                          <LineMargin price={Number(l.unit_price)} cost={costOf[l.id]}
+                                      qty={l.qty} currency={order.currency} />
                         )}
                       </td>
                     </tr>
@@ -578,12 +584,14 @@ function MarkPaid({ invoices, pending, onSave, onCancel }: {
 }
 
 /** What one line earns, in money and as a share of what it sold for. */
-function LineMargin({ price, cost, qty }: { price: number; cost: number; qty: number }) {
+function LineMargin({ price, cost, qty, currency }: {
+  price: number; cost: number; qty: number; currency: string;
+}) {
   const profit = (price - cost) * qty;
   const pct = price > 0 ? ((price - cost) / price) * 100 : 0;
   return (
     <span className={profit >= 0 ? '' : 'text-danger font-semibold'}>
-      <Money value={profit} />
+      <Money value={profit} currency={currency} />
       <span className="text-mute font-normal"> {pct.toFixed(0)}%</span>
     </span>
   );

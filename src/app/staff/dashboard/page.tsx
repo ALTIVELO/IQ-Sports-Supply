@@ -49,19 +49,28 @@ function bucketLabel(day: string, grain: Grain) {
  */
 export default async function DashboardPage({
   searchParams,
-}: { searchParams: Promise<{ period?: string }> }) {
+}: { searchParams: Promise<{ period?: string; currency?: string }> }) {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
 
-  const { period } = await searchParams;
+  const { period, currency } = await searchParams;
   const key = isPeriodKey(period) ? period : '30d';
   const p = resolvePeriod(key, new Date().toISOString().slice(0, 10));
 
+  // Which currencies there is anything to report on at all. A business that
+  // only ever sells in pounds gets no control and no choice to make; one that
+  // sells in two gets one report per currency, never a sum of both.
+  const { data: sold } = await sb.rpc('sold_currencies');
+  const currencies = ((sold ?? []) as { currency: string }[]).map((r) => r.currency);
+  if (!currencies.length) currencies.push('GBP');
+  const money = currency && currencies.includes(currency) ? currency : currencies[0];
+
   const [nowRes, beforeRes, seriesRes, clientsRes] = await Promise.all([
-    sb.rpc('sales_totals', { p_from: p.from, p_to: p.to }),
-    sb.rpc('sales_totals', { p_from: p.previousFrom, p_to: p.previousTo }),
-    sb.rpc('sales_over_time', { p_from: p.from, p_to: p.to, p_grain: p.grain }),
-    sb.rpc('top_clients', { p_from: p.from, p_to: p.to, p_limit: 6 }),
+    sb.rpc('sales_totals', { p_from: p.from, p_to: p.to, p_currency: money }),
+    sb.rpc('sales_totals', { p_from: p.previousFrom, p_to: p.previousTo, p_currency: money }),
+    sb.rpc('sales_over_time',
+           { p_from: p.from, p_to: p.to, p_grain: p.grain, p_currency: money }),
+    sb.rpc('top_clients', { p_from: p.from, p_to: p.to, p_limit: 6, p_currency: money }),
   ]);
 
   const buckets: Bucket[] = ((seriesRes.data ?? []) as BucketRow[]).map((r) => ({
@@ -80,6 +89,8 @@ export default async function DashboardPage({
 
   const data: DashboardData = {
     period: key,
+    currency: money,
+    currencies,
     description: p.description,
     previousLabel: p.previousLabel,
     now: totals((nowRes.data ?? [])[0] as TotalsRow | undefined),

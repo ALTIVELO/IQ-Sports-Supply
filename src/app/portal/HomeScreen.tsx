@@ -4,7 +4,7 @@ import { fmtDate } from '@/lib/format';
 import ProductImage from '@/components/ProductImage';
 
 export interface HomeOrder {
-  id: string; number: string; date: string; status: string;
+  id: string; number: string; date: string; status: string; currency: string;
   order_lines: { id: string; qty: number; unit_price: number }[];
   invoices: { id: string; shipped: boolean; delivered: boolean; superseded: boolean }[];
 }
@@ -22,7 +22,8 @@ export interface HomeData {
   clientName: string;
   tier: string | null;
   productCount: number;
-  outstanding: number;
+  /** What is owed, per currency. Empty when nothing is. */
+  outstanding: { currency: string; value: number }[];
   dueCount: number;
   overdueCount: number;
   earliestOverdue: string | null;
@@ -90,7 +91,16 @@ export default function HomeScreen({ data }: { data: HomeData }) {
         <Summary
           href="/portal/invoices"
           label="Outstanding"
-          value={<Money value={data.outstanding} />}
+          value={data.outstanding.length
+            ? <>
+                {data.outstanding.map((o, n) => (
+                  <span key={o.currency}>
+                    {n > 0 ? <span className="text-mute text-[13px]"> · </span> : ''}
+                    <Money value={o.value} currency={o.currency} />
+                  </span>
+                ))}
+              </>
+            : <Money value={0} />}
           note={`${data.dueCount} invoice${data.dueCount === 1 ? '' : 's'} `
               + 'awaiting payment, inc VAT'}
         />
@@ -166,7 +176,7 @@ export default function HomeScreen({ data }: { data: HomeData }) {
                       <td className="num whitespace-nowrap">{fmtDate(o.date)}</td>
                       <td className="num text-right">{o.order_lines.length}</td>
                       <td className={`num text-right ${cancelled ? 'line-through' : ''}`}>
-                        <Money value={net} />
+                        <Money value={net} currency={o.currency} />
                       </td>
                       <td>
                         {cancelled

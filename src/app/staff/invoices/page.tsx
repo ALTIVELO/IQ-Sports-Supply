@@ -15,7 +15,7 @@ export default async function InvoicesPage({
 
   let query = sb
     .from('invoices')
-    .select(`id, number, type, date, due_date, vat_rate, paid, paid_date, packed, shipped,
+    .select(`id, number, type, date, due_date, vat_rate, currency, paid, paid_date, packed, shipped,
              ready_to_pack, superseded, xero_id, xero_status, xero_error, exported,
              clients(name), orders(number), invoice_lines(qty, unit_price)`)
     .order('date', { ascending: false })

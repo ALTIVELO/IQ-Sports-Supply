@@ -30,7 +30,7 @@ export default function ProductRow({ product }: { product: CatalogueItem }) {
         </div>
 
         <div className="num text-[15px] font-semibold w-[90px] text-right">
-          <Money value={Number(product.price)} />
+          <Money value={Number(product.price)} currency={product.currency} />
         </div>
 
         <div className="flex items-center gap-1">

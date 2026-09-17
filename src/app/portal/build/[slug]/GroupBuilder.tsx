@@ -9,7 +9,7 @@ import { useCart } from '../../CartContext';
 export interface GroupOption {
   option_id: string; step_id: string; product_id: string;
   label: string; sort: number; sku: string;
-  price: number; in_stock: boolean; image_url: string | null;
+  price: number; currency: string; in_stock: boolean; image_url: string | null;
   axis1_value: string | null; axis2_value: string | null;
 }
 
@@ -62,6 +62,11 @@ export default function GroupBuilder({
   const missing = steps.filter((s) => s.required && !chosen[s.id]);
   const net = picked.reduce((a, p) => a + Number(p.option.price) * p.step.qty, 0) * qty;
   const vat = (net * vatRate) / 100;
+  // A build is one supplier's parts, so one currency. Taking it from what is
+  // actually picked rather than from the group means a build that somehow
+  // spans two says so in the basket rather than here, where there is nothing
+  // useful to do about it.
+  const currency = picked[0]?.option.currency ?? 'GBP';
 
   function addAll() {
     for (const p of picked) add(p.option.product_id, p.step.qty * qty);
@@ -143,7 +148,8 @@ export default function GroupBuilder({
               <span className="font-medium">{step.options[0].label}</span>
               <span className="num text-[11px] text-mute">{step.options[0].sku}</span>
               <span className="num text-mute ml-auto">
-                <Money value={Number(step.options[0].price)} />
+                <Money value={Number(step.options[0].price)}
+                       currency={step.options[0].currency} />
               </span>
             </div>
           ) : (
@@ -166,7 +172,7 @@ export default function GroupBuilder({
                       <span className="num block text-[11px] text-mute">{o.sku}</span>
                       <span className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="num text-[13px] font-semibold">
-                          <Money value={Number(o.price)} />
+                          <Money value={Number(o.price)} currency={o.currency} />
                         </span>
                       </span>
                     </span>
@@ -209,13 +215,14 @@ export default function GroupBuilder({
                   <span className="text-mute w-[88px] flex-shrink-0">{step.name}</span>
                   <span className="flex-1 min-w-0 font-medium">{option.label}</span>
                   <span className="num font-semibold">
-                    <Money value={step.qty * qty * Number(option.price)} />
+                    <Money value={step.qty * qty * Number(option.price)}
+                           currency={option.currency} />
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-x-3 text-[11px] text-mute sm:pl-[96px]">
                   <span className="num">{option.sku}</span>
                   <span className="num">
-                    {step.qty * qty} × <Money value={Number(option.price)} />
+                    {step.qty * qty} × <Money value={Number(option.price)} currency={option.currency} />
                   </span>
                 </div>
               </div>
@@ -243,11 +250,11 @@ export default function GroupBuilder({
             />
           </label>
           <div className="num text-[13px] text-mute text-right">
-            <div>Net <Money value={net} /></div>
-            {vatRate > 0 && <div>VAT ({vatRate}%) <Money value={vat} /></div>}
+            <div>Net <Money value={net} currency={currency} /></div>
+            {vatRate > 0 && <div>VAT ({vatRate}%) <Money value={vat} currency={currency} /></div>}
           </div>
           <div className="num text-[24px] font-semibold tracking-[-0.02em]">
-            <Money value={net + vat} />
+            <Money value={net + vat} currency={currency} />
           </div>
           <Button kind="accent" onClick={addAll} disabled={missing.length > 0 || !picked.length}>
             Add to basket
@@ -337,7 +344,7 @@ function AxisPicker({ step, chosenId, onChoose }: {
           <span className="font-semibold">{current.label}</span>
           <span className="num text-[11px] text-mute">{current.sku}</span>
           <span className="num font-semibold ml-auto">
-            <Money value={Number(current.price)} />
+            <Money value={Number(current.price)} currency={current.currency} />
           </span>
         </div>
       ) : (

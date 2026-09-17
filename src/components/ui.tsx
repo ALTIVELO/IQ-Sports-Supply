@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { CURRENCY_SYMBOL, currencyOf } from '@/lib/format';
 
 /* The prototype's visual language, as reusable pieces. */
 
@@ -96,10 +97,21 @@ export function Empty({ children }: { children: React.ReactNode }) {
   return <div className="text-[13px] text-mute">{children}</div>;
 }
 
-export function Money({ value, className = '' }: { value: number; className?: string }) {
+/**
+ * A figure with the money it is in.
+ *
+ * `currency` defaults to sterling, so every screen that only ever deals in
+ * pounds stays as it was. Anywhere a euro price can reach, the code is passed
+ * through from the row it came from — a price rendered without its currency is
+ * a price that will eventually be read as the wrong one.
+ */
+export function Money({ value, currency = 'GBP', className = '' }: {
+  value: number; currency?: string | null; className?: string;
+}) {
   return (
     <span className={`num ${className}`}>
-      £{value.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      {CURRENCY_SYMBOL[currencyOf(currency)]}
+      {value.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </span>
   );
 }

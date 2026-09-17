@@ -8,6 +8,8 @@ import type { ActionResult } from '../actions';
 export async function saveProduct(input: {
   id?: string; sku: string; name: string; brand: string;
   prices: Record<string, string>; cost?: string; effectiveFrom: string;
+  /** GBP or EUR. Anything else is refused rather than quietly made sterling. */
+  currency?: string;
 }): Promise<ActionResult> {
   await requireStaff();
   const sb = await supabaseServer();
@@ -15,6 +17,15 @@ export async function saveProduct(input: {
   const sku = input.sku.trim();
   const name = input.name.trim();
   if (!sku || !name) return { ok: false, error: 'SKU and product name are both required' };
+
+  // Undefined means "leave it alone", not "make it sterling": a caller that
+  // does not know about currency must never re-denominate a euro product by
+  // omission, which would move every price on it by the rate without touching
+  // a single figure.
+  const currency = input.currency?.trim().toUpperCase() || undefined;
+  if (currency && currency !== 'GBP' && currency !== 'EUR') {
+    return { ok: false, error: `${input.currency} is not a currency we hold` };
+  }
 
   let productId = input.id;
   let revived = false;
@@ -41,13 +52,15 @@ export async function saveProduct(input: {
     const { error } = await sb.from('products')
       .update({
         sku, name, brand: input.brand.trim() || null,
+        ...(currency ? { currency } : {}),
         ...(revived ? { active: true } : {}),
       })
       .eq('id', productId);
     if (error) return { ok: false, error: error.message };
   } else {
     const { data, error } = await sb.from('products')
-      .insert({ sku, name, brand: input.brand.trim() || null }).select('id').single();
+      .insert({ sku, name, brand: input.brand.trim() || null, currency: currency ?? 'GBP' })
+      .select('id').single();
     if (error) return { ok: false, error: error.message };
     productId = data.id;
   }

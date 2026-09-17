@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
-import { fmtDate, today } from '@/lib/format';
+import { CURRENCY_SYMBOL, currencyOf, fmtDate, money, today } from '@/lib/format';
 import { saveProduct, setProductActive, deleteProducts } from './actions';
 import { setStock, createTransfer, receiveTransfer } from '../actions';
 import { categoriseUncategorised, setProductCategory } from '../import/actions';
@@ -12,6 +12,8 @@ import ImageCell from './ImageCell';
 interface Product {
   id: string; sku: string; name: string; brand: string | null;
   active: boolean; category_id: string | null; image_url: string | null;
+  /** The money this product's cost and every tier price are quoted in. */
+  currency: string;
 }
 interface Named { id: string; name: string }
 interface CategoryOption {
@@ -92,16 +94,18 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
   const [effectiveFrom, setEffectiveFrom] = useState(today());
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [cost, setCost] = useState('');
+  const [currency, setCurrency] = useState('GBP');
   const [pending, startTransition] = useTransition();
 
   function submit() {
     startTransition(async () => {
-      const r = await saveProduct({ sku, name, brand, prices, cost, effectiveFrom });
+      const r = await saveProduct({ sku, name, brand, prices, cost, effectiveFrom, currency });
       onMessage(r.ok
         ? { tone: 'success', text: r.message ?? 'Saved' }
         : { tone: 'error', text: r.error ?? 'Could not save' });
       if (r.ok) {
-        setSku(''); setName(''); setBrand(''); setPrices({}); setCost(''); setOpen(false);
+        setSku(''); setName(''); setBrand(''); setPrices({}); setCost('');
+        setCurrency('GBP'); setOpen(false);
       }
     });
   }
@@ -112,10 +116,17 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
 
   return (
     <Card accent className="space-y-3">
-      <div className="grid sm:grid-cols-[140px_1fr_140px_150px] gap-2">
+      <div className="grid sm:grid-cols-[140px_1fr_140px_90px_150px] gap-2">
         <input placeholder="SKU" value={sku} onChange={(e) => setSku(e.target.value)} />
         <input placeholder="Product name" value={name} onChange={(e) => setName(e.target.value)} />
         <input placeholder="Brand" value={brand} onChange={(e) => setBrand(e.target.value)} />
+        {/* Every figure below is in this, cost and tiers alike. Nothing is
+            converted anywhere — the currency travels with the price. */}
+        <select value={currency} onChange={(e) => setCurrency(e.target.value)}
+                aria-label="Currency">
+          <option value="GBP">£ GBP</option>
+          <option value="EUR">€ EUR</option>
+        </select>
         <label className="text-[11px] text-mute">
           Prices effective from
           <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
@@ -125,13 +136,14 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
            style={{ gridTemplateColumns: `repeat(${tiers.length + 1}, minmax(0,1fr))` }}>
         <input
           type="number" step="0.01" min={0} className="num"
-          placeholder="Our cost £" value={cost}
+          placeholder={`Our cost ${CURRENCY_SYMBOL[currencyOf(currency)]}`} value={cost}
           onChange={(e) => setCost(e.target.value)}
         />
         {tiers.map((t) => (
           <input
             key={t.id} type="number" step="0.01" min={0} className="num"
-            placeholder={`${t.name} £`} value={prices[t.id] ?? ''}
+            placeholder={`${t.name} ${CURRENCY_SYMBOL[currencyOf(currency)]}`}
+            value={prices[t.id] ?? ''}
             onChange={(e) => setPrices((p) => ({ ...p, [t.id]: e.target.value }))}
           />
         ))}
@@ -391,7 +403,8 @@ function StockMatrix({
                   })}
                   <td className="num text-right font-semibold">{total}</td>
                   <td className="num text-right text-mute">
-                    {costs[p.id] != null ? <Money value={costs[p.id]} /> : '—'}
+                    {costs[p.id] != null
+                      ? <Money value={costs[p.id]} currency={p.currency} /> : '—'}
                   </td>
                   {tiers.map((t) => {
                     const price = prices[p.id]?.[t.id];
@@ -403,9 +416,10 @@ function StockMatrix({
                       <td
                         key={t.id}
                         className={`num text-right ${atALoss ? 'text-danger font-semibold' : ''}`}
-                        title={atALoss ? `At or below the ${'\u00A3'}${cost.toFixed(2)} we pay` : undefined}
+                        title={atALoss
+                          ? `At or below the ${money(cost, p.currency)} we pay` : undefined}
                       >
-                        {price != null ? <Money value={price} /> : '—'}
+                        {price != null ? <Money value={price} currency={p.currency} /> : '—'}
                       </td>
                     );
                   })}

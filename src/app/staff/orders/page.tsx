@@ -14,7 +14,7 @@ export default async function OrdersPage({
 
   let query = sb
     .from('orders')
-    .select(`id, number, date, status, notes,
+    .select(`id, number, date, status, notes, currency,
              clients(id, name), locations(name),
              cancelled_reason,
              order_lines(id, product_id, sku, name, qty, unit_price, alloc_qty, bo_qty, po_qty),

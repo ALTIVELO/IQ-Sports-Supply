@@ -56,6 +56,7 @@ const FIXED_FIELDS: Record<ImportScope, Field[]> = {
     { key: 'brand', label: 'Brand', required: false },
     { key: 'category', label: 'Category', required: false },
     { key: 'image_url', label: 'Image URL', required: false },
+    { key: 'currency', label: 'Currency', required: false },
     { key: 'cost', label: 'Our cost', required: false },
   ],
   clients: [
@@ -241,6 +242,7 @@ export default function ImportScreen({
             brand: r.brand ?? '',
             category: r.category ?? '',
             image_url: r.image_url ?? '',
+            currency: r.currency ?? '',
             cost: r.cost ? toNumber(r.cost) : undefined,
             prices,
           };
@@ -550,6 +552,10 @@ function PreviewCards({ preview }: { preview: CataloguePreview }) {
 
       {preview.withdrawn.length > 0 && <Withdrawn withdrawn={preview.withdrawn} />}
 
+      {preview.currencyChanges.length > 0 && (
+        <Redenominated changes={preview.currencyChanges} />
+      )}
+
       {preview.newSkus.length > 0 && (
         <Card>
           <Bucket title={`New SKUs to be created (${preview.newSkus.length})`}>
@@ -613,6 +619,41 @@ function Withdrawn({ withdrawn }: { withdrawn: { sku: string; name: string }[] }
 }
 
 /**
+ * Products this file would move to a different currency.
+ *
+ * Worth a card of its own because nothing is converted: £1,200 becomes €1,200,
+ * the same figure under a different symbol. That is exactly right the first
+ * time a supplier's own list arrives in their money, and a several-thousand
+ * pound error if the column was pointed at the wrong thing — and either way
+ * the preview above shows only the numbers, which do not change.
+ */
+function Redenominated({ changes }: {
+  changes: { sku: string; name: string; from: string; to: string }[];
+}) {
+  const one = changes.length === 1;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center gap-3 mb-2">
+        <Tag tone="red">Currency</Tag>
+        <span className="text-[12px]">
+          <strong>{changes.length}</strong> product{one ? '' : 's'} would change currency
+        </span>
+      </div>
+      <p className="text-[12px] text-mute mb-2 max-w-3xl">
+        Nothing is converted. The figures stay as they are and the symbol in front
+        of them changes, so a price reading £1,200 today reads €1,200 afterwards.
+        Check this is a list in the supplier&rsquo;s own money and not a column
+        mapped by mistake.
+      </p>
+      <p className="text-[12px] num">
+        {changes.slice(0, 40).map((c) => `${c.sku} ${c.from}→${c.to}`).join(' · ')}
+        {changes.length > 40 ? ` … and ${changes.length - 40} more` : ''}
+      </p>
+    </Card>
+  );
+}
+
+/**
  * What we would be paying, and — the part worth stopping for — anything this
  * file would have us selling at or below what it costs us.
  */
@@ -652,9 +693,11 @@ function CostCard({ costs }: { costs: CostPreview }) {
                     <td className="num font-semibold">{b.sku}</td>
                     <td>{b.name}</td>
                     <td>{b.tierName}</td>
-                    <td className="num text-right"><Money value={b.cost} /></td>
+                    <td className="num text-right">
+                      <Money value={b.cost} currency={b.currency} />
+                    </td>
                     <td className="num text-right text-danger font-semibold">
-                      <Money value={b.price} />
+                      <Money value={b.price} currency={b.currency} />
                     </td>
                   </tr>
                 ))}
@@ -717,8 +760,12 @@ function ChangeTable({ title, changes }: {
               <tr key={c.sku} className={c.suspicious ? 'bg-[#FDF2F0]' : ''}>
                 <td className="num font-semibold">{c.sku}</td>
                 <td>{c.name}</td>
-                <td className="num text-right text-mute"><Money value={c.oldPrice} /></td>
-                <td className="num text-right font-semibold"><Money value={c.newPrice} /></td>
+                <td className="num text-right text-mute">
+                  <Money value={c.oldPrice} currency={c.currency} />
+                </td>
+                <td className="num text-right font-semibold">
+                  <Money value={c.newPrice} currency={c.currency} />
+                </td>
                 <td className={`num text-right ${c.suspicious ? 'text-danger font-semibold' : 'text-mute'}`}>
                   {c.deltaPct > 0 ? '+' : ''}{c.deltaPct.toFixed(1)}%
                   {c.suspicious && ' ⚠'}

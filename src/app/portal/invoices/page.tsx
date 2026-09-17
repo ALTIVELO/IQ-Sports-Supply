@@ -12,7 +12,7 @@ export default async function Invoices() {
 
   const { data: invoices } = await sb
     .from('invoices')
-    .select(`id, number, type, date, due_date, vat_rate, paid, paid_date, superseded,
+    .select(`id, number, type, date, due_date, vat_rate, paid, paid_date, superseded, currency,
              orders(number), invoice_lines(qty, unit_price)`)
     .eq('client_id', user.clientId)
     .order('date', { ascending: false })
@@ -30,10 +30,18 @@ export default async function Invoices() {
   // A proforma asks for nothing and a credit note is money the other way, so
   // neither belongs in what this client owes. Counting a proforma here would
   // bill them twice for the same goods once the real invoice follows.
-  const outstanding = owed
-    .filter((i) => !i.paid && i.type !== 'proforma' && i.type !== 'credit')
-    .reduce((a, i) => a + gross(i), 0)
-    - owed.filter((i) => i.type === 'credit').reduce((a, i) => a + gross(i), 0);
+  //
+  // Per currency, because a euro invoice and a sterling one are two debts and
+  // adding them would state a balance that is owed to nobody. A client who has
+  // only ever been invoiced in one currency sees exactly what they saw before.
+  const balances = new Map<string, number>();
+  for (const i of owed) {
+    if (i.type === 'proforma') continue;
+    const code = i.currency ?? 'GBP';
+    const sign = i.type === 'credit' ? -1 : i.paid ? 0 : 1;
+    if (sign) balances.set(code, (balances.get(code) ?? 0) + sign * gross(i));
+  }
+  const outstanding = [...balances].filter(([, v]) => v > 0);
 
   const overdue = (i: { paid: boolean; due_date: string; type: string; superseded: boolean }) =>
     !i.superseded && !i.paid && i.type !== 'proforma' && i.type !== 'credit'
@@ -44,8 +52,18 @@ export default async function Invoices() {
       <div>
         <h1 className="text-[26px] font-semibold tracking-[-0.02em]">Invoices</h1>
         <p className="text-[13px] text-mute mt-1">
-          {outstanding > 0
-            ? <>Outstanding balance <span className="num font-semibold text-ink"><Money value={outstanding} /></span> including VAT.</>
+          {outstanding.length
+            ? <>
+                Outstanding balance{' '}
+                {outstanding.map(([code, value], n) => (
+                  <span key={code}>
+                    {n > 0 ? ' and ' : ''}
+                    <span className="num font-semibold text-ink">
+                      <Money value={value} currency={code} />
+                    </span>
+                  </span>
+                ))}{' '}including VAT.
+              </>
             : 'Nothing outstanding — thank you.'}
         </p>
       </div>
@@ -77,10 +95,12 @@ export default async function Invoices() {
                         {i.superseded || i.type === 'proforma' || i.type === 'credit'
                           ? '—' : fmtDate(i.due_date)}
                       </td>
-                      <td className="num text-right"><Money value={net} /></td>
+                      <td className="num text-right">
+                        <Money value={net} currency={i.currency} />
+                      </td>
                       <td className={`num text-right font-semibold
                                       ${i.superseded ? 'line-through' : ''}`}>
-                        <Money value={net * (1 + Number(i.vat_rate) / 100)} />
+                        <Money value={net * (1 + Number(i.vat_rate) / 100)} currency={i.currency} />
                       </td>
                       <td className="whitespace-nowrap">
                         {i.superseded

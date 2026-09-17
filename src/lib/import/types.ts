@@ -16,6 +16,13 @@ export interface CatalogueRow {
   /** A category slug or name given by the sheet, overriding the classifier. */
   category?: string;
   /**
+   * The money this row's cost and prices are quoted in. Absent where the sheet
+   * says nothing, which leaves an existing product's currency alone and makes
+   * a new one sterling — the assumption every list made before this column
+   * existed.
+   */
+  currency?: string;
+  /**
    * What this costs us. Absent where the sheet has no cost for this row; NaN
    * where it has something there that is not a number, which is an error and
    * is reported as one.
@@ -43,6 +50,8 @@ export interface HistoricOrderRow {
 export interface PriceChange {
   sku: string; name: string; oldPrice: number; newPrice: number;
   deltaPct: number;
+  /** What both figures are in, so a preview never shows a euro price as £. */
+  currency: string;
   /** Anything moving more than ±25% is flagged as a likely typo. */
   suspicious: boolean;
 }
@@ -63,7 +72,10 @@ export interface CostPreview {
   changed: PriceChange[];
   unchanged: number;
   /** Priced to a customer below what we pay — the one error worth stopping for. */
-  belowCost: { sku: string; name: string; tierName: string; price: number; cost: number }[];
+  belowCost: {
+    sku: string; name: string; tierName: string;
+    price: number; cost: number; currency: string;
+  }[];
 }
 
 export interface CataloguePreview {
@@ -79,6 +91,16 @@ export interface CataloguePreview {
    * import to land on silently: the prices go in, and the product stays gone.
    */
   withdrawn: { sku: string; name: string }[];
+  /**
+   * Products this file would re-denominate.
+   *
+   * Changing a product's currency does not convert anything: the number stays
+   * and the symbol in front of it changes, so £1,200 becomes €1,200. That is
+   * right when a list arrives in its supplier's own money for the first time
+   * and catastrophic when the column was mapped by mistake, so it is always
+   * listed and never silent.
+   */
+  currencyChanges: { sku: string; name: string; from: string; to: string }[];
   /** In the system but absent from the file — reported only, never deleted. */
   missing: { sku: string; name: string }[];
   invalid: { row: number; reason: string }[];
@@ -94,6 +116,8 @@ export interface CataloguePreview {
 export interface ColumnMapping {
   sku?: string; name?: string; brand?: string; image_url?: string;
   category?: string;
+  /** GBP or EUR, per row. */
+  currency?: string;
   /** What we pay our supplier. */
   cost?: string;
   email?: string; tier?: string; vat_no?: string; address?: string; phone?: string;

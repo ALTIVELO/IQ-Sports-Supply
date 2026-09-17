@@ -2,18 +2,18 @@ import { fmtDate, money, totals } from '@/lib/format';
 
 interface Line { sku: string; name: string; qty: number; unit_price: number }
 
-const table = (lines: Line[], withPrices: boolean) =>
+const table = (lines: Line[], withPrices: boolean, currency?: string) =>
   lines
     .map((l) =>
       withPrices
-        ? `  ${l.sku.padEnd(14)} ${String(l.qty).padStart(4)}  ${money(l.unit_price).padStart(10)}  ${l.name}`
+        ? `  ${l.sku.padEnd(14)} ${String(l.qty).padStart(4)}  ${money(l.unit_price, currency).padStart(10)}  ${l.name}`
         : `  ${l.sku.padEnd(14)} ${String(l.qty).padStart(4)}  ${l.name}`,
     )
     .join('\n');
 
 export function orderConfirmation(o: {
   company: string; clientName: string; orderNumber: string; invoiceNumber: string;
-  date: string; dueDate: string; vatRate: number; lines: Line[];
+  date: string; dueDate: string; vatRate: number; currency?: string; lines: Line[];
   backordered: { sku: string; name: string; qty: number }[];
   portalUrl: string;
 }) {
@@ -32,11 +32,11 @@ Invoice  ${o.invoiceNumber}
 Date     ${fmtDate(o.date)}
 Due      ${fmtDate(o.dueDate)}
 
-${table(o.lines, true)}
+${table(o.lines, true, o.currency)}
 
-  Net           ${money(net)}
-  VAT (${o.vatRate}%)   ${money(vat)}
-  Total         ${money(gross)}
+  Net           ${money(net, o.currency)}
+  VAT (${o.vatRate}%)   ${money(vat, o.currency)}
+  Total         ${money(gross, o.currency)}
 ${bo}
 The invoice PDF is attached. Your order will be dispatched once payment has
 been received; you can follow its progress at any time here:

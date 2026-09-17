@@ -12,7 +12,7 @@ import type { InvoiceType } from '@/lib/types';
 
 interface Inv {
   id: string; number: string; type: InvoiceType;
-  date: string; due_date: string; vat_rate: number;
+  date: string; due_date: string; vat_rate: number; currency: string;
   paid: boolean; paid_date: string | null; packed: boolean; shipped: boolean;
   superseded: boolean;
   xero_id: string | null; xero_status: 'not_synced' | 'synced' | 'error';
@@ -123,10 +123,13 @@ export default function InvoicesScreen({
                       </td>
                       <td className="num whitespace-nowrap">{fmtDate(inv.date)}</td>
                       <td className="num whitespace-nowrap">{fmtDate(inv.due_date)}</td>
-                      <td className="num text-right"><Money value={n} /></td>
+                      <td className="num text-right">
+                        <Money value={n} currency={inv.currency} />
+                      </td>
                       <td className={`num text-right font-semibold
                                       ${inv.superseded ? 'line-through' : ''}`}>
-                        <Money value={n * (1 + Number(inv.vat_rate) / 100)} />
+                        <Money value={n * (1 + Number(inv.vat_rate) / 100)}
+                               currency={inv.currency} />
                       </td>
                       <td className="whitespace-nowrap">
                         {inv.superseded

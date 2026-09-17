@@ -84,6 +84,10 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     date: inv.date,
     dueDate: inv.due_date,
     vatRate: Number(inv.vat_rate),
+    // Undefined against a database without the currency migration, which the
+    // formatter reads as sterling — the assumption every invoice raised before
+    // it was written under.
+    currency: inv.currency,
     lines: [...lines].sort((a, b) => a.sku.localeCompare(b.sku)),
     clientName: client.name,
     clientAddress: client.invoicing_address ?? client.address,
