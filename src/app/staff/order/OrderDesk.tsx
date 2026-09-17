@@ -7,7 +7,9 @@ import { placeOrder } from '../actions';
 import { totalsByCurrency } from '@/lib/orders/split';
 import CollectionPicker from '@/components/CollectionPicker';
 import { groupCollections, idsUnderSlug, type CategoryLite } from '@/lib/catalogue/collections';
-import type { DeskProduct } from './page';
+import { groupSizes } from '@/lib/catalogue/variants';
+import DeskBuild from './DeskBuild';
+import type { DeskProduct, DeskBuild as Build } from './page';
 
 interface ClientRow {
   id: string; name: string; tier_id: string; address: string | null;
@@ -23,15 +25,18 @@ interface DraftLine {
 }
 
 export default function OrderDesk({
-  clients, locations, tiers, products, categories, vatRate,
+  clients, locations, tiers, products, categories, builds, vatRate,
 }: {
   clients: ClientRow[]; locations: Named[]; tiers: Named[];
-  products: DeskProduct[]; categories: CategoryLite[]; vatRate: number;
+  products: DeskProduct[]; categories: CategoryLite[];
+  builds: Build[]; vatRate: number;
 }) {
   const [clientId, setClientId] = useState('');
   const [locationId, setLocationId] = useState('');
   const [query, setQuery] = useState('');
   const [collection, setCollection] = useState<string | null>(null);
+  const [openSizes, setOpenSizes] = useState<string | null>(null);
+  const [openBuild, setOpenBuild] = useState<string | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
   const [placed, setPlaced] = useState<{ id: string; warning?: string } | null>(null);
@@ -84,21 +89,55 @@ export default function OrderDesk({
         : products.filter((p) => p.category_id
             && idsUnderSlug(categories, collection).includes(p.category_id));
 
-    if (!term) return collection === null ? [] : inCollection.slice(0, 60);
-    return inCollection
-      .filter((p) => `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(term))
-      .slice(0, collection === null ? 8 : 60);
+    if (!term) return collection === null ? [] : inCollection;
+    // A size that matches brings its whole bike with it, so searching one
+    // frame's SKU still shows the range it belongs to.
+    const hit = inCollection
+      .filter((p) => `${p.sku} ${p.name} ${p.brand ?? ''}`.toLowerCase().includes(term));
+    const wanted = new Set(hit.map((p) => p.variant_group ?? p.id));
+    return inCollection.filter((p) => wanted.has(p.variant_group ?? p.id));
   }, [query, collection, products, categories]);
 
-  function addLine(p: DeskProduct) {
+  // One row per bike rather than one per frame: five sizes of a Storm filling
+  // the result list is the same problem the portal had, and worse here, where
+  // the list is a narrow column beside a phone call.
+  //
+  // Capped after grouping, not before, or a bike built in five sizes would eat
+  // five places in a list of eight.
+  const shelves = useMemo(
+    () => groupSizes(results).slice(0, collection === null && query.trim() ? 8 : 60),
+    [results, collection, query],
+  );
+
+  const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  /**
+   * The builds worth offering: those in the collection being browsed, or all
+   * of them when nothing is. A search matches a build by its own name, so
+   * typing "dura-ace" finds the builder rather than only the loose SKUs.
+   */
+  const offeredBuilds = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    const ids = collection && collection !== 'none'
+      ? idsUnderSlug(categories, collection) : null;
+    return builds.filter((b) => {
+      if (ids && !(b.category_id && ids.includes(b.category_id))) return false;
+      if (collection === 'none' && b.category_id) return false;
+      if (term && !`${b.name} ${b.brand ?? ''}`.toLowerCase().includes(term)) return false;
+      return b.steps.length > 0;
+    });
+  }, [builds, collection, query, categories]);
+
+  /** Adds to an existing line rather than making a second one for the same SKU. */
+  function addLine(p: DeskProduct, add = 1) {
     setLines((ls) => {
       const existing = ls.find((l) => l.productId === p.id);
       if (existing) {
-        return ls.map((l) => (l.productId === p.id ? { ...l, qty: l.qty + 1 } : l));
+        return ls.map((l) => (l.productId === p.id ? { ...l, qty: l.qty + add } : l));
       }
       const price = priceFor(p);
       return [...ls, {
-        productId: p.id, sku: p.sku, name: p.name, qty: 1,
+        productId: p.id, sku: p.sku, name: p.name, qty: add,
         unitPrice: price, tierPrice: price, currency: p.currency,
       }];
     });
@@ -242,44 +281,126 @@ export default function OrderDesk({
             </div>
           )}
 
-          {collection && results.length === 0 && (
+          {/* Builds first: a groupset is specced, not picked off a shelf, and
+              the loose fixed-spec SKUs beneath are the thing it replaces. */}
+          {client && offeredBuilds.length > 0 && (
+            <div className="mt-2.5 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-mute uppercase tracking-wide mr-1">
+                  Build
+                </span>
+                {offeredBuilds.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => setOpenBuild(openBuild === b.id ? null : b.id)}
+                    className={`text-[12px] font-semibold rounded px-[10px] py-[5px] border
+                      whitespace-nowrap ${openBuild === b.id
+                        ? 'bg-flame text-ink border-flame'
+                        : 'bg-white border-line hover:bg-parch'}`}
+                  >
+                    {b.name}
+                    <span className="num font-normal opacity-60"> {b.steps.length} steps</span>
+                  </button>
+                ))}
+              </div>
+              {offeredBuilds
+                .filter((b) => b.id === openBuild)
+                .map((b) => (
+                  <DeskBuild
+                    key={b.id}
+                    build={b}
+                    products={byId}
+                    priceFor={priceFor}
+                    stockAt={stockAt}
+                    locationId={locationId}
+                    onAdd={(picks) => picks.forEach((x) => addLine(x.product, x.qty))}
+                    onClose={() => setOpenBuild(null)}
+                  />
+                ))}
+            </div>
+          )}
+
+          {collection && shelves.length === 0 && (
             <p className="text-[12px] text-mute mt-2">
               Nothing in this collection{query ? ' matches that search' : ' yet'}.
             </p>
           )}
 
-          {results.length > 0 && (
+          {shelves.length > 0 && (
             <div className={`border border-line rounded mt-1.5 overflow-hidden
                              ${collection ? 'max-h-[420px] overflow-y-auto' : ''}`}>
-              {results.map((p) => {
-                const here = stockAt(p, locationId);
-                const elsewhere = totalStock(p) - here;
+              {shelves.map((shelf) => {
+                const sized = shelf.sizes.length > 1;
+                const lead = shelf.lead;
+                const open = openSizes === shelf.key;
+                const rows = sized && open ? shelf.sizes : [];
+                const prices = shelf.sizes.map(priceFor);
+                const low = Math.min(...prices);
+                const high = Math.max(...prices);
+                const held = shelf.sizes.reduce((a, p) => a + stockAt(p, locationId), 0);
+
                 return (
-                  <button
-                    key={p.id}
-                    onClick={() => addLine(p)}
-                    className="flex w-full items-center gap-2.5 px-2.5 py-2 text-[13px] text-left border-b border-row-line last:border-b-0 hover:bg-parch"
-                  >
-                    <span className="num font-semibold min-w-[110px]">{p.sku}</span>
-                    <span className="flex-1 min-w-0 truncate">{p.name}</span>
-                    {/* The size, called out rather than left inside the name:
-                        it is the thing being picked off the shelf. */}
-                    {p.variant_label && (
-                      <span className="text-[11px] font-semibold border border-line rounded
-                                       px-[6px] py-[1px] whitespace-nowrap">
-                        {p.variant_label}
+                  <div key={shelf.key} className="border-b border-row-line last:border-b-0">
+                    <button
+                      onClick={() => (sized
+                        ? setOpenSizes(open ? null : shelf.key)
+                        : addLine(lead))}
+                      aria-expanded={sized ? open : undefined}
+                      className="flex w-full items-center gap-2.5 px-2.5 py-2 text-[13px]
+                                 text-left hover:bg-parch"
+                    >
+                      <span className="num font-semibold min-w-[110px]">
+                        {sized ? lead.sku.replace(/[-_ ]?[A-Za-z0-9]+$/, '') : lead.sku}
                       </span>
-                    )}
-                    <span className={`num text-[12px] ${here > 0 ? 'text-success' : 'text-danger'}`}>
-                      {here > 0 ? `${here} here` : 'back order'}
-                    </span>
-                    {elsewhere > 0 && (
-                      <span className="num text-[12px] text-mute">{elsewhere} elsewhere</span>
-                    )}
-                    <span className="num font-semibold">
-                      <Money value={priceFor(p)} currency={p.currency} />
-                    </span>
-                  </button>
+                      <span className="flex-1 min-w-0 truncate">
+                        {sized ? lead.name.split(' — ')[0] : lead.name}
+                      </span>
+                      {sized ? (
+                        <span className="text-[11px] text-mute whitespace-nowrap">
+                          {shelf.sizes.length} sizes ·{' '}
+                          {shelf.sizes.map((p) => p.variant_label).join(' ')}
+                        </span>
+                      ) : null}
+                      <span className={`num text-[12px] ${held > 0 ? 'text-success' : 'text-danger'}`}>
+                        {held > 0 ? `${held} here` : 'back order'}
+                      </span>
+                      <span className="num font-semibold whitespace-nowrap">
+                        {low !== high && <span className="text-[11px] text-mute">from </span>}
+                        <Money value={low} currency={lead.currency} />
+                      </span>
+                      {sized && (
+                        <span className="text-[11px] text-mute w-4 text-right">
+                          {open ? '▾' : '▸'}
+                        </span>
+                      )}
+                    </button>
+
+                    {rows.map((size) => {
+                      const here = stockAt(size, locationId);
+                      const elsewhere = totalStock(size) - here;
+                      return (
+                        <button
+                          key={size.id}
+                          onClick={() => addLine(size)}
+                          className="flex w-full items-center gap-2.5 pl-6 pr-2.5 py-1.5
+                                     text-[12px] text-left bg-parch/60 hover:bg-parch
+                                     border-t border-row-line"
+                        >
+                          <span className="font-semibold w-8">{size.variant_label}</span>
+                          <span className="num flex-1 min-w-0 truncate text-mute">{size.sku}</span>
+                          <span className={`num ${here > 0 ? 'text-success' : 'text-danger'}`}>
+                            {here > 0 ? `${here} here` : 'back order'}
+                          </span>
+                          {elsewhere > 0 && (
+                            <span className="num text-mute">{elsewhere} elsewhere</span>
+                          )}
+                          <span className="num font-semibold">
+                            <Money value={priceFor(size)} currency={size.currency} />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 );
               })}
             </div>

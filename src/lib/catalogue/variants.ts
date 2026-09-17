@@ -43,14 +43,50 @@ export function sizeRank(label: string | null): [number, number, string] {
   return [2, 0, text];
 }
 
+/** The least a row needs for this file to treat it as a size of something. */
+export interface Sized {
+  id: string;
+  variant_group: string | null;
+  variant_label: string | null;
+  variant_sort: number | null;
+}
+
 /** Where a size sits in its range: the import's own order first, then the scale. */
-function order(a: CatalogueItem, b: CatalogueItem): number {
+function order(a: Sized, b: Sized): number {
   if (a.variant_sort != null && b.variant_sort != null && a.variant_sort !== b.variant_sort) {
     return a.variant_sort - b.variant_sort;
   }
   const [ax, ay, at] = sizeRank(a.variant_label);
   const [bx, by, bt] = sizeRank(b.variant_label);
   return ax - bx || ay - by || at.localeCompare(bt);
+}
+
+/**
+ * Folds any list of rows carrying a variant group into one entry per bike.
+ *
+ * Generic because the staff order desk holds a different shape from the
+ * portal's catalogue — prices per tier and stock per site rather than one of
+ * each — and both need the sizes gathered the same way. Anything that depends
+ * on what a row actually is belongs to the caller.
+ */
+export function groupSizes<T extends Sized>(items: T[]): { key: string; lead: T; sizes: T[] }[] {
+  const groups: { key: string; lead: T; sizes: T[] }[] = [];
+  const index = new Map<string, { key: string; lead: T; sizes: T[] }>();
+
+  for (const item of items) {
+    const key = item.variant_group ?? item.id;
+    const existing = index.get(key);
+    if (existing) { existing.sizes.push(item); continue; }
+    const group = { key, lead: item, sizes: [item] };
+    index.set(key, group);
+    groups.push(group);
+  }
+
+  for (const g of groups) {
+    g.sizes.sort(order);
+    g.lead = g.sizes[0];
+  }
+  return groups;
 }
 
 /**
@@ -61,37 +97,19 @@ function order(a: CatalogueItem, b: CatalogueItem): number {
  * override whatever the screen asked the database for.
  */
 export function groupVariants(products: CatalogueItem[]): VariantGroup[] {
-  const groups: VariantGroup[] = [];
-  const index = new Map<string, VariantGroup>();
-
-  for (const p of products) {
-    const key = p.variant_group ?? p.id;
-    const existing = index.get(key);
-    if (existing) {
-      existing.sizes.push(p);
-      continue;
-    }
-    const group: VariantGroup = {
-      key, lead: p, sizes: [p], low: Number(p.price), high: Number(p.price),
-      inStock: p.in_stock,
-    };
-    index.set(key, group);
-    groups.push(group);
-  }
-
-  for (const g of groups) {
-    g.sizes.sort(order);
-    // The lead carries the picture and the name. Any size will do for those,
-    // but a size with a photo beats one without, and the first size named the
-    // bike before its range was known.
-    g.lead = g.sizes.find((s) => s.image_url) ?? g.sizes[0];
+  return groupSizes(products).map((g) => {
     const prices = g.sizes.map((s) => Number(s.price)).filter((n) => Number.isFinite(n));
-    g.low = prices.length ? Math.min(...prices) : 0;
-    g.high = prices.length ? Math.max(...prices) : 0;
-    g.inStock = g.sizes.some((s) => s.in_stock);
-  }
-
-  return groups;
+    return {
+      ...g,
+      // The lead carries the picture and the name. Any size will do for those,
+      // but a size with a photo beats one without, and the first size named the
+      // bike before its range was known.
+      lead: g.sizes.find((s) => s.image_url) ?? g.sizes[0],
+      low: prices.length ? Math.min(...prices) : 0,
+      high: prices.length ? Math.max(...prices) : 0,
+      inStock: g.sizes.some((s) => s.in_stock),
+    };
+  });
 }
 
 /** The name without the size on the end, for a bike whose rows are "X — M". */
