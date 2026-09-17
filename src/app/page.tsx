@@ -5,10 +5,11 @@ import { Wordmark, LogoGlyph } from '@/components/Logo';
 import { getSessionUser, isStaff } from '@/lib/auth';
 
 export const metadata: Metadata = {
-  title: 'IQ Sports Supply — Shimano components at trade prices',
+  title: 'IQ Sports Supply — the pro cycling team friendly distributor',
   description:
-    'Trade supply of Shimano road components and Di2 groupsets to shops, clubs and '
-    + 'distributors in the UK. Accounts are opened by application; pricing is set per account.',
+    'UK trade supply of components, bikes, clothing and tools to pro and elite teams, '
+    + 'bike shops, clubs and distributors. Accounts are opened by application; pricing '
+    + 'is set per account.',
 };
 
 /**
@@ -16,8 +17,12 @@ export const metadata: Metadata = {
  *
  * It sells the account, not the catalogue. Prices are set per customer and are
  * commercially confidential, so nothing priced appears here and nothing here
- * implies stock we have not committed to — every claim on this page is one the
- * business can stand behind on the phone.
+ * implies stock we have not committed to.
+ *
+ * The range is described by department rather than by brand. What we can
+ * source changes with the supplier arrangements behind it, and a homepage
+ * naming a manufacturer is a homepage that has to be rewritten every time one
+ * of those changes.
  */
 export default async function Home() {
   const user = await getSessionUser();
@@ -27,6 +32,7 @@ export default async function Home() {
     <main className="min-h-screen flex flex-col bg-white">
       <Header />
       <Hero />
+      <Teams />
       <Range />
       <HowItWorks />
       <Portal />
@@ -88,17 +94,22 @@ function Hero() {
             Trade supply · United Kingdom
           </div>
 
-          <h1 className="text-[40px] sm:text-[54px] font-semibold leading-[1.04]
+          <h1 className="text-[32px] sm:text-[46px] font-semibold leading-[1.06]
                          tracking-[-0.03em] mt-6">
-            Shimano components,
-            <br />
-            at your trade price.
+            {/* Placed breaks, but only where there is room for them: on a
+                phone the second line does not fit and the hard break would
+                leave "friendly" alone on a line of its own. */}
+            The world’s only
+            <br className="hidden sm:inline" />
+            {' '}pro cycling team friendly
+            <br className="hidden sm:inline" />
+            {' '}distributor.
           </h1>
 
           <p className="text-[15px] sm:text-[16px] text-[#C3D0DA] mt-6 leading-relaxed max-w-xl">
-            We supply Shimano road groupsets and componentry to bike shops, clubs and
-            distributors. Accounts are opened by application, priced to the account, and
-            everything after that runs through your own ordering portal.
+            Components, bikes, clothing and tools, supplied to teams, shops, clubs and
+            distributors across the UK. Accounts are opened by application, priced to the
+            account, and run the way a race programme actually needs them to be.
           </p>
 
           <div className="flex flex-wrap gap-3 mt-9">
@@ -123,30 +134,90 @@ function Hero() {
   );
 }
 
+
 /**
- * What we carry, said in the supplier's own vocabulary.
+ * The claim in the headline, unpacked.
  *
- * A buyer scanning this is checking whether we hold the group they fit, so the
- * series numbers matter more than the adjectives.
+ * Each of these is a thing the portal actually does — a rider-specific build,
+ * an address book, buying in against an order, a PDF the moment a document is
+ * raised — rather than a promise about how hard we will try.
  */
+const TEAM_POINTS = [
+  {
+    title: 'Built to the rider, not the box',
+    body: 'Crank length, chainring, cassette, rotors, wire lengths — specified on the '
+        + 'order and priced as one line, so a build for one rider is one line item and '
+        + 'not eleven.',
+  },
+  {
+    title: 'Ships where the race is',
+    body: 'Keep the service course, the shop and a race address on the same account, '
+        + 'and choose the one you need at checkout.',
+  },
+  {
+    title: 'Bought to your order',
+    body: 'We buy in against what you order, so what you can have is not limited to '
+        + 'what happens to be sitting on a shelf that week.',
+  },
+  {
+    title: 'Paperwork that keeps up',
+    body: 'Invoice, proforma or credit note, as a PDF the moment it is raised, on '
+        + 'account terms rather than a card at the counter.',
+  },
+];
+
+function Teams() {
+  return (
+    <section className="bg-white border-b border-line">
+      <div className="max-w-5xl mx-auto px-6 py-14 sm:py-20 grid lg:grid-cols-[1fr_1.15fr] gap-10">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-mute">
+            Why teams
+          </div>
+          <h2 className="text-[26px] sm:text-[32px] font-semibold tracking-[-0.025em]
+                         leading-tight mt-3">
+            The trade is built around shops. We built ours around teams.
+          </h2>
+          <p className="text-[14px] text-mute mt-4 leading-relaxed">
+            We built the account around the team first — the rider-by-rider builds, the
+            addresses that move with the calendar, the paperwork a soigneur should not
+            have to chase. Shops, clubs and distributors get the same account, and it
+            turns out they wanted it too.
+          </p>
+          <div className="w-12 h-[3px] bg-flame mt-7" aria-hidden />
+        </div>
+
+        <ul className="space-y-6">
+          {TEAM_POINTS.map((t) => (
+            <li key={t.title} className="border-l-2 border-line pl-4">
+              <h3 className="text-[14px] font-semibold">{t.title}</h3>
+              <p className="text-[13px] text-mute mt-1.5 leading-relaxed">{t.body}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+/** The four ways the catalogue divides, matching the departments inside it. */
 const RANGE = [
-  { name: 'Dura-Ace Di2 R9200', detail: 'Shifters, mechs, chainsets, cassettes, chains' },
-  { name: 'Ultegra Di2 R8100', detail: 'The full component set, in every crank length' },
-  { name: 'Power meter chainsets', detail: 'Dura-Ace and Ultegra, 50/34 through 54/40' },
-  { name: 'Disc rotors', detail: 'CL900, CL800, CL700 and SM series, 140–203mm' },
-  { name: 'Bottom brackets', detail: 'UN300, ES300, Hollowtech II and press-fit' },
-  { name: 'Brake pads', detail: 'Resin and metal, alloy and steel backed, bulk packs' },
+  { name: 'Components', detail: 'Parts, wheels and tyres, frames and forks' },
+  { name: 'Bikes', detail: 'Complete bicycles, road through to track' },
+  { name: 'Clothing', detail: 'Race kit, casual wear and helmets' },
+  { name: 'Tools', detail: 'Workshop tools, consumables and accessories' },
 ];
 
 function Range() {
   return (
     <Section
       eyebrow="The range"
-      title="Road groupsets and the parts that go with them"
-      lead="We are a Shimano house. The catalogue runs from a single bottom bracket to a
-            complete Di2 groupset built to the rider's cranks, rings and cassette."
+      title="Components, bikes, clothing and tools"
+      lead="Everything a workshop, a squad or a shop floor gets through in a season, on
+            one account and one invoice. What we can source is a conversation — if it is
+            not on the list yet, ask."
     >
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-line border border-line
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-px bg-line border border-line
                       rounded-card overflow-hidden mt-8">
         {RANGE.map((r) => (
           <div key={r.name} className="bg-white p-5">
@@ -222,7 +293,7 @@ const PORTAL = [
         + 'excluding VAT, with the VAT-inclusive figure beside it.',
   },
   {
-    title: 'Build a groupset to spec',
+    title: 'Build to the rider’s spec',
     body: 'Pick the crank length, chainring, cassette, rotors and wire lengths, and '
         + 'order the whole build as one line instead of eleven.',
   },
@@ -238,8 +309,8 @@ const PORTAL = [
   },
   {
     title: 'More than one address',
-    body: 'Keep your shop, your warehouse and a race address on the account, and pick '
-        + 'the one you want at checkout.',
+    body: 'Keep the shop, the warehouse, the service course and a race address on the '
+        + 'account, and pick the one you want at checkout.',
   },
   {
     title: 'Everything you have ever bought',
@@ -270,26 +341,31 @@ function Portal() {
 
 const AUDIENCES = [
   {
-    name: 'Bike shops',
-    body: 'Workshop consumables through to complete groupsets, on an account that '
-        + 'settles on terms rather than on the card every time.',
+    name: 'Pro & elite teams',
+    body: 'Rider-by-rider builds, kit for the whole squad, and an address book that '
+        + 'keeps up with the calendar.',
   },
   {
-    name: 'Clubs & elite teams',
-    body: 'Equip a squad from one account, with its own pricing and one invoice '
-        + 'per order rather than a pile of receipts.',
+    name: 'Clubs',
+    body: 'Equip a club from one account, with its own pricing and one invoice per '
+        + 'order rather than a pile of receipts.',
+  },
+  {
+    name: 'Bike shops',
+    body: 'Workshop consumables through to complete bikes, on an account that settles '
+        + 'on terms rather than on the card every time.',
   },
   {
     name: 'Distributors',
-    body: 'Volume pricing, and a catalogue that says plainly what we can supply '
-        + 'rather than making you ring to find out.',
+    body: 'Volume pricing, and a catalogue that says plainly what we can supply rather '
+        + 'than making you ring to find out.',
   },
 ];
 
 function WhoFor() {
   return (
     <Section eyebrow="Who we supply" title="Trade only">
-      <div className="grid sm:grid-cols-3 gap-6 mt-8">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
         {AUDIENCES.map((a) => (
           <div key={a.name} className="border border-line rounded-card p-5 bg-parch">
             <h3 className="text-[15px] font-semibold">{a.name}</h3>
