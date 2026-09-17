@@ -17,7 +17,7 @@ export default async function OrderHistory({
     .from('orders')
     .select(`id, number, date, status,
              order_lines(id, sku, name, qty, unit_price, bo_qty),
-             invoices(id, number, paid, shipped, superseded)`)
+             invoices(id, number, paid, shipped, delivered, superseded)`)
     .eq('client_id', user.clientId)
     .order('date', { ascending: false })
     .limit(300);
@@ -55,6 +55,7 @@ export default async function OrderHistory({
         filtered.map((o) => {
           const total = o.order_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
           const live = o.invoices.filter((i) => !i.superseded);
+          const allDelivered = live.length > 0 && live.every((i) => i.delivered);
           const allShipped = live.length > 0 && live.every((i) => i.shipped);
           const cancelled = o.status === 'cancelled';
 
@@ -70,9 +71,11 @@ export default async function OrderHistory({
                   {/* A cancelled order is neither delivered nor in progress. */}
                   {cancelled
                     ? <VoidTag>cancelled</VoidTag>
-                    : allShipped
+                    : allDelivered
                       ? <Tag tone="green">Delivered</Tag>
-                      : <Tag tone="line">In progress</Tag>}
+                      : allShipped
+                        ? <Tag tone="line">Shipped</Tag>
+                        : <Tag tone="line">In progress</Tag>}
                   <span className={`num ml-auto font-semibold ${cancelled ? 'line-through' : ''}`}>
                     <Money value={total} />
                   </span>
