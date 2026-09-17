@@ -109,6 +109,26 @@ ${o.company}`,
   };
 }
 
+export function deliveredNotice(o: {
+  company: string; orderNumber: string; invoiceNumber: string;
+  lines: { sku: string; name: string; qty: number }[]; portalUrl: string;
+}) {
+  return {
+    subject: `${o.company} — order ${o.orderNumber} delivered`,
+    body: `Your order has been delivered.
+
+Order     ${o.orderNumber}
+Invoice   ${o.invoiceNumber}
+
+${table(o.lines.map((l) => ({ ...l, unit_price: 0 })), false)}
+
+Full order history and invoices:
+  ${o.portalUrl}
+
+${o.company}`,
+  };
+}
+
 export function applicationNotice(a: {
   company: string; companyName: string; tradingName: string | null;
   contactName: string; email: string; phone: string | null;
