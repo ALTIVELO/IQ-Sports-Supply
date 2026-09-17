@@ -552,6 +552,10 @@ function PreviewCards({ preview }: { preview: CataloguePreview }) {
         </Notice>
       )}
 
+      {preview.notes.map((note) => (
+        <Notice tone="info" key={note}>{note}</Notice>
+      ))}
+
       {preview.costs && <CostCard costs={preview.costs} />}
 
       {preview.tiers.map((t) => <TierCard key={t.tierId} preview={t} />)}

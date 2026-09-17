@@ -24,7 +24,8 @@ export default function DeskBuild({
   build: DeskBuild;
   /** Product id → the catalogue row, for price, stock and SKU. */
   products: Map<string, DeskProduct>;
-  priceFor: (p: DeskProduct) => number;
+  /** Undefined where nothing prices the product on this client's tier. */
+  priceFor: (p: DeskProduct) => number | undefined;
   stockAt: (p: DeskProduct, locationId: string) => number;
   locationId: string;
   /** Called with one entry per component, quantities already multiplied. */
@@ -42,7 +43,11 @@ export default function DeskBuild({
   );
 
   const missing = missingSteps(build.steps, chosen);
-  const net = lines.reduce((a, l) => a + priceFor(l.product) * l.qty, 0);
+  // A component nobody has priced on this tier is not free, and a total that
+  // treats it as free is the one number here nobody would question. So it is
+  // named instead, and it blocks the build until it is priced or swapped.
+  const unpriced = lines.filter((l) => priceFor(l.product) === undefined);
+  const net = lines.reduce((a, l) => a + (priceFor(l.product) ?? 0) * l.qty, 0);
   const currency = lines[0]?.product.currency ?? 'GBP';
 
   // Every component of one build should be in one currency; if a catalogue
@@ -98,7 +103,9 @@ export default function DeskBuild({
                     {here > 0 ? `${here} here` : 'back order'}
                   </span>
                   <span className="num text-[12px] font-semibold w-[90px] text-right">
-                    <Money value={priceFor(product)} currency={product.currency} />
+                    {priceFor(product) === undefined
+                      ? <span className="text-danger font-normal">no price</span>
+                      : <Money value={priceFor(product)!} currency={product.currency} />}
                   </span>
                 </>
               )}
@@ -121,12 +128,14 @@ export default function DeskBuild({
             ? `Still to choose: ${missing.map((s) => s.name).join(', ')}`
             : `${lines.length} component${lines.length === 1 ? '' : 's'}`}
         </span>
-        <span className="num text-[16px] font-semibold ml-auto">
+        <span className={`num text-[16px] font-semibold ml-auto
+                          ${unpriced.length ? 'text-mute line-through' : ''}`}>
           <Money value={net} currency={currency} />
         </span>
         <Button
           small kind="accent"
-          disabled={missing.length > 0 || currencies.length > 1 || !lines.length}
+          disabled={missing.length > 0 || currencies.length > 1
+                    || unpriced.length > 0 || !lines.length}
           onClick={() => {
             onAdd(lines.map((l) => ({ product: l.product, qty: l.qty })));
             onClose();
@@ -135,6 +144,16 @@ export default function DeskBuild({
           Add to order
         </Button>
       </div>
+
+      {unpriced.length > 0 && (
+        <p className="text-[12px] text-danger">
+          {unpriced.map((l) => l.product.sku).join(', ')}{' '}
+          {unpriced.length === 1 ? 'has' : 'have'} no price on this client&rsquo;s tier, so
+          the total above is not what this build costs. Price{' '}
+          {unpriced.length === 1 ? 'it' : 'them'} on the Catalogue screen, or choose another
+          option for that step.
+        </p>
+      )}
 
       {currencies.length > 1 && (
         <p className="text-[12px] text-danger">

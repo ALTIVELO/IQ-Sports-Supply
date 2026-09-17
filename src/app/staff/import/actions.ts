@@ -10,6 +10,7 @@ import { SUSPICIOUS_DELTA, type CatalogueRow, type CataloguePreview,
 import type { ActionResult } from '../actions';
 import { classifyProduct } from '@/lib/catalogue/categories';
 import { knownSize } from '@/lib/catalogue/variants';
+import { variantPair } from '@/lib/import/variant-pair';
 
 const norm = (sku: string) => sku.trim().toLowerCase();
 
@@ -79,6 +80,10 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
   const merged = new Map<string, CatalogueRow>();
   const invalid: { row: number; reason: string }[] = [];
   let line = 0;
+  // Rows carrying one half of a size-and-model pair. Counted rather than
+  // listed: on a sheet with a stray Size column that is every row, and a
+  // hundred identical complaints would bury the ones that matter.
+  let halfPaired = 0;
 
   for (const sheet of sheets) {
     const seenHere = new Set<string>();
@@ -110,20 +115,9 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
         invalid.push({ row: line, reason: `${sku}: "${row.currency}" is not a currency we hold` });
       }
 
-      // A model with no size is a size nobody can pick; a size with no model
-      // is a size of nothing. Either alone is a half-filled column, and the
-      // product would import as a bike in its own right without saying so.
-      const group = row.variant_group?.trim() || undefined;
-      const label = row.variant_label?.trim() || undefined;
-      if (Boolean(group) !== Boolean(label)) {
-        invalid.push({
-          row: line,
-          reason: group
-            ? `${sku} gives a model but no size`
-            : `${sku} gives a size but no model to put it under`,
-        });
-        continue;
-      }
+      const { group, label, halfPaired: unpaired } =
+        variantPair(row.variant_group, row.variant_label);
+      if (unpaired) halfPaired += 1;
 
       const prices = Object.fromEntries(
         Object.entries(row.prices).filter(([, v]) => Number.isFinite(v) && v >= 0),
@@ -186,7 +180,19 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
     }
   }
 
-  return { rows: [...merged.values()], invalid };
+  // Said once, and not as a skipped row: nothing was skipped, and a sheet
+  // whose Size column means rotor diameters would otherwise report every row
+  // it has as a problem.
+  const notes: string[] = [];
+  if (halfPaired) {
+    notes.push(
+      `${halfPaired} row${halfPaired === 1 ? '' : 's'} gave a size without a model to put `
+      + 'it under (or a model with no size), so those import as ordinary products rather '
+      + 'than as sizes of one thing. Prices and costs are unaffected. If this file really '
+      + 'does hold frame sizes, point the Model column at whatever names the bike.');
+  }
+
+  return { rows: [...merged.values()], invalid, notes };
 }
 
 /** The price in force for each product on a tier, as at a date. */
@@ -256,7 +262,7 @@ export async function previewCatalogue(
     sb.from('products').select('id, sku, name, active, currency').limit(10000),
   ]);
 
-  const { rows, invalid } = mergeSheets(sheets);
+  const { rows, invalid, notes } = mergeSheets(sheets);
   if (!rows.length) return { ok: false, error: 'That file had no product rows in it' };
 
   const bySku = new Map((products ?? []).map((p) => [norm(p.sku), p]));
@@ -357,6 +363,7 @@ export async function previewCatalogue(
         .filter((p) => p.active && !inFile.has(norm(p.sku)))
         .map((p) => ({ sku: p.sku, name: p.name })),
       invalid,
+      notes,
     },
   };
 }

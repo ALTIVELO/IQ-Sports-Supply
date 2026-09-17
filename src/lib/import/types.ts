@@ -110,6 +110,11 @@ export interface CataloguePreview {
   /** In the system but absent from the file — reported only, never deleted. */
   missing: { sku: string; name: string }[];
   invalid: { row: number; reason: string }[];
+  /**
+   * Things worth saying that are not errors: nothing was skipped and no price
+   * is at risk, but the file did something the person may not have intended.
+   */
+  notes: string[];
 }
 
 /**

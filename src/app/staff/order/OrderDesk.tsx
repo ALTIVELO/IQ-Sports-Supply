@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button, Card, Money, Notice, Tag } from '@/components/ui';
 import { placeOrder } from '../actions';
 import { totalsByCurrency } from '@/lib/orders/split';
+import { priceRange, tierPrice } from '@/lib/orders/tier-price';
 import CollectionPicker from '@/components/CollectionPicker';
 import { groupCollections, idsUnderSlug, type CategoryLite } from '@/lib/catalogue/collections';
 import { groupSizes } from '@/lib/catalogue/variants';
@@ -56,7 +57,18 @@ export default function OrderDesk({
     setLocationId(c?.default_location_id ?? locations[0]?.id ?? '');
   }
 
-  const priceFor = (p: DeskProduct) => (client ? p.prices[client.tier_id] ?? 0 : 0);
+  /**
+   * What this client pays for this product, or undefined where nothing prices
+   * it on their tier.
+   *
+   * Undefined rather than zero, because zero is a price: a product nobody has
+   * priced on the Distributor tier used to read "£0.00" here, which is both
+   * wrong and the most expensive kind of wrong — it reads as free. place_order
+   * refuses such a line anyway, so the only question is whether the person
+   * finds out now or after keying forty of them.
+   */
+  const priceFor = (p: DeskProduct): number | undefined =>
+    tierPrice(p.prices, client?.tier_id);
   const stockAt = (p: DeskProduct, loc: string) => p.stock[loc] ?? 0;
   const totalStock = (p: DeskProduct) => Object.values(p.stock).reduce((a, b) => a + b, 0);
 
@@ -130,12 +142,18 @@ export default function OrderDesk({
 
   /** Adds to an existing line rather than making a second one for the same SKU. */
   function addLine(p: DeskProduct, add = 1) {
+    const price = priceFor(p);
+    if (price === undefined) {
+      setError(`${p.sku} has no ${tier?.name ?? 'tier'} price, so it cannot go on this order. `
+             + 'Price it on the Catalogue screen first.');
+      return;
+    }
+    setError('');
     setLines((ls) => {
       const existing = ls.find((l) => l.productId === p.id);
       if (existing) {
         return ls.map((l) => (l.productId === p.id ? { ...l, qty: l.qty + add } : l));
       }
-      const price = priceFor(p);
       return [...ls, {
         productId: p.id, sku: p.sku, name: p.name, qty: add,
         unitPrice: price, tierPrice: price, currency: p.currency,
@@ -334,9 +352,10 @@ export default function OrderDesk({
                 const lead = shelf.lead;
                 const open = openSizes === shelf.key;
                 const rows = sized && open ? shelf.sizes : [];
-                const prices = shelf.sizes.map(priceFor);
-                const low = Math.min(...prices);
-                const high = Math.max(...prices);
+                // Over the priced sizes only. Counting an unpriced one as
+                // zero made a whole bike read "from £0.00" because one frame
+                // had never been priced on this client's tier.
+                const { low, high, unpriced } = priceRange(shelf.sizes.map(priceFor));
                 const held = shelf.sizes.reduce((a, p) => a + stockAt(p, locationId), 0);
 
                 return (
@@ -365,8 +384,23 @@ export default function OrderDesk({
                         {held > 0 ? `${held} here` : 'back order'}
                       </span>
                       <span className="num font-semibold whitespace-nowrap">
-                        {low !== high && <span className="text-[11px] text-mute">from </span>}
-                        <Money value={low} currency={lead.currency} />
+                        {low === undefined ? (
+                          <span className="text-[11px] font-normal text-danger">
+                            no {tier?.name ?? 'tier'} price
+                          </span>
+                        ) : (
+                          <>
+                            {low !== high && <span className="text-[11px] text-mute">from </span>}
+                            <Money value={low} currency={lead.currency} />
+                            {/* Said out loud: a range that quietly skips the
+                                sizes nobody priced is a range that lies. */}
+                            {unpriced > 0 && (
+                              <span className="text-[11px] font-normal text-danger">
+                                {' '}· {unpriced} unpriced
+                              </span>
+                            )}
+                          </>
+                        )}
                       </span>
                       {sized && (
                         <span className="text-[11px] text-mute w-4 text-right">
@@ -378,13 +412,15 @@ export default function OrderDesk({
                     {rows.map((size) => {
                       const here = stockAt(size, locationId);
                       const elsewhere = totalStock(size) - here;
+                      const price = priceFor(size);
                       return (
                         <button
                           key={size.id}
                           onClick={() => addLine(size)}
+                          disabled={price === undefined}
                           className="flex w-full items-center gap-2.5 pl-6 pr-2.5 py-1.5
                                      text-[12px] text-left bg-parch/60 hover:bg-parch
-                                     border-t border-row-line"
+                                     border-t border-row-line disabled:opacity-60"
                         >
                           <span className="font-semibold w-8">{size.variant_label}</span>
                           <span className="num flex-1 min-w-0 truncate text-mute">{size.sku}</span>
@@ -395,7 +431,9 @@ export default function OrderDesk({
                             <span className="num text-mute">{elsewhere} elsewhere</span>
                           )}
                           <span className="num font-semibold">
-                            <Money value={priceFor(size)} currency={size.currency} />
+                            {price === undefined
+                              ? <span className="text-danger font-normal">no price</span>
+                              : <Money value={price} currency={size.currency} />}
                           </span>
                         </button>
                       );
