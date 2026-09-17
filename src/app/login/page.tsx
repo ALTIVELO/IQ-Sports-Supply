@@ -11,7 +11,11 @@ export default async function LoginPage({
 }) {
   const { next, error } = await searchParams;
   const user = await getSessionUser();
-  if (user) redirect(isStaff(user.role) ? '/staff' : user.clientId ? '/portal' : '/pending');
+  if (user) {
+    redirect(isStaff(user.role) ? '/staff'
+      : user.role === 'partner' ? (user.brands.length ? '/brand' : '/pending')
+      : user.clientId ? '/portal' : '/pending');
+  }
 
   return (
     <main className="min-h-screen flex items-center justify-center px-6 py-16">

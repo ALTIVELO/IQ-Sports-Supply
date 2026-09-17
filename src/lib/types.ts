@@ -1,4 +1,14 @@
-export type Role = 'admin' | 'accounts' | 'ops' | 'client';
+export type Role = 'admin' | 'accounts' | 'ops' | 'client' | 'partner';
+
+/** A brand we sell for, as their own portal reads it. */
+export interface BrandPartner {
+  brandId: string;
+  brandName: string;
+  /** They leave stock with us and are paid as it sells. */
+  consignment: boolean;
+  /** Whether their screens show what the goods sold for, not only what they are owed. */
+  showsMargin: boolean;
+}
 export type OrderStatus = 'open' | 'complete' | 'cancelled';
 export type InvoiceType =
   | 'full' | 'shipment' | 'backorder'

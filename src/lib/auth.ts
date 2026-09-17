@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { supabaseServer } from './supabase/server';
 import { supabaseAdmin } from './supabase/admin';
-import type { Role } from './types';
+import type { BrandPartner, Role } from './types';
 import { clientToLink } from './login/matchClient';
 
 export interface SessionUser {
@@ -13,6 +13,11 @@ export interface SessionUser {
   clientId: string | null;
   /** Fulfilment sites an ops user is assigned to; admin/accounts see all. */
   locationIds: string[];
+  /**
+   * The brands this login speaks for. Empty for everyone but a partner, and
+   * the only thing their portal ever scopes itself by.
+   */
+  brands: BrandPartner[];
   /** Signed in on a temporary password, and going nowhere until it changes. */
   mustChangePassword: boolean;
 }
@@ -58,6 +63,26 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const client = found
     ?? (role === 'client' && address ? await linkClientByEmail(user.id, address) : null);
 
+  // Read for a partner and nobody else: the query is RLS-scoped anyway, but a
+  // role that can never have brands should not be asking.
+  let brands: BrandPartner[] = [];
+  if (role === 'partner') {
+    const { data: rows } = await sb.from('brand_partners')
+      .select('brand_id, brands(name, consignment, shows_margin)')
+      .eq('auth_user_id', user.id).eq('active', true);
+    brands = ((rows ?? []) as unknown as {
+      brand_id: string;
+      brands: { name: string; consignment: boolean; shows_margin: boolean } | null;
+    }[])
+      .filter((r) => r.brands)
+      .map((r) => ({
+        brandId: r.brand_id,
+        brandName: r.brands!.name,
+        consignment: r.brands!.consignment,
+        showsMargin: r.brands!.shows_margin,
+      }));
+  }
+
   let locationIds: string[] = (opsLocs ?? []).map((r) => r.location_id);
   if (role === 'admin' || role === 'accounts') {
     const { data: all } = await sb.from('locations').select('id');
@@ -71,6 +96,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     fullName: profile.full_name,
     clientId: client?.id ?? null,
     locationIds,
+    brands,
     mustChangePassword: Boolean(profile.must_change_password),
   };
 }
@@ -91,8 +117,32 @@ export async function requireStaff(roles: Role[] = STAFF): Promise<SessionUser> 
   const user = await getSessionUser();
   if (!user) redirect('/login');
   requirePasswordChanged(user);
-  if (!roles.includes(user.role)) redirect(user.role === 'client' ? '/portal' : '/login');
+  if (!roles.includes(user.role)) redirect(homeFor(user.role));
   return user;
+}
+
+/** Where a signed-in person belongs when they land somewhere they do not. */
+export function homeFor(role: Role): string {
+  if (role === 'client') return '/portal';
+  if (role === 'partner') return '/brand';
+  return '/login';
+}
+
+/**
+ * Guard for the brand portal.
+ *
+ * A partner with no brand attached is in the same position as a client with
+ * no approved account: signed in and entitled to nothing. They are sent to
+ * the same waiting page rather than shown an empty dashboard, because an
+ * empty dashboard reads as "you have sold nothing".
+ */
+export async function requirePartner(): Promise<SessionUser & { brands: BrandPartner[] }> {
+  const user = await getSessionUser();
+  if (!user) redirect('/login');
+  requirePasswordChanged(user);
+  if (user.role !== 'partner') redirect(homeFor(user.role));
+  if (!user.brands.length) redirect('/pending');
+  return user as SessionUser & { brands: BrandPartner[] };
 }
 
 /**

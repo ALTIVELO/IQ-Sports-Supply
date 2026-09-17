@@ -21,6 +21,7 @@ export default async function Pending() {
   if (!user) redirect('/login');
   if (isStaff(user.role)) redirect('/staff');
   if (user.clientId) redirect('/portal');
+  if (user.role === 'partner' && user.brands.length) redirect('/brand');
 
   return (
     <main className="min-h-screen flex items-center justify-center px-6 py-16">
@@ -36,8 +37,19 @@ export default async function Pending() {
         <p className="text-[14px] text-mute mt-3 leading-relaxed">
           You are signed in as{' '}
           <strong className="text-ink">{user.email ?? 'this address'}</strong>, and we
-          cannot find a trade account against it.
+          cannot find {user.role === 'partner' ? 'a brand' : 'a trade account'} against it.
         </p>
+
+        {/* A brand partner reaching this page is a different problem from a
+            customer reaching it, and the advice below is written for a
+            customer. An empty dashboard would read as "you have sold
+            nothing", which is why they are sent here instead. */}
+        {user.role === 'partner' && (
+          <p className="text-[13px] text-mute mt-3 leading-relaxed">
+            Your login is set up as a brand partner but is not attached to a brand yet.
+            Reply to any email from us and we will put that right.
+          </p>
+        )}
 
         <div className="border border-line rounded-card bg-white p-4 mt-5 space-y-3">
           <p className="text-[13px] font-semibold">Two things this usually is</p>

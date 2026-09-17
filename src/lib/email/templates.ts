@@ -198,3 +198,40 @@ We are not able to open an account for ${a.companyName} at this time.${
 ${a.company}`,
   };
 }
+
+/**
+ * Telling a brand there is a box to send.
+ *
+ * Address and contents. Not what the customer paid for it, not the rest of
+ * their order, not their account: a brand packing one box needs to know where
+ * it goes and what goes in it, and everything else is ours.
+ */
+export function dropshipNotice(o: {
+  company: string; brandName: string; orderNumber: string; date: string;
+  clientName: string; shipTo: string;
+  lines: { sku: string; name: string; qty: number }[];
+  portalUrl: string;
+}) {
+  return {
+    subject: `${o.company} — order ${o.orderNumber} to dispatch`,
+    body: `There is an order for ${o.brandName} to send out.
+
+Order    ${o.orderNumber}
+Placed   ${fmtDate(o.date)}
+
+${o.lines.map((l) =>
+  `  ${l.sku.padEnd(16)} ${String(l.qty).padStart(4)}  ${l.name}`).join('\n')}
+
+Deliver to
+  ${o.clientName}
+${o.shipTo.split('\n').map((line) => `  ${line}`).join('\n')}
+
+Mark it dispatched here, and add tracking if you have it — we pass that
+straight to the customer:
+
+  ${o.portalUrl}
+
+${o.company}
+`,
+  };
+}

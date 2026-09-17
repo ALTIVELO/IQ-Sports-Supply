@@ -27,6 +27,7 @@ const ITEMS: Item[] = [
   { href: '/staff/catalogue', label: 'Catalogue' },
   { href: '/staff/groups', label: 'Variants & builds', roles: ['admin', 'accounts'] },
   { href: '/staff/clients', label: 'Clients' },
+  { href: '/staff/brands', label: 'Brand partners', roles: ['admin', 'accounts'] },
   { href: '/staff/applications', label: 'Applications', roles: ['admin', 'accounts'], badge: 'applications' },
   { href: '/staff/locations', label: 'Locations', roles: ['admin'] },
   { href: '/staff/team', label: 'Team', roles: ['admin'] },

@@ -7,7 +7,7 @@ import { requireStaff } from '@/lib/auth';
 import { trackingUrlFor } from '@/lib/format';
 import { splitByCurrency } from '@/lib/orders/split';
 import {
-  notifyOrderPlaced, notifySupplierOrder, notifyShipped, notifyDelivered,
+  notifyOrderPlaced, notifySupplierOrder, notifyShipped, notifyDelivered, notifyDropshipPartners,
 } from '@/lib/notifications';
 
 export interface ActionResult {
@@ -107,6 +107,11 @@ export async function placeOrder(input: {
     const w = await notify(
       () => notifyOrderPlaced(orderId as string), 'The order confirmation');
     if (w) warnings.push(w);
+    // A brand with a box to send is told here too. Its failure is reported
+    // like any other email's and never undoes the order.
+    const d = await notify(
+      () => notifyDropshipPartners(orderId as string), 'The brand dispatch notice');
+    if (d) warnings.push(d);
   }
 
   revalidatePath('/staff/orders');

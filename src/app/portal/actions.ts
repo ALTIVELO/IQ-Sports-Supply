@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { supabaseServer } from '@/lib/supabase/server';
 import { requireClient } from '@/lib/auth';
-import { notifyOrderPlaced } from '@/lib/notifications';
+import { notifyOrderPlaced, notifyDropshipPartners } from '@/lib/notifications';
 import { splitByCurrency } from '@/lib/orders/split';
 
 export interface PortalResult {
@@ -89,6 +89,14 @@ export async function placeClientOrder(
       await notifyOrderPlaced(orderId as string);
     } catch {
       warnings.push(currency);
+    }
+    // Separately, and never allowed to affect the customer's confirmation: a
+    // brand not hearing about a box is our problem to chase, and the notice
+    // stays unsent on their dispatch list until it is.
+    try {
+      await notifyDropshipPartners(orderId as string);
+    } catch {
+      // Left unnotified on purpose; the dispatch list still shows it.
     }
 
     const { data: order } = await sb.from('orders')

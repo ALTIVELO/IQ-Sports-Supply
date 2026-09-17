@@ -149,8 +149,13 @@ function Row({ colour, name, value }: { colour?: string; name: string; value: st
   );
 }
 
-export function SalesChart({ data, currency = 'GBP' }: {
+export function SalesChart({
+  data, currency = 'GBP',
+  rows = { total: 'revenue', accent: 'profit', muted: 'to supplier' },
+}: {
   data: Bucket[]; currency?: string;
+  /** What the hover panel calls each figure. See Legend. */
+  rows?: { total: string; accent: string; muted: string };
 }) {
   const [active, setActive] = useState<number | null>(null);
   const clip = useId();
@@ -176,9 +181,9 @@ export function SalesChart({ data, currency = 'GBP' }: {
       tooltip={hot && (
         <>
           <div className="font-semibold mb-1">{hot.label}</div>
-          <Row name="revenue" value={money(hot.revenue, currency)} />
-          <Row colour={PROFIT_FILL} name="profit" value={money(hot.profit, currency)} />
-          <Row colour={COST_FILL} name="to supplier" value={money(hot.cost, currency)} />
+          <Row name={rows.total} value={money(hot.revenue, currency)} />
+          <Row colour={PROFIT_FILL} name={rows.accent} value={money(hot.profit, currency)} />
+          <Row colour={COST_FILL} name={rows.muted} value={money(hot.cost, currency)} />
           <Row name={hot.orders === 1 ? 'order' : 'orders'} value={String(hot.orders)} />
         </>
       )}
@@ -362,16 +367,27 @@ function Hits({ data, g, height, onActive, describe }: {
 }
 
 /** Two series, so a legend is always present. Bars key with a rect. */
-export function Legend() {
+/**
+ * What the two fills mean.
+ *
+ * Named by the caller because the same chart answers two different questions:
+ * on the staff dashboard the accent is our profit and the grey is what we
+ * paid, and in a brand's own portal those are the other way round — the
+ * accent is what they are owed and the grey is the part we keep. The chart is
+ * the same shape; whose money is emphasised is not.
+ */
+export function Legend({
+  accent = 'Profit', muted = 'Cost to us', total = 'Column height is revenue',
+}: { accent?: string; muted?: string; total?: string } = {}) {
   return (
     <div className="flex items-center gap-4 text-[12px] text-mute">
-      {[[PROFIT_FILL, 'Profit'], [COST_FILL, 'Cost to us']].map(([fill, name]) => (
+      {[[PROFIT_FILL, accent], [COST_FILL, muted]].map(([fill, name]) => (
         <span key={name} className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-[2px]" style={{ background: fill }} />
           {name}
         </span>
       ))}
-      <span className="text-mute">Column height is revenue</span>
+      <span className="text-mute">{total}</span>
     </div>
   );
 }

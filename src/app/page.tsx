@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { Wordmark, LogoGlyph } from '@/components/Logo';
-import { getSessionUser, isStaff } from '@/lib/auth';
+import { getSessionUser, homeFor, isStaff } from '@/lib/auth';
 
 export const metadata: Metadata = {
   title: 'IQ Sports Supply — trade supply built around pro teams',
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
  */
 export default async function Home() {
   const user = await getSessionUser();
-  if (user) redirect(isStaff(user.role) ? '/staff' : '/portal');
+  if (user) redirect(isStaff(user.role) ? '/staff' : homeFor(user.role));
 
   return (
     <main className="min-h-screen flex flex-col bg-white">

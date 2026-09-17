@@ -2,7 +2,8 @@ import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sendEmail } from '@/lib/email/send';
 import {
-  orderConfirmation, supplierOrder, shippedNotice, deliveredNotice, welcomeEmail, rejectionEmail,
+  orderConfirmation, supplierOrder, shippedNotice, deliveredNotice, welcomeEmail,
+  rejectionEmail, dropshipNotice,
 } from '@/lib/email/templates';
 import { invoiceDocData, renderInvoicePdf } from '@/lib/pdf/render';
 import { appUrl } from '@/lib/app-url';
@@ -221,4 +222,84 @@ export async function notifyRejected(email: string, companyName: string, reason:
   const { data: settings } = await db.from('settings').select('company').eq('id', 1).single();
   const msg = rejectionEmail({ company: settings!.company, companyName, reason });
   await sendEmail({ kind: 'rejection', to: [email], subject: msg.subject, body: msg.body });
+}
+
+/**
+ * Emails every brand with something to ship on an order.
+ *
+ * Driven off the notices the database raised when the lines landed, so this
+ * cannot disagree with what the brand sees on their dispatch list — and a
+ * notice that has already been sent is never sent twice, however many times
+ * this is called.
+ *
+ * One email per brand per order. A brand with three of their products on one
+ * order gets one message listing three lines, because that is one box.
+ */
+export async function notifyDropshipPartners(orderId: string) {
+  const db = supabaseAdmin();
+
+  const { data: notices } = await db
+    .from('dropship_notices')
+    .select('id, brand_id, brands(name)')
+    .eq('order_id', orderId)
+    .is('notified_at', null);
+  if (!notices?.length) return;
+
+  const { data: order } = await db
+    .from('orders')
+    .select(`number, date, ship_to, clients(name, address),
+             order_lines(sku, name, qty, product_id)`)
+    .eq('id', orderId)
+    .single();
+  if (!order) return;
+
+  const { data: settings } = await db
+    .from('settings').select('company').eq('id', 1).single();
+
+  // Which product belongs to which brand, for splitting the lines up.
+  const lines = (order.order_lines ?? []) as {
+    sku: string; name: string; qty: number; product_id: string | null;
+  }[];
+  const { data: products } = await db
+    .from('products')
+    .select('id, brand_id, dropship')
+    .in('id', lines.map((l) => l.product_id).filter(Boolean) as string[]);
+  const brandOf = new Map((products ?? [])
+    .filter((p) => p.dropship)
+    .map((p) => [p.id, p.brand_id]));
+
+  const client = order.clients as unknown as { name: string; address: string | null };
+
+  for (const notice of notices as unknown as {
+    id: string; brand_id: string; brands: { name: string } | null;
+  }[]) {
+    const mine = lines.filter((l) => l.product_id && brandOf.get(l.product_id) === notice.brand_id);
+    if (!mine.length) continue;
+
+    const { data: people } = await db
+      .from('brand_partners')
+      .select('email')
+      .eq('brand_id', notice.brand_id).eq('active', true);
+    const to = (people ?? []).map((p) => p.email).filter(Boolean);
+    if (!to.length) continue;
+
+    const msg = dropshipNotice({
+      company: settings?.company ?? 'IQ Sports Supply',
+      brandName: notice.brands?.name ?? 'your brand',
+      orderNumber: order.number,
+      date: order.date,
+      clientName: client?.name ?? '',
+      shipTo: order.ship_to ?? client?.address ?? '',
+      lines: mine.map((l) => ({ sku: l.sku, name: l.name, qty: l.qty })),
+      portalUrl: `${appUrl()}/brand/dispatch`,
+    });
+
+    await sendEmail({
+      kind: 'dropship_notice', to, subject: msg.subject, body: msg.body, orderId,
+    });
+    // Recorded only once it has gone, so a failure leaves it to be retried
+    // rather than silently marked as told.
+    await db.from('dropship_notices')
+      .update({ notified_at: new Date().toISOString() }).eq('id', notice.id);
+  }
 }
