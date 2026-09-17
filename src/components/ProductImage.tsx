@@ -25,16 +25,25 @@ export default function ProductImage({
   sizePx?: number;
   /** How prominent the placeholder mark is. Until the catalogue has photos,
    *  most tiles show it — at full weight a grid becomes a wall of identical
-   *  logos, so large surfaces use the quieter setting. */
-  placeholderScale?: 'half' | 'quiet';
+   *  logos, so large surfaces use the quieter setting.
+   *
+   *  'none' draws nothing at all, not even the box: for a dense list where the
+   *  slot exists only to keep the columns lined up, and sixty repetitions of
+   *  the same mark down a narrow column would be worse than the gap. The
+   *  failure handling still applies, so a URL that dies leaves a space rather
+   *  than a broken-image icon. */
+  placeholderScale?: 'half' | 'quiet' | 'none';
 }) {
   const [failed, setFailed] = useState(false);
   const showPlaceholder = !src || failed;
+  const bare = placeholderScale === 'none';
+
+  if (showPlaceholder && bare) return <div className={className} aria-hidden />;
 
   return (
     <div
-      className={`relative bg-white border border-line rounded overflow-hidden
-                  flex items-center justify-center ${className}`}
+      className={`relative overflow-hidden flex items-center justify-center ${className}
+                  ${bare ? '' : 'bg-white border border-line rounded'}`}
     >
       {showPlaceholder ? (
         <LogoGlyph
@@ -51,7 +60,7 @@ export default function ProductImage({
           width={sizePx}
           height={sizePx}
           onError={() => setFailed(true)}
-          className="w-full h-full object-contain"
+          className={bare ? 'max-w-full max-h-full object-contain' : 'w-full h-full object-contain'}
         />
       )}
     </div>

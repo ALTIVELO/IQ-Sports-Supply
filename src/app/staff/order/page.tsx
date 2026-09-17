@@ -12,6 +12,8 @@ export interface DeskProduct {
   currency: string;
   /** Which collection it is filed under, so the desk can be browsed, not only searched. */
   category_id: string | null;
+  /** Its photo, where it has one. Most of the catalogue still does not. */
+  image_url: string | null;
   /** Its frame size, where it is one size of a bike. */
   variant_label: string | null;
   /** Shared by every size of one bike, so the desk can offer it as one row. */
@@ -72,7 +74,7 @@ export default async function OrderDeskPage() {
       .eq('active', true).order('name'),
     sb.from('locations').select('id, name').eq('active', true).order('name'),
     fetchAll((from, to) => sb.from('products')
-      .select(`id, sku, name, brand, currency, category_id,
+      .select(`id, sku, name, brand, currency, category_id, image_url,
                variant_group, variant_label, variant_sort`)
       .eq('active', true).order('sku').range(from, to)),
   ]);

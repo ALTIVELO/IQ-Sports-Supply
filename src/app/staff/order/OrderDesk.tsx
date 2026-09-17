@@ -6,6 +6,7 @@ import { Button, Card, Money, Notice, Tag } from '@/components/ui';
 import { placeOrder } from '../actions';
 import { totalsByCurrency } from '@/lib/orders/split';
 import { priceRange, tierPrice } from '@/lib/orders/tier-price';
+import ProductImage from '@/components/ProductImage';
 import CollectionPicker from '@/components/CollectionPicker';
 import { groupCollections, idsUnderSlug, type CategoryLite } from '@/lib/catalogue/collections';
 import { groupSizes } from '@/lib/catalogue/variants';
@@ -117,7 +118,16 @@ export default function OrderDesk({
   // Capped after grouping, not before, or a bike built in five sizes would eat
   // five places in a list of eight.
   const shelves = useMemo(
-    () => groupSizes(results).slice(0, collection === null && query.trim() ? 8 : 60),
+    () => groupSizes(results)
+      .map((shelf) => ({
+        ...shelf,
+        // Any size will do for the picture, but one that has a photo beats one
+        // that does not: DRAG photograph the bike, not each frame.
+        lead: shelf.sizes.find((p) => p.image_url) ?? shelf.lead,
+        name: shelf.sizes[0].name,
+        stem: shelf.sizes[0].sku,
+      }))
+      .slice(0, collection === null && query.trim() ? 8 : 60),
     [results, collection, query],
   );
 
@@ -232,8 +242,12 @@ export default function OrderDesk({
       {placed?.warning && <Notice tone="info">{placed.warning}</Notice>}
       {error && <Notice>{error}</Notice>}
 
-      <div className="grid lg:grid-cols-[280px_1fr] gap-4 items-start">
-        <Card className="space-y-3">
+      {/* min-w-0 on both tracks: a grid column is sized by its widest child's
+          min-content, so one dense product row with a SKU, a price and a
+          thumbnail on it would otherwise stretch the whole page — including
+          the client card beside it — past the edge of a narrow screen. */}
+      <div className="grid lg:grid-cols-[280px_minmax(0,1fr)] gap-4 items-start">
+        <Card className="space-y-3 min-w-0">
           <div>
             <div className="text-[12px] font-semibold mb-1.5">Client</div>
             <select value={clientId} onChange={(e) => chooseClient(e.target.value)}>
@@ -278,7 +292,7 @@ export default function OrderDesk({
           )}
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <div className="text-[12px] font-semibold mb-1.5">Add products</div>
           <input
             placeholder={client ? 'Search SKU, name or brand…' : 'Choose a client first'}
@@ -365,22 +379,38 @@ export default function OrderDesk({
                         ? setOpenSizes(open ? null : shelf.key)
                         : addLine(lead))}
                       aria-expanded={sized ? open : undefined}
-                      className="flex w-full items-center gap-2.5 px-2.5 py-2 text-[13px]
-                                 text-left hover:bg-parch"
+                      className="flex w-full items-center gap-2 sm:gap-2.5 px-2.5 py-2
+                                 text-[13px] text-left hover:bg-parch"
                     >
-                      <span className="num font-semibold min-w-[110px]">
-                        {sized ? lead.sku.replace(/[-_ ]?[A-Za-z0-9]+$/, '') : lead.sku}
+                      {/* The slot is kept even when there is no photo, so the
+                          SKUs line up — but nothing is drawn in it. Most of
+                          this catalogue has no pictures yet, and sixty
+                          placeholder glyphs down a narrow column would be
+                          worse than the gap. */}
+                      <ProductImage
+                        src={lead.image_url}
+                        alt=""
+                        className="w-10 h-10 flex-shrink-0"
+                        sizePx={80}
+                        placeholderScale="none"
+                      />
+                      {/* The fixed column keeps SKUs in line on a counter
+                          screen. On a narrow one it is the difference between
+                          a tidy row and a sideways scroll, so it gives way. */}
+                      <span className="num font-semibold sm:min-w-[110px] truncate max-w-[45%] sm:max-w-none">
+                        {sized ? shelf.stem.replace(/[-_ ]?[A-Za-z0-9]+$/, '') : lead.sku}
                       </span>
                       <span className="flex-1 min-w-0 truncate">
-                        {sized ? lead.name.split(' — ')[0] : lead.name}
+                        {sized ? shelf.name.split(' — ')[0] : lead.name}
                       </span>
                       {sized ? (
-                        <span className="text-[11px] text-mute whitespace-nowrap">
+                        <span className="hidden md:inline text-[11px] text-mute whitespace-nowrap">
                           {shelf.sizes.length} sizes ·{' '}
                           {shelf.sizes.map((p) => p.variant_label).join(' ')}
                         </span>
                       ) : null}
-                      <span className={`num text-[12px] ${held > 0 ? 'text-success' : 'text-danger'}`}>
+                      <span className={`num text-[12px] whitespace-nowrap
+                                        ${held > 0 ? 'text-success' : 'text-danger'}`}>
                         {held > 0 ? `${held} here` : 'back order'}
                       </span>
                       <span className="num font-semibold whitespace-nowrap">

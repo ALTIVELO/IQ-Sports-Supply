@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Button, Money } from '@/components/ui';
+import ProductImage from '@/components/ProductImage';
 import type { DeskBuild, DeskProduct, DeskStep } from './page';
 import { buildLines, missingSteps, preselect, type Chosen } from '@/lib/orders/build';
 
@@ -79,7 +80,16 @@ export default function DeskBuild({
           const here = product ? stockAt(product, locationId) : 0;
           return (
             <div key={step.id} className="flex flex-wrap items-center gap-2">
-              <label className="text-[12px] font-semibold min-w-[110px]" htmlFor={step.id}>
+              {/* Confirms at a glance that the right part was picked, where
+                  there is a picture to confirm it with. */}
+              <ProductImage
+                src={product?.image_url ?? null}
+                alt=""
+                className="w-7 h-7 flex-shrink-0"
+                sizePx={56}
+                placeholderScale="none"
+              />
+              <label className="text-[12px] font-semibold min-w-[100px]" htmlFor={step.id}>
                 {step.name}
                 {step.qty > 1 && <span className="text-mute font-normal"> ×{step.qty}</span>}
                 {!step.required && <span className="text-mute font-normal"> (optional)</span>}
