@@ -1,5 +1,6 @@
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
+import { fetchAll } from '@/lib/supabase/chunk';
 import { buildTree, offeredLoose, type CategoryRow } from '@/lib/catalogue/tree';
 import HomeScreen, { type HomeData } from './HomeScreen';
 
@@ -17,7 +18,7 @@ export default async function PortalHome() {
   const today = new Date().toISOString().slice(0, 10);
 
   const [{ data: client }, { data: due }, { data: orders }, { data: shipped },
-         { data: groups }, { data: filed }, { data: categories }] =
+         { data: groups }, filed, { data: categories }] =
     await Promise.all([
       sb.from('clients').select('name, tiers(name)').eq('id', user.clientId).single(),
 
@@ -50,8 +51,9 @@ export default async function PortalHome() {
         .eq('active', true).order('sort'),
 
       // Two columns, not nine: this only needs to count what is filed where.
-      sb.from('client_catalogue')
-        .select('category_slug, image_url, configurator_only, variant_group').limit(2000),
+      fetchAll((from, to) => sb.from('client_catalogue')
+        .select('category_slug, image_url, configurator_only, variant_group')
+        .order('sku').range(from, to)),
 
       sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),
     ]);

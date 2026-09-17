@@ -2,6 +2,7 @@ import { requireStaff } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
 import { PageHeading } from '@/components/ui';
 import OrderDesk from './OrderDesk';
+import { fetchAll, inChunks } from '@/lib/supabase/chunk';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,21 +66,16 @@ export default async function OrderDeskPage() {
   await requireStaff();
   const sb = await supabaseServer();
 
-  const [{ data: clients }, { data: locations }, { data: products }, { data: prices }, { data: stock }] =
-    await Promise.all([
-      sb.from('clients')
-        .select('id, name, tier_id, address, vat_exempt, default_location_id, email')
-        .eq('active', true).order('name'),
-      sb.from('locations').select('id, name').eq('active', true).order('name'),
-      sb.from('products')
-        .select(`id, sku, name, brand, currency, category_id,
-                 variant_group, variant_label, variant_sort`)
-        .eq('active', true).order('sku'),
-      sb.from('tier_prices').select('product_id, tier_id, price, effective_from')
-        .lte('effective_from', new Date().toISOString().slice(0, 10))
-        .order('effective_from', { ascending: false }),
-      sb.from('stock_levels').select('product_id, location_id, qty'),
-    ]);
+  const [{ data: clients }, { data: locations }, products] = await Promise.all([
+    sb.from('clients')
+      .select('id, name, tier_id, address, vat_exempt, default_location_id, email')
+      .eq('active', true).order('name'),
+    sb.from('locations').select('id, name').eq('active', true).order('name'),
+    fetchAll((from, to) => sb.from('products')
+      .select(`id, sku, name, brand, currency, category_id,
+               variant_group, variant_label, variant_sort`)
+      .eq('active', true).order('sku').range(from, to)),
+  ]);
 
   const [{ data: tiers }, { data: settings }, { data: categories }, { data: groups }] =
     await Promise.all([
@@ -98,22 +94,37 @@ export default async function OrderDeskPage() {
         .eq('active', true).order('sort'),
     ]);
 
-  // Current price = the most recent row effective today, per product and tier.
+  // The price in force per product and tier, asked for in batches. Reading the
+  // whole of tier_prices and keeping the newest row per product in JavaScript
+  // is what left this screen saying there was no price: the response is capped
+  // at a thousand rows, so one import of a few hundred same-dated prices
+  // filled it and pushed every older price out of the answer.
+  const ids = products.map((p) => p.id);
+  const [priceRows, stockRows] = await Promise.all([
+    inChunks<{ product_id: string; tier_id: string; price: number }>(
+      ids, Math.max(1, (tiers ?? []).length),
+      (batch) => sb.rpc('current_tier_prices', { p_products: batch })),
+    inChunks<{ product_id: string; location_id: string; qty: number }>(
+      ids, Math.max(1, (locations ?? []).length),
+      (batch) => sb.from('stock_levels')
+        .select('product_id, location_id, qty').in('product_id', batch)),
+  ]);
+
   const priceMap = new Map<string, Record<string, number>>();
-  for (const row of prices ?? []) {
+  for (const row of priceRows) {
     const forProduct = priceMap.get(row.product_id) ?? {};
-    if (forProduct[row.tier_id] === undefined) forProduct[row.tier_id] = Number(row.price);
+    forProduct[row.tier_id] = Number(row.price);
     priceMap.set(row.product_id, forProduct);
   }
 
   const stockMap = new Map<string, Record<string, number>>();
-  for (const row of stock ?? []) {
+  for (const row of stockRows) {
     const forProduct = stockMap.get(row.product_id) ?? {};
     forProduct[row.location_id] = row.qty;
     stockMap.set(row.product_id, forProduct);
   }
 
-  const deskProducts: DeskProduct[] = (products ?? []).map((p) => ({
+  const deskProducts: DeskProduct[] = products.map((p) => ({
     ...p,
     prices: priceMap.get(p.id) ?? {},
     stock: stockMap.get(p.id) ?? {},

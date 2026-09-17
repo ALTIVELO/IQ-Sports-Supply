@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
+import { fetchAll } from '@/lib/supabase/chunk';
 import { Card, Empty } from '@/components/ui';
 import { buildTree, findNode, offeredLoose, slugsUnder,
          type CategoryRow } from '@/lib/catalogue/tree';
@@ -36,14 +37,14 @@ export default async function CollectionPage({
   const user = await requireClient();
   const sb = await supabaseServer();
 
-  const [{ data: rows }, { data: categories }, { data: client }, { data: settings },
+  const [rows, { data: categories }, { data: client }, { data: settings },
          { data: groupRows }] =
     await Promise.all([
-      sb.from('client_catalogue')
+      fetchAll((from, to) => sb.from('client_catalogue')
         .select(`id, sku, name, brand, price, currency, price_note, in_stock, image_url,
                variant_group, variant_label, variant_sort,
                category_slug, category_name, configurator_only`)
-        .order('sku').limit(2000),
+        .order('sku').range(from, to)),
       sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),
       sb.from('clients').select('vat_exempt').eq('id', user.clientId).single(),
       sb.from('settings').select('vat_rate').eq('id', 1).single(),
@@ -52,7 +53,7 @@ export default async function CollectionPage({
         .eq('active', true).order('sort'),
     ]);
 
-  const products = (rows ?? []) as CatalogueItem[];
+  const products = rows as CatalogueItem[];
   const vatRate = client?.vat_exempt ? 0 : Number(settings?.vat_rate ?? 20);
 
   // Everything not yet categorised, which has no row in `categories`.

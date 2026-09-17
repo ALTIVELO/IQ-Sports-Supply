@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { PageHeading } from '@/components/ui';
 import CatalogueScreen from './CatalogueScreen';
 import { groupCollections, idsUnderSlug } from '@/lib/catalogue/collections';
+import { fetchAll, inChunks } from '@/lib/supabase/chunk';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +24,11 @@ export default async function CataloguePage({
   // it stays cheap even at a few thousand SKUs — and it has to be the whole
   // catalogue rather than the filtered page, or the counts would change every
   // time somebody typed in the search box.
-  const { data: filed } = await sb.from('products').select('category_id').limit(10000);
+  const filed = await fetchAll<{ category_id: string | null }>(
+    (from, to) => sb.from('products').select('category_id').order('sku').range(from, to));
   const counts = new Map<string, number>();
   let uncategorisedTotal = 0;
-  for (const row of filed ?? []) {
+  for (const row of filed) {
     if (!row.category_id) { uncategorisedTotal += 1; continue; }
     counts.set(row.category_id, (counts.get(row.category_id) ?? 0) + 1);
   }
@@ -46,39 +48,44 @@ export default async function CataloguePage({
     productQuery = productQuery.in('category_id', ids.length ? ids : ['']);
   }
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const [{ data: products }, { data: transfers }] = await Promise.all([
+    productQuery,
+    sb.from('stock_transfers')
+      .select('id, number, date, status, from_location_id, to_location_id, stock_transfer_lines(id, sku, name, qty)')
+      .order('date', { ascending: false }).limit(20),
+  ]);
 
-  const [{ data: products }, { data: prices }, { data: costs }, { data: stock }, { data: transfers }] =
-    await Promise.all([
-      productQuery,
-      sb.from('tier_prices').select('product_id, tier_id, price, effective_from')
-        .lte('effective_from', todayISO)
-        .order('effective_from', { ascending: false }),
-      sb.from('product_costs').select('product_id, cost, effective_from')
-        .lte('effective_from', todayISO)
-        .order('effective_from', { ascending: false }),
-      sb.from('stock_levels').select('product_id, location_id, qty'),
-      sb.from('stock_transfers')
-        .select('id, number, date, status, from_location_id, to_location_id, stock_transfer_lines(id, sku, name, qty)')
-        .order('date', { ascending: false }).limit(20),
-    ]);
+  // Only for the products on this page, and only the figure in force. Reading
+  // the whole of tier_prices and picking the newest row per product in
+  // JavaScript is what broke: the response is capped, so once one import wrote
+  // a few hundred same-dated rows they filled it and every older price fell
+  // off the end — silently, because a truncated response looks like a short one.
+  const shown = (products ?? []).map((p) => p.id);
+  const tierCount = Math.max(1, (tiers ?? []).length);
+  const [priceRows, costRows, stockRows] = await Promise.all([
+    inChunks<{ product_id: string; tier_id: string; price: number }>(
+      shown, tierCount,
+      (batch) => sb.rpc('current_tier_prices', { p_products: batch })),
+    inChunks<{ product_id: string; cost: number }>(
+      shown, 1,
+      (batch) => sb.rpc('current_costs', { p_products: batch })),
+    inChunks<{ product_id: string; location_id: string; qty: number }>(
+      shown, Math.max(1, (locations ?? []).length),
+      (batch) => sb.from('stock_levels')
+        .select('product_id, location_id, qty').in('product_id', batch)),
+  ]);
 
   const priceMap: Record<string, Record<string, number>> = {};
-  for (const r of prices ?? []) {
+  for (const r of priceRows) {
     priceMap[r.product_id] ??= {};
-    if (priceMap[r.product_id][r.tier_id] === undefined) {
-      priceMap[r.product_id][r.tier_id] = Number(r.price);
-    }
+    priceMap[r.product_id][r.tier_id] = Number(r.price);
   }
 
-  // Latest row first, so the first one seen for a product is the one in force.
   const costMap: Record<string, number> = {};
-  for (const r of costs ?? []) {
-    if (costMap[r.product_id] === undefined) costMap[r.product_id] = Number(r.cost);
-  }
+  for (const r of costRows) costMap[r.product_id] = Number(r.cost);
 
   const stockMap: Record<string, Record<string, number>> = {};
-  for (const r of stock ?? []) {
+  for (const r of stockRows) {
     stockMap[r.product_id] ??= {};
     stockMap[r.product_id][r.location_id] = r.qty;
   }

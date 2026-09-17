@@ -1,5 +1,6 @@
 import { requireStaff } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
+import { fetchAll } from '@/lib/supabase/chunk';
 import { PageHeading, Card, Empty } from '@/components/ui';
 import OrderRow from './OrderRow';
 
@@ -27,10 +28,11 @@ export default async function OrdersPage({
 
   if (q?.trim()) query = query.ilike('number', `%${q.trim()}%`);
 
-  const [{ data: orders }, { data: products }, { data: lineCosts }] = await Promise.all([
+  const [{ data: orders }, products, { data: lineCosts }] = await Promise.all([
     query,
     // For adding a line while editing. The catalogue, not this order's lines.
-    sb.from('products').select('id, sku, name').eq('active', true).order('sku').limit(2000),
+    fetchAll((from, to) => sb.from('products').select('id, sku, name')
+      .eq('active', true).order('sku').range(from, to)),
     // What each line cost us, as recorded when it was placed. A separate table
     // because a client reads their own order lines and may never read this.
     sb.from('order_line_costs').select('order_line_id, unit_cost'),
@@ -72,7 +74,7 @@ export default async function OrdersPage({
             <OrderRow
               key={o.id}
               order={o as never}
-              products={(products ?? []) as never}
+              products={products as never}
               costOf={costOf}
               canAmend={user.role === 'admin' || user.role === 'accounts'}
               canDelete={user.role === 'admin'}

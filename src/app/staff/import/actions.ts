@@ -11,6 +11,7 @@ import type { ActionResult } from '../actions';
 import { classifyProduct } from '@/lib/catalogue/categories';
 import { knownSize } from '@/lib/catalogue/variants';
 import { variantPair } from '@/lib/import/variant-pair';
+import { fetchAll } from '@/lib/supabase/chunk';
 
 const norm = (sku: string) => sku.trim().toLowerCase();
 
@@ -254,18 +255,19 @@ export async function previewCatalogue(
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
 
-  const [{ data: tiers }, { data: products }] = await Promise.all([
+  const [{ data: tiers }, products] = await Promise.all([
     sb.from('tiers').select('id, name').order('sort'),
     // Withdrawn products included. They still hold the SKU, so a preview that
     // cannot see them calls a SKU new that the import will not create, and
     // says nothing about the one place the prices are actually going.
-    sb.from('products').select('id, sku, name, active, currency').limit(10000),
+    fetchAll((from, to) => sb.from('products')
+      .select('id, sku, name, active, currency').order('sku').range(from, to)),
   ]);
 
   const { rows, invalid, notes } = mergeSheets(sheets);
   if (!rows.length) return { ok: false, error: 'That file had no product rows in it' };
 
-  const bySku = new Map((products ?? []).map((p) => [norm(p.sku), p]));
+  const bySku = new Map(products.map((p) => [norm(p.sku), p]));
   const priced = tiersPriced(rows, tiers ?? []);
 
   const nameOf = (r: CatalogueRow) => bySku.get(norm(r.sku))?.name ?? r.name ?? r.sku;
@@ -359,7 +361,7 @@ export async function previewCatalogue(
           from: product.currency ?? 'GBP', to: r.currency,
         }];
       }),
-      missing: (products ?? [])
+      missing: products
         .filter((p) => p.active && !inFile.has(norm(p.sku)))
         .map((p) => ({ sku: p.sku, name: p.name })),
       invalid,
@@ -400,13 +402,20 @@ export async function applyCatalogue(input: {
   const { data: tiers } = await sb.from('tiers').select('id, name').order('sort');
   const priced = tiersPriced(valid, tiers ?? []);
 
-  const { data: existing } = await sb.from('products')
+  // Paged, not limited. A prefix of the catalogue here is not a display
+  // problem: every SKU past the cut looks new, so the import tries to create a
+  // product that already exists and the whole apply fails on the unique index
+  // — or worse, succeeds at pricing the wrong thing.
+  const existing = await fetchAll<{
+    id: string; sku: string; active: boolean; currency: string;
+    variant_group: string | null; variant_label: string | null; price_note: string | null;
+  }>((from, to) => sb.from('products')
     .select('id, sku, active, currency, variant_group, variant_label, price_note')
-    .limit(10000);
-  const byNormSku = new Map((existing ?? []).map((p) => [norm(p.sku), p]));
-  const bySku = new Map((existing ?? []).map((p) => [norm(p.sku), p.id]));
+    .order('sku').range(from, to));
+  const byNormSku = new Map(existing.map((p) => [norm(p.sku), p]));
+  const bySku = new Map(existing.map((p) => [norm(p.sku), p.id]));
   const withdrawn = new Map(
-    (existing ?? []).filter((p) => !p.active).map((p) => [norm(p.sku), p.id]));
+    existing.filter((p) => !p.active).map((p) => [norm(p.sku), p.id]));
 
   // ── withdrawn SKUs this file prices ──
   const backInStock = valid
@@ -566,7 +575,7 @@ export async function applyCatalogue(input: {
 
   if (input.deactivateMissing) {
     const present = new Set(valid.map((r) => norm(r.sku)));
-    const stale = (existing ?? []).filter((p) => !present.has(norm(p.sku))).map((p) => p.id);
+    const stale = existing.filter((p) => !present.has(norm(p.sku))).map((p) => p.id);
     if (stale.length) await sb.from('products').update({ active: false }).in('id', stale);
   }
 

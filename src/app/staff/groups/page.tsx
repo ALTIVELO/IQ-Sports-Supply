@@ -1,5 +1,6 @@
 import { requireStaff } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
+import { fetchAll } from '@/lib/supabase/chunk';
 import { PageHeading } from '@/components/ui';
 import GroupsScreen, { type Group, type ProductLite } from './GroupsScreen';
 
@@ -16,14 +17,14 @@ export default async function GroupsPage() {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
 
-  const [{ data: groups }, { data: products }, { data: categories }] = await Promise.all([
+  const [{ data: groups }, products, { data: categories }] = await Promise.all([
     sb.from('product_groups')
       .select(`id, slug, name, brand, description, category_id, image_url, active, sort,
                product_group_steps(id, name, hint, qty, required, sort,
                  product_group_options(id, product_id, label, sort))`)
       .order('name'),
-    sb.from('products').select('id, sku, name, brand, active').eq('active', true)
-      .order('sku').limit(2000),
+    fetchAll((from, to) => sb.from('products').select('id, sku, name, brand, active')
+      .eq('active', true).order('sku').range(from, to)),
     sb.from('categories')
       .select('id, name, parent_id, sort, configurator_only').order('sort'),
   ]);
@@ -35,7 +36,7 @@ export default async function GroupsPage() {
       </PageHeading>
       <GroupsScreen
         groups={(groups ?? []) as unknown as Group[]}
-        products={(products ?? []) as ProductLite[]}
+        products={products as ProductLite[]}
         categories={categories ?? []}
       />
     </>

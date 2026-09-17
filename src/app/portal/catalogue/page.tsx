@@ -1,5 +1,6 @@
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
+import { fetchAll } from '@/lib/supabase/chunk';
 import CollectionsBrowser from '../CollectionsBrowser';
 import type { CategoryRow } from '@/lib/catalogue/tree';
 import type { CatalogueItem } from '@/lib/types';
@@ -12,14 +13,14 @@ export default async function PortalCatalogue() {
   const user = await requireClient();
   const sb = await supabaseServer();
 
-  const [{ data: products }, { data: categories }, { data: groupRows },
+  const [products, { data: categories }, { data: groupRows },
          { data: client }, { data: settings }] =
     await Promise.all([
-    sb.from('client_catalogue')
+    fetchAll((from, to) => sb.from('client_catalogue')
       .select(`id, sku, name, brand, price, currency, price_note, in_stock, image_url,
                variant_group, variant_label, variant_sort,
                category_slug, category_name, configurator_only`)
-      .order('sku').limit(2000),
+      .order('sku').range(from, to)),
     sb.from('categories').select('id, slug, name, sort, parent_id').order('sort'),
     // Counted alongside the products: a builder is one thing to click.
     sb.from('product_groups').select('categories(slug)').eq('active', true),
@@ -29,7 +30,7 @@ export default async function PortalCatalogue() {
 
   return (
     <CollectionsBrowser
-      products={(products ?? []) as CatalogueItem[]}
+      products={products as CatalogueItem[]}
       categories={(categories ?? []) as CategoryRow[]}
       configurators={((groupRows ?? []) as unknown as { categories: { slug: string } | null }[])
         .map((g) => ({ categorySlug: g.categories?.slug ?? null }))}

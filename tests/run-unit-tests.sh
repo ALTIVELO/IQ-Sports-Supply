@@ -15,6 +15,10 @@ $TSC src/lib/login/*.ts     --outDir .test-build/login     >/dev/null 2>&1
 $TSC src/lib/import/*.ts    --outDir .test-build/import    >/dev/null 2>&1
 $TSC src/lib/reporting/*.ts --outDir .test-build/reporting >/dev/null 2>&1
 $TSC src/lib/orders/*.ts    --outDir .test-build/orders    >/dev/null 2>&1
+$TSC src/lib/supabase/chunk.ts --outDir .test-build/supabase >/dev/null 2>&1
+# chunk.ts is server-only; the marker import means nothing to Node and would
+# just fail to resolve, so it is dropped from the compiled copy the tests read.
+sed -i "/^import 'server-only';$/d" .test-build/supabase/chunk.js 2>/dev/null || true
 # The chart's axis maths. JSX, so it needs the React preset to emit at all.
 $TSC src/app/staff/dashboard/Charts.tsx --jsx react-jsx \
      --outDir .test-build/dashboard >/dev/null 2>&1
