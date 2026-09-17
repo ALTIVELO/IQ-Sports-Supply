@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
-import { markPacked, markShipped } from '../actions';
+import { markPacked, markShipped, markDelivered } from '../actions';
 import type { ActionResult } from '../actions';
 import type { InvoiceType } from '@/lib/types';
 
@@ -12,6 +12,7 @@ interface Inv {
   id: string; number: string; type: InvoiceType; date: string;
   paid: boolean; paid_date: string | null; ready_to_pack: boolean;
   packed: boolean; packed_at: string | null; shipped: boolean; shipped_at: string | null;
+  delivered: boolean; delivered_at: string | null;
   carrier: string | null; tracking_number: string | null; tracking_url: string | null;
   clients: { name: string; address: string | null };
   orders: { number: string };
@@ -129,7 +130,9 @@ function PackRow({
         <span className="text-[12px] text-mute num">{inv.orders.number}</span>
         {inv.type !== 'full' && <Tag tone={inv.type === 'backorder' ? 'red' : 'line'}>{inv.type}</Tag>}
         <span className="text-[12px] text-mute num">{units} units · {fmtDate(inv.date)}</span>
-        {inv.shipped && <Tag tone="green">Shipped</Tag>}
+        {inv.delivered
+          ? <Tag tone="green">Delivered</Tag>
+          : inv.shipped && <Tag tone="line">Shipped</Tag>}
 
         <div className="ml-auto flex flex-wrap gap-1.5">
           <a
@@ -146,6 +149,11 @@ function PackRow({
           {inv.packed && !inv.shipped && (
             <Button small kind="accent" onClick={() => setShipping(!shipping)}>
               {shipping ? 'Cancel' : 'Mark shipped'}
+            </Button>
+          )}
+          {inv.shipped && !inv.delivered && (
+            <Button small kind="accent" disabled={pending} onClick={() => run(() => markDelivered(inv.id))}>
+              {pending ? 'Sending…' : 'Mark delivered'}
             </Button>
           )}
         </div>
