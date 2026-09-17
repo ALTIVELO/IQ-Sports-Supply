@@ -12,7 +12,8 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Dashboard — IQ Sports Supply' };
 
 interface TotalsRow {
-  orders: number; revenue: string; cost: string; profit: string; uncosted_lines: number;
+  orders: number; revenue: string; cost: string; profit: string;
+  excluded_lines: number; excluded_revenue: string;
 }
 interface BucketRow {
   bucket: string; orders: number; revenue: string; cost: string; profit: string;
@@ -26,7 +27,8 @@ const totals = (r: TotalsRow | undefined): Totals => ({
   revenue: Number(r?.revenue ?? 0),
   cost: Number(r?.cost ?? 0),
   profit: Number(r?.profit ?? 0),
-  uncostedLines: r?.uncosted_lines ?? 0,
+  excludedLines: r?.excluded_lines ?? 0,
+  excludedRevenue: Number(r?.excluded_revenue ?? 0),
 });
 
 /** A bucket's label: the date for a day, the week's Monday, the month's name. */
@@ -88,7 +90,7 @@ export default async function DashboardPage({
 
   return (
     <>
-      <PageHeading sub="Revenue is net of VAT and recognised on the order date — an order placed in March that settles in April was March's work. Cancelled orders are not sales and are left out entirely.">
+      <PageHeading sub="Revenue is net of VAT and recognised on the order date — an order placed in March that settles in April was March's work. Cancelled orders are not sales, and a line we have no cost for is left out of every figure rather than counted as free.">
         Dashboard
       </PageHeading>
       <DashboardScreen data={data} />

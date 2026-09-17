@@ -48,13 +48,16 @@ export default function OrderRow({ order, products, costOf, canAmend, canDelete 
   const backordered = order.order_lines.reduce((a, l) => a + l.bo_qty, 0);
   const total = order.order_lines.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
 
-  // What this order owes the supplier, and what is left over. Lines we have
-  // never costed count as nothing towards the first, which flatters the
-  // second — so the count of them is shown rather than hidden.
-  const supplier = order.order_lines.reduce((a, l) => a + l.qty * (costOf[l.id] ?? 0), 0);
-  const uncosted = order.order_lines.filter((l) => costOf[l.id] === undefined).length;
-  const profit = total - supplier;
-  const marginPct = total > 0 ? (profit / total) * 100 : 0;
+  // Net is the whole order, because that is what the client pays and it has to
+  // agree with the invoice. The margin is only over the lines we can cost:
+  // counting an uncosted line as free would put its whole price into profit,
+  // which is the same thing the dashboard refuses to do.
+  const costed = order.order_lines.filter((l) => costOf[l.id] !== undefined);
+  const uncosted = order.order_lines.length - costed.length;
+  const supplier = costed.reduce((a, l) => a + l.qty * costOf[l.id], 0);
+  const costedNet = costed.reduce((a, l) => a + l.qty * Number(l.unit_price), 0);
+  const profit = costedNet - supplier;
+  const marginPct = costedNet > 0 ? (profit / costedNet) * 100 : 0;
   const live = order.invoices.filter((i) => !i.superseded);
   const fullInvoice = live.find((i) => i.type === 'full');
   const canSplit = Boolean(fullInvoice && !fullInvoice.paid && backordered > 0);
@@ -123,7 +126,7 @@ export default function OrderRow({ order, products, costOf, canAmend, canDelete 
           <span className="font-semibold">
             <Money value={total} /> <span className="text-mute font-normal">net</span>
           </span>
-          {supplier > 0 && (
+          {costed.length > 0 && (
             <>
               <span className="text-mute">
                 <Money value={supplier} /> <span className="font-normal">to supplier</span>
@@ -185,9 +188,11 @@ export default function OrderRow({ order, products, costOf, canAmend, canDelete 
 
             {uncosted > 0 && (
               <p className="text-[12px] text-mute mt-2">
-                {uncosted} line{uncosted === 1 ? '' : 's'} with no cost recorded, so the
-                margin above is only as complete as the price list. Import a cost column
-                on the Import screen and past orders are costed with it.
+                {uncosted} line{uncosted === 1 ? '' : 's'} with no cost recorded, so
+                {uncosted === 1 ? ' it is' : ' they are'} outside the margin above —
+                which covers the {costed.length} line{costed.length === 1 ? '' : 's'} we
+                can cost, not the whole order. Import a cost column on the Import screen
+                and past orders are costed with it.
               </p>
             )}
 

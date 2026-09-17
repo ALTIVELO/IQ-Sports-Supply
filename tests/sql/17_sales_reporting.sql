@@ -3,8 +3,8 @@
 --
 -- The figures on a dashboard get quoted in meetings, so the things worth
 -- pinning down are the edges: which orders count, which day an order belongs
--- to, what an empty bucket looks like, and what a line with no recorded cost
--- does to the margin.
+-- to, what an empty bucket looks like, and what happens to a line nobody has
+-- costed — which is reported on nowhere, and counted as excluded instead.
 -- ============================================================================
 \set ON_ERROR_STOP on
 \pset pager off
@@ -70,7 +70,8 @@ begin
   perform assert_eq(r.revenue, 700.00::numeric, 'revenue is the seven units sold');
   perform assert_eq(r.cost, 420.00::numeric, 'against what those seven cost us');
   perform assert_eq(r.profit, 280.00::numeric, 'leaving the difference');
-  perform assert_eq(r.uncosted_lines, 0, 'and every line was costed');
+  perform assert_eq(r.excluded_lines, 0, 'and nothing had to be left out');
+  perform assert_eq(r.excluded_revenue, 0::numeric, 'so no revenue was set aside');
 end $$;
 
 \echo ''
@@ -133,21 +134,62 @@ select assert_fails($$ select * from sales_over_time(current_date, current_date,
                     'a grain this does not report on is refused');
 
 \echo ''
-\echo '───────── A line nobody has costed flatters the margin, and says so ─────────'
+\echo '───────── A sale nobody can cost is not reported on at all ─────────'
 do $$
 declare r record;
 begin
+  -- RP-2 has never been costed. Counting it at zero cost would put its whole
+  -- price into profit, so it is left out of every figure instead.
   perform import_historic_order(
     (select id from clients where name='MDI Ltd'), (current_date - 1)::date,
     jsonb_build_array(jsonb_build_object('sku','RP-2','qty',1,'unit_price',100.00)),
     'REP-D', null);
 
   select * into r from sales_totals((current_date - 30)::date, current_date);
-  perform assert_eq(r.revenue, 800.00::numeric, 'the sale counts towards revenue');
-  perform assert_eq(r.cost, 420.00::numeric, 'but adds nothing to cost, having none');
-  perform assert_eq(r.profit, 380.00::numeric, 'so it all reads as profit');
-  perform assert_eq(r.uncosted_lines, 1,
-                    'which is why the count of uncosted lines comes back too');
+  perform assert_eq(r.revenue, 700.00::numeric, 'its price is not in revenue');
+  perform assert_eq(r.cost, 420.00::numeric, 'nor does it move the cost');
+  perform assert_eq(r.profit, 280.00::numeric, 'so the margin stays true');
+  perform assert_eq(r.orders, 2, 'and the order it was alone on is not counted');
+
+  -- Smaller than the order book, and saying so is the whole point.
+  perform assert_eq(r.excluded_lines, 1, 'the line is reported as excluded');
+  perform assert_eq(r.excluded_revenue, 100.00::numeric,
+                    'along with the money that went with it');
+
+  perform assert_eq(
+    (select coalesce(sum(revenue), 0) from sales_over_time(
+       (current_date - 30)::date, current_date, 'day')),
+    700.00::numeric, 'and the buckets leave it out too');
+  perform assert_eq(
+    (select orders from sales_over_time((current_date - 30)::date, current_date, 'day')
+      where bucket = (current_date - 1)::date),
+    0, 'the day it was placed on reads as quiet');
+end $$;
+
+\echo ''
+\echo '───────── An order half of which we can cost keeps the half we can ─────────'
+do $$
+declare r record; v_before numeric;
+begin
+  select revenue into v_before from sales_totals((current_date - 30)::date, current_date);
+
+  -- Three of the costed widget and one of the widget nobody has costed, on
+  -- one order. Throwing the whole order away to punish one line would lose
+  -- far more than it protects.
+  perform import_historic_order(
+    (select id from clients where name='MDI Ltd'), (current_date - 2)::date,
+    jsonb_build_array(
+      jsonb_build_object('sku','RP-1','qty',3,'unit_price',100.00),
+      jsonb_build_object('sku','RP-2','qty',1,'unit_price',100.00)),
+    'REP-E', null);
+
+  select * into r from sales_totals((current_date - 30)::date, current_date);
+  perform assert_eq(r.revenue, v_before + 300.00, 'only the costed lines add revenue');
+  perform assert_eq(r.cost, 600.00::numeric, 'and only their cost');
+  perform assert_eq(r.profit, 400.00::numeric, 'leaving a margin that is true');
+  perform assert_eq(r.orders, 3, 'the order counts once, on the strength of its costed lines');
+  perform assert_eq(r.excluded_lines, 2, 'two lines have now been set aside');
+  perform assert_eq(r.excluded_revenue, 200.00::numeric, 'worth two hundred between them');
 end $$;
 
 \echo ''

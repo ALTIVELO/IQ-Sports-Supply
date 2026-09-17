@@ -7,7 +7,10 @@ import { PERIODS, type PeriodKey } from '@/lib/reporting/period';
 import { SalesChart, OrdersChart, Legend, type Bucket } from './Charts';
 
 export interface Totals {
-  orders: number; revenue: number; cost: number; profit: number; uncostedLines: number;
+  orders: number; revenue: number; cost: number; profit: number;
+  /** Lines with no recorded cost, which this report does not cover. */
+  excludedLines: number;
+  excludedRevenue: number;
 }
 export interface TopClient {
   clientId: string; name: string; orders: number; revenue: number; profit: number;
@@ -61,18 +64,7 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
               now={now.orders} before={before.orders} against={data.previousLabel} />
       </div>
 
-      {now.uncostedLines > 0 && (
-        <Notice tone="info">
-          {now.uncostedLines} line{now.uncostedLines === 1 ? '' : 's'} in this period
-          {now.uncostedLines === 1 ? ' has' : ' have'} no cost recorded, so
-          {now.uncostedLines === 1 ? ' it counts' : ' they count'} as costing nothing and
-          the profit above is flattered by however much they really cost.{' '}
-          <Link href="/staff/import" className="text-ink font-semibold underline">
-            Import a cost column
-          </Link>{' '}
-          and past orders are costed with it.
-        </Notice>
-      )}
+      {now.excludedLines > 0 && <Excluded totals={now} />}
 
       <Card>
         <div className="flex flex-wrap items-baseline gap-3 mb-1">
@@ -152,6 +144,36 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * What the figures above do not cover.
+ *
+ * The report is deliberately smaller than the order book — a line we cannot
+ * cost is left out rather than counted as free — and a number that is smaller
+ * than someone expects, for a reason nobody stated, is how a dashboard loses
+ * its readers. So the gap is named, in lines and in money, every time there
+ * is one.
+ */
+function Excluded({ totals }: { totals: Totals }) {
+  const one = totals.excludedLines === 1;
+  const share = totals.revenue + totals.excludedRevenue > 0
+    ? (totals.excludedRevenue / (totals.revenue + totals.excludedRevenue)) * 100
+    : 0;
+
+  return (
+    <Notice tone={share >= 20 ? 'error' : 'info'}>
+      Not counted above: {totals.excludedLines} order line{one ? '' : 's'} worth{' '}
+      <strong className="num"><Money value={totals.excludedRevenue} /></strong>
+      {share >= 1 && <> — {share.toFixed(0)}% of what was ordered</>}. We have no cost
+      for {one ? 'it' : 'them'}, so {one ? 'it is' : 'they are'} left out of revenue and
+      profit rather than counted as costing nothing.{' '}
+      <Link href="/staff/import" className="text-ink font-semibold underline">
+        Import a cost column
+      </Link>{' '}
+      and past orders are costed with it, back to the day each was placed.
+    </Notice>
   );
 }
 
