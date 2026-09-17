@@ -15,7 +15,7 @@ export type XeroStatus = 'not_synced' | 'synced' | 'error';
 
 export type OrderEventType =
   | 'placed' | 'invoice_sent' | 'payment_received'
-  | 'supplier_ordered' | 'stock_arrived' | 'packed' | 'shipped';
+  | 'supplier_ordered' | 'stock_arrived' | 'packed' | 'shipped' | 'delivered';
 
 /**
  * One product as a client sees it: their own tier's price, and nothing about
@@ -75,6 +75,7 @@ export interface Invoice {
   date: string; due_date: string; vat_rate: number; paid: boolean; paid_date: string | null;
   ready_to_pack: boolean; packed: boolean; packed_at: string | null;
   shipped: boolean; shipped_at: string | null;
+  delivered: boolean; delivered_at: string | null;
   carrier: string | null; tracking_number: string | null; tracking_url: string | null;
   location_id: string; superseded: boolean;
   xero_id: string | null; xero_status: XeroStatus; xero_error: string | null; exported: boolean;
@@ -119,4 +120,5 @@ export const TIMELINE: { type: OrderEventType; label: string }[] = [
   { type: 'stock_arrived', label: 'Stock arrived' },
   { type: 'packed', label: 'Packed' },
   { type: 'shipped', label: 'Shipped' },
+  { type: 'delivered', label: 'Delivered' },
 ];
