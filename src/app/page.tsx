@@ -5,7 +5,7 @@ import { Wordmark, LogoGlyph } from '@/components/Logo';
 import { getSessionUser, isStaff } from '@/lib/auth';
 
 export const metadata: Metadata = {
-  title: 'IQ Sports Supply — the pro cycling team friendly distributor',
+  title: 'IQ Sports Supply — trade supply built around pro teams',
   description:
     'UK trade supply of components, bikes, clothing and tools to pro and elite teams, '
     + 'bike shops, clubs and distributors. Accounts are opened by application; pricing '
@@ -94,16 +94,13 @@ function Hero() {
             Trade supply · United Kingdom
           </div>
 
-          <h1 className="text-[32px] sm:text-[46px] font-semibold leading-[1.06]
+          <h1 className="text-[34px] sm:text-[52px] font-semibold leading-[1.06]
                          tracking-[-0.03em] mt-6">
-            {/* Placed breaks, but only where there is room for them: on a
-                phone the second line does not fit and the hard break would
-                leave "friendly" alone on a line of its own. */}
-            The world’s only
+            {/* One sentence to a line above phone width, where both fit the
+                measure; below it the browser wraps them as it likes. */}
+            Built around pro teams.
             <br className="hidden sm:inline" />
-            {' '}pro cycling team friendly
-            <br className="hidden sm:inline" />
-            {' '}distributor.
+            {' '}Open to the trade.
           </h1>
 
           <p className="text-[15px] sm:text-[16px] text-[#C3D0DA] mt-6 leading-relaxed max-w-xl">
@@ -176,7 +173,7 @@ function Teams() {
           </div>
           <h2 className="text-[26px] sm:text-[32px] font-semibold tracking-[-0.025em]
                          leading-tight mt-3">
-            The trade is built around shops. We built ours around teams.
+            A race week does not look like a shop week.
           </h2>
           <p className="text-[14px] text-mute mt-4 leading-relaxed">
             We built the account around the team first — the rider-by-rider builds, the
