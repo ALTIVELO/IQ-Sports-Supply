@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0024: does this person have a password?
+-- 0025: does this person have a password?
 --
 -- A password is an addition here, never a replacement: the emailed sign-in
 -- link keeps working for everybody, which is what makes "I have forgotten it"
