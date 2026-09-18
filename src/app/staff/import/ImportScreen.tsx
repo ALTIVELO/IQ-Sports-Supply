@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from 'react';
 import { Button, Card, Empty, Money, Notice, Tag } from '@/components/ui';
 import { today } from '@/lib/format';
 import {
-  parseWorkbook, columnLetters, guessMapping, guessCatalogueColumns,
+  parseWorkbook, columnLetters, guessMapping, guessCatalogueColumns, sameHeaders,
   unclaimedMoneyColumns, extractRows, toNumber, type ParsedSheet,
 } from '@/lib/import/parse';
 import {
@@ -16,7 +16,12 @@ import { previewCatalogue, applyCatalogue, applyClients, applyStock,
          applyHistoricOrders, saveTemplate } from './actions';
 
 interface Named { id: string; name: string }
-interface Template { scope: string; tier_id: string | null; header_row: number; mapping: ColumnMapping }
+interface Template {
+  scope: string; tier_id: string | null; header_row: number;
+  mapping: ColumnMapping;
+  /** The headers this layout was saved against; empty on layouts from before. */
+  header_labels?: string[];
+}
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
 type Plan = SheetPlan & { include: boolean };
 
@@ -152,10 +157,21 @@ export default function ImportScreen({
 
         const saved = savedTemplate();
         const next: Record<string, Plan> = {};
+        let reguessed = false;
         for (const sheet of parsed) {
           const headerRow = saved?.header_row ?? 1;
           const header = sheet.grid[headerRow - 1] ?? [];
-          const mapping = saved?.mapping ?? mappingFor(sheet.name, header);
+          /*
+           * The saved layout only applies to the sheet it was saved from.
+           *
+           * It is a set of column letters. Against a sheet with a column
+           * inserted they still resolve, silently, to the wrong columns —
+           * which is worse than not having them, because the guess that would
+           * have read the new headers correctly never runs.
+           */
+          const fits = saved ? sameHeaders(saved.header_labels, header) : false;
+          if (saved && !fits) reguessed = true;
+          const mapping = fits && saved ? saved.mapping : mappingFor(sheet.name, header);
           next[sheet.name] = {
             sheetName: sheet.name,
             headerRow,
@@ -168,9 +184,16 @@ export default function ImportScreen({
         }
         setPlans(next);
 
-        const read = `${parsed.length} sheet${parsed.length === 1 ? '' : 's'} read from ${file.name}`;
+        // A saved layout quietly not being used is its own kind of surprise,
+        // so it is said out loud rather than left to be noticed in a preview.
+        const relaid = reguessed
+          ? ' · this sheet has different columns from the one your saved layout '
+            + 'was set up for, so the columns were read afresh — check them below'
+          : '';
+        const read = `${parsed.length} sheet${parsed.length === 1 ? '' : 's'} `
+                   + `read from ${file.name}${relaid}`;
         if (scope !== 'prices') {
-          setMessage({ tone: 'info', text: read });
+          setMessage({ tone: reguessed ? 'info' : 'info', text: read });
           return;
         }
 
@@ -321,12 +344,18 @@ export default function ImportScreen({
 
   function persistMapping(sheetName: string) {
     const plan = plans[sheetName];
+    // The headers go with it. Without them the letters get applied to next
+    // quarter's sheet whatever shape it turns out to be.
+    const header = sheets.find((s) => s.name === sheetName)
+      ?.grid[plan.headerRow - 1] ?? [];
     startTransition(async () => {
       const r = await saveTemplate({
         scope, tierId: null, headerRow: plan.headerRow, mapping: plan.mapping,
+        headerLabels: header.map((c) => String(c ?? '')),
       });
       setMessage(r.ok
-        ? { tone: 'success', text: 'Mapping saved — next quarter is drag-and-drop' }
+        ? { tone: 'success', text: 'Mapping saved — next quarter is drag-and-drop, '
+                                + 'as long as the sheet keeps these columns' }
         : { tone: 'error', text: r.error ?? 'Could not save the mapping' });
     });
   }

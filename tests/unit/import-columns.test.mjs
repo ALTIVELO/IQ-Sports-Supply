@@ -1,7 +1,7 @@
 // Matching a price list's columns to our pricing tiers, and finding the one
 // column that says what we pay. Getting the second wrong is the expensive
 // mistake: a selling price read as a cost makes every margin look healthy.
-const { guessMapping, guessCatalogueColumns, unclaimedMoneyColumns } =
+const { guessMapping, guessCatalogueColumns, unclaimedMoneyColumns, sameHeaders } =
   await import('../../.test-build/import/parse.js');
 
 let fail = 0;
@@ -145,5 +145,44 @@ check('a whole bike list maps in one pass',
   [bikes.sku, bikes.name, bikes.currency, bikes.variant_group, bikes.variant_label,
    bikes.price_note],
   ['B', 'A', 'E', 'F', 'G', 'H']);
+
+// ── whether a saved layout still describes this sheet ─────────────────────
+//
+// A layout is a set of column letters, and a letter only means something
+// against the header row it was read from. This is the check that stopped a
+// layout saved for last quarter's sheet being applied, letter for letter, to
+// one with four columns inserted — which read Series as the Size and filed a
+// hundred and eighteen products as size "Dura-Ace".
+const LAST_QUARTER =
+  ['Name','SKU','Brand','Category','Our cost','Distributor','Shop','Club','Retail'];
+const THIS_QUARTER =
+  ['Name','SKU','Brand','Series','Model','Size','Category','Image',
+   'Our cost','Distributor','Shop','Club','Retail'];
+
+// check() canonicalises objects, and Object.entries(true) is empty — every
+// boolean would compare equal to every other. Plain values get their own.
+const is = (label, got, want) => {
+  const ok = got === want;
+  if (!ok) fail++;
+  console.log(`${ok ? 'PASS ' : 'FAIL '} ${label}${ok ? '' : `  (got ${got}, wanted ${want})`}`);
+};
+
+is('the same sheet matches', sameHeaders(LAST_QUARTER, LAST_QUARTER), true);
+is('a sheet with columns inserted does not',
+   sameHeaders(LAST_QUARTER, THIS_QUARTER), false);
+// A supplier re-exporting the same sheet changes the case and the spacing and
+// nothing else, and re-doing the mapping over that would be a chore invented
+// for no reason.
+is('case and spacing do not count',
+   sameHeaders(['Our Cost', 'SKU'], ['our  cost', 'sku ']), true);
+is('nor do trailing blanks, which are a spreadsheet\'s own idea',
+   sameHeaders(['SKU', 'Name'], ['SKU', 'Name', '', '']), true);
+is('a renamed column is a different sheet',
+   sameHeaders(['SKU', 'Name'], ['SKU', 'Title']), false);
+// A layout saved before the headers were recorded cannot be checked, and one
+// that cannot be checked is one to guess again rather than trust.
+is('a layout with no headers recorded never matches',
+   sameHeaders([], LAST_QUARTER), false);
+is('and neither does a missing one', sameHeaders(null, LAST_QUARTER), false);
 
 process.exit(fail ? 1 : 0);

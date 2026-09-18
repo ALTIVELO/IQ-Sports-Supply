@@ -136,9 +136,17 @@ or stock levels. Availability reaches the portal as a boolean through
 
 Excel stays the working master. The Import screen takes `.xlsx`/`.csv` by
 drag-and-drop — one file per tier, or one workbook with a tab per tier, matched
-to tiers by tab name. Column mappings are saved per tier, so subsequent quarters
-need no setup. It tolerates title blocks above the header row and blank rows in
-the middle.
+to tiers by tab name. Column mappings are saved, so subsequent quarters need no
+setup. It tolerates title blocks above the header row and blank rows in the
+middle.
+
+A saved mapping is a set of column letters, and letters only mean anything
+against the headers they were read from — insert one column upstream and every
+letter after it points at the wrong thing. So the headers are saved with it: a
+sheet whose headers match gets the saved layout, one whose headers differ gets
+read afresh, and the screen says which happened. As a backstop the import also
+checks whether the chosen Size column holds sizes at all, since a model whose
+members are all one size has no sizes in it.
 
 Before anything is written you get a preview in three buckets: new SKUs, price
 changes with old → new and the % delta (anything beyond ±25% flagged as a likely

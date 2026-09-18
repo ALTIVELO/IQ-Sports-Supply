@@ -38,6 +38,34 @@ const isHeaderish = (cell: string) => {
 };
 
 /**
+ * Whether a saved layout still describes the sheet in front of us.
+ *
+ * A layout is a set of column letters, and a letter only means something
+ * against the header row it was read from. Insert one column upstream and
+ * every letter after it points at the wrong thing — which is how a Series
+ * column came to be imported as the Size, filing a hundred and eighteen
+ * products as size "Dura-Ace".
+ *
+ * Compared loosely, because a supplier re-exporting the same sheet changes
+ * the case and the spacing and nothing else. Trailing blanks are ignored for
+ * the same reason: a spreadsheet's idea of where a row ends is its own.
+ *
+ * An empty saved list never matches. A layout saved before the headers were
+ * recorded cannot be checked, and one that cannot be checked is one to guess
+ * again rather than trust.
+ */
+export function sameHeaders(saved: string[] | null | undefined, actual: string[]): boolean {
+  const tidy = (cells: string[]) => {
+    const out = cells.map((c) => String(c ?? '').trim().toLowerCase().replace(/\s+/g, ' '));
+    while (out.length && out[out.length - 1] === '') out.pop();
+    return out;
+  };
+  const a = tidy(saved ?? []);
+  const b = tidy(actual);
+  return a.length > 0 && a.length === b.length && a.every((cell, i) => cell === b[i]);
+}
+
+/**
  * Guesses which column is which from the header row, so the first-time setup is
  * usually just a confirmation. Header text is matched loosely.
  */

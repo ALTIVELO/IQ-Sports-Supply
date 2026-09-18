@@ -10,7 +10,7 @@ import { SUSPICIOUS_DELTA, type CatalogueRow, type CataloguePreview,
 import type { ActionResult } from '../actions';
 import { classifyProduct } from '@/lib/catalogue/categories';
 import { knownSize } from '@/lib/catalogue/variants';
-import { variantPair } from '@/lib/import/variant-pair';
+import { variantPair, sizesLookWrong } from '@/lib/import/variant-pair';
 import { fetchAll } from '@/lib/supabase/chunk';
 
 const norm = (sku: string) => sku.trim().toLowerCase();
@@ -35,17 +35,30 @@ function readCurrency(raw: string | undefined): 'GBP' | 'EUR' | null | undefined
 // ── saved column mappings ───────────────────────────────────────────────────
 
 export async function loadTemplates(): Promise<
-  { scope: string; tier_id: string | null; header_row: number; mapping: ColumnMapping }[]
+  {
+    scope: string; tier_id: string | null; header_row: number;
+    mapping: ColumnMapping; header_labels: string[];
+  }[]
 > {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
-  const { data } = await sb.from('import_templates').select('scope, tier_id, header_row, mapping');
+  const { data } = await sb.from('import_templates')
+    .select('scope, tier_id, header_row, mapping, header_labels');
   return (data ?? []) as never;
 }
 
-/** Saved per tier, so every subsequent quarter is pure drag-and-drop. */
+/**
+ * Saved so every subsequent quarter is pure drag-and-drop.
+ *
+ * The headers go with it. A layout is a set of column letters, and letters
+ * only mean anything against the sheet they were read from: insert one column
+ * upstream and every letter after it points at the wrong thing. Saving what
+ * the headers said lets the screen tell a sheet that has kept its shape from
+ * one that has not.
+ */
 export async function saveTemplate(input: {
-  scope: ImportScope; tierId: string | null; headerRow: number; mapping: ColumnMapping;
+  scope: ImportScope; tierId: string | null; headerRow: number;
+  mapping: ColumnMapping; headerLabels?: string[];
 }): Promise<ActionResult> {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
@@ -53,6 +66,7 @@ export async function saveTemplate(input: {
     {
       scope: input.scope, tier_id: input.tierId,
       header_row: input.headerRow, mapping: input.mapping,
+      header_labels: input.headerLabels ?? [],
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'scope,tier_id' },
@@ -162,6 +176,27 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
             price_note: row.price_note?.trim() || undefined,
           });
     }
+  }
+
+  /*
+   * Before listing the clashes, ask whether the Size column is a size column.
+   *
+   * A model whose members are all one size has no sizes in it, and a sheet
+   * where most models look like that has had something else read as the Size.
+   * Saying that once beats eighty-one rows each reporting that two products
+   * are the same size as each other, all of which are true and none of which
+   * name the cause.
+   */
+  const wrongColumn = sizesLookWrong([...merged.values()]);
+  if (wrongColumn) {
+    invalid.push({
+      row: 0,
+      reason: `The Size column does not look like sizes: ${wrongColumn.rows} products `
+            + `across ${wrongColumn.models} models all give the same one `
+            + `("${wrongColumn.value}"). A size is what tells the members of a model `
+            + 'apart, so point Size at the column that does — and check Model too, '
+            + 'since a saved layout that has slipped by one usually takes both.',
+    });
   }
 
   // The database refuses two products claiming one size of one model, and it
