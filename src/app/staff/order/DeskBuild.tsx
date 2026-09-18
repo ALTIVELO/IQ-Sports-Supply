@@ -5,6 +5,7 @@ import { Button, Money } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
 import type { DeskBuild, DeskProduct, DeskStep } from './page';
 import { buildLines, missingSteps, preselect, type Chosen } from '@/lib/orders/build';
+import QtyStepper from '@/components/QtyStepper';
 
 /**
  * A groupset specced at the counter.
@@ -125,13 +126,12 @@ export default function DeskBuild({
       </div>
 
       <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-row-line">
-        <label className="text-[12px] font-semibold" htmlFor={`${build.id}-kits`}>
-          Builds
-        </label>
-        <input
-          id={`${build.id}-kits`} type="number" min={1} value={kits}
-          onChange={(e) => setKits(Math.max(1, Number(e.target.value) || 1))}
-          className="num w-16"
+        <span className="text-[12px] font-semibold">Builds</span>
+        <QtyStepper
+          value={kits}
+          min={1}
+          label={`builds of ${build.name}`}
+          onChange={setKits}
         />
         <span className="text-[12px] text-mute">
           {missing.length > 0

@@ -8,6 +8,7 @@ import { useCart } from '../CartContext';
 import type { Address } from '../account/AddressBook';
 import { placeClientOrder } from '../actions';
 import AgencyNotice from '@/components/AgencyNotice';
+import QtyStepper from '@/components/QtyStepper';
 import type { AgencyBrand, CatalogueItem } from '@/lib/types';
 import { currencyOf } from '@/lib/format';
 import { totalsByCurrency } from '@/lib/orders/split';
@@ -28,7 +29,7 @@ export default function BasketReview({
   products: CatalogueItem[]; vatRate: number; paymentDays: number; addresses: Address[];
   company: string; agencyBrands: AgencyBrand[];
 }) {
-  const { quantities, setQty, add, clear, ready } = useCart();
+  const { quantities, setQty, clear, ready } = useCart();
   const [placed, setPlaced] = useState<{
     orders: {
       number: string; currency: string;
@@ -258,24 +259,13 @@ export default function BasketReview({
                 <Money value={Number(product.price)} currency={product.currency} /> each
               </div>
 
-              <div className="flex items-center gap-1">
-                <button onClick={() => add(product.id, -1)}
-                        aria-label={`Remove one ${product.sku}`}
-                        className="w-9 h-9 border border-line rounded bg-white text-[16px]">
-                  −
-                </button>
-                <input
-                  type="number" min={0} value={qty}
-                  onChange={(e) => setQty(product.id, Math.max(0, Number(e.target.value) || 0))}
-                  aria-label={`Quantity of ${product.sku}`}
-                  className="num w-16 text-center"
-                />
-                <button onClick={() => add(product.id, 1)}
-                        aria-label={`Add one ${product.sku}`}
-                        className="w-9 h-9 border border-line rounded bg-white text-[16px] hover:bg-parch">
-                  +
-                </button>
-              </div>
+              {/* Down to nothing, which takes the line off the basket. */}
+              <QtyStepper
+                value={qty}
+                min={0}
+                label={product.sku}
+                onChange={(next) => setQty(product.id, next)}
+              />
 
               <div className="num text-[15px] font-semibold w-[90px] text-right">
                 <Money value={qty * Number(product.price)} currency={product.currency} />

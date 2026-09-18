@@ -14,6 +14,7 @@ import DeskBuild from './DeskBuild';
 import AgencyNotice from '@/components/AgencyNotice';
 import type { AgencyBrand } from '@/lib/types';
 import type { DeskProduct, DeskBuild as Build } from './page';
+import QtyStepper from '@/components/QtyStepper';
 
 interface ClientRow {
   id: string; name: string; tier_id: string; address: string | null;
@@ -514,7 +515,7 @@ export default function OrderDesk({
                 <thead>
                   <tr>
                     <th>SKU</th><th>Item</th>
-                    <th className="w-[70px]">Qty</th>
+                    <th className="w-[140px]">Qty</th>
                     <th className="w-[100px]">Unit</th>
                     <th className="w-[90px] text-right">Line</th>
                     <th className="w-[30px]" />
@@ -526,9 +527,11 @@ export default function OrderDesk({
                       <td className="num">{l.sku}</td>
                       <td>{l.name}</td>
                       <td>
-                        <input
-                          className="num" type="number" min={1} value={l.qty}
-                          onChange={(e) => patch(i, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                        <QtyStepper
+                          value={l.qty}
+                          min={1}
+                          label={`${l.sku} on this order`}
+                          onChange={(qty) => patch(i, { qty })}
                         />
                       </td>
                       <td>

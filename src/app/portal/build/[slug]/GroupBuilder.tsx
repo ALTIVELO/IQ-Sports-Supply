@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Button, Card, Empty, Field, Money, Notice, Tag } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
 import { useCart } from '../../CartContext';
+import QtyStepper from '@/components/QtyStepper';
 
 export interface GroupOption {
   option_id: string; step_id: string; product_id: string;
@@ -241,14 +242,15 @@ export default function GroupBuilder({
         </Notice>
 
         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-3 pt-1">
-          <label className="flex items-center gap-2 text-[12px] font-semibold mr-auto">
+          <div className="flex items-center gap-2 text-[12px] font-semibold mr-auto">
             {isBuild ? 'How many builds' : 'Quantity'}
-            <input
-              type="number" min={1} value={qty}
-              onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-              className="num w-20 text-center"
+            <QtyStepper
+              value={qty}
+              min={1}
+              label={isBuild ? 'builds' : 'of this'}
+              onChange={setQty}
             />
-          </label>
+          </div>
           <div className="num text-[13px] text-mute text-right">
             <div>Net <Money value={net} currency={currency} /></div>
             {vatRate > 0 && <div>VAT ({vatRate}%) <Money value={vat} currency={currency} /></div>}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { Button, Notice, Tag } from '@/components/ui';
+import QtyStepper from '@/components/QtyStepper';
 import { RETURN_REASONS, type ReturnOutcome, type ReturnReason } from '@/lib/types';
 import { requestReturn } from './actions';
 
@@ -140,22 +141,20 @@ export default function ReportProblem({
                   {l.name}
                 </span>
                 <Tag tone="line">{l.left} available</Tag>
-                <label className="text-[11px] font-semibold text-mute">
-                  How many
-                  <input
-                    type="number" min={0} max={l.left}
-                    value={state?.qty ?? 0}
-                    onChange={(e) => {
-                      const qty = Math.max(0, Math.min(l.left, Number(e.target.value) || 0));
-                      setPicked((p) => ({
-                        ...p,
-                        [l.id]: { reason: p[l.id]?.reason ?? 'faulty',
-                                  note: p[l.id]?.note ?? '', qty },
-                      }));
-                    }}
-                    className="num w-16"
-                  />
-                </label>
+                <span className="text-[11px] font-semibold text-mute">How many</span>
+                {/* Capped at what is left to send back, so the form cannot ask
+                    for more than the database will take. */}
+                <QtyStepper
+                  value={state?.qty ?? 0}
+                  min={0}
+                  max={l.left}
+                  label={l.sku}
+                  onChange={(qty) => setPicked((p) => ({
+                    ...p,
+                    [l.id]: { reason: p[l.id]?.reason ?? 'faulty',
+                              note: p[l.id]?.note ?? '', qty },
+                  }))}
+                />
               </div>
 
               {state?.qty > 0 && (

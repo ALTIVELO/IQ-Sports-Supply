@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Card, Money, Tag } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
+import QtyStepper from '@/components/QtyStepper';
 import { useCart } from './CartContext';
 import { groupName, skuPrefix, type VariantGroup } from '@/lib/catalogue/variants';
 import type { CatalogueItem } from '@/lib/types';
@@ -130,33 +131,24 @@ function SizeRow({ size }: { size: CatalogueItem }) {
   );
 }
 
+/**
+ * One product's quantity, against the cart rather than against a field.
+ *
+ * The control itself is shared with the order desk and the basket, so a
+ * customer counting frames and the person on the phone counting them for
+ * somebody else are working the same buttons.
+ */
 function Stepper({ product }: { product: CatalogueItem }) {
-  const { quantities, add } = useCart();
-  const qty = quantities[product.id] ?? 0;
+  const { quantities, setQty } = useCart();
   const what = product.variant_label
     ? `${product.sku} size ${product.variant_label}`
     : product.sku;
 
   return (
-    <div className="flex items-center gap-1">
-      <button
-        onClick={() => add(product.id, -1)}
-        disabled={!qty}
-        aria-label={`Remove one ${what}`}
-        className="w-9 h-9 border border-line rounded bg-white text-[16px] disabled:opacity-30"
-      >
-        −
-      </button>
-      <span className="num w-9 text-center text-[14px] font-semibold" aria-live="polite">
-        {qty}
-      </span>
-      <button
-        onClick={() => add(product.id, 1)}
-        aria-label={`Add one ${what}`}
-        className="w-9 h-9 border border-line rounded bg-white text-[16px] hover:bg-parch"
-      >
-        +
-      </button>
-    </div>
+    <QtyStepper
+      value={quantities[product.id] ?? 0}
+      onChange={(qty) => setQty(product.id, qty)}
+      label={what}
+    />
   );
 }
