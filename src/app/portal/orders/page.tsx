@@ -118,7 +118,12 @@ export default async function CurrentOrders() {
                         target="_blank" rel="noreferrer"
                         className="text-[12px] font-semibold border border-line rounded px-[10px] py-[5px] bg-white hover:bg-parch"
                       >
-                        {i.number} {i.paid ? '· paid' : '· awaiting payment'}
+                        {/* Nothing is owed to us on an introduced order, so
+                            it must never read as though something is. */}
+                        {i.number}{' '}
+                        {o.agency_terms
+                          ? '· order confirmation'
+                          : i.paid ? '· paid' : '· awaiting payment'}
                       </a>
                     ))}
                     {live.filter((i) => i.tracking_url).map((i) => (

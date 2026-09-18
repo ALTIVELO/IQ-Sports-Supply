@@ -13,6 +13,7 @@ import type { InvoiceType } from '@/lib/types';
 interface Inv {
   id: string; number: string; type: InvoiceType;
   date: string; due_date: string; vat_rate: number; currency: string;
+  agency: boolean;
   paid: boolean; paid_date: string | null; packed: boolean; shipped: boolean;
   superseded: boolean;
   xero_id: string | null; xero_status: 'not_synced' | 'synced' | 'error';
@@ -134,6 +135,8 @@ export default function InvoicesScreen({
                       <td className="whitespace-nowrap">
                         {inv.superseded
                           ? <span className="text-[12px] text-mute">—</span>
+                          : inv.agency
+                          ? <Tag tone="line">the brand invoices this</Tag>
                           : inv.type === 'proforma'
                           ? <Tag tone="line">nothing to pay</Tag>
                           : inv.type === 'credit'
@@ -157,7 +160,8 @@ export default function InvoicesScreen({
                           >
                             PDF
                           </a>
-                          {inv.superseded || inv.type === 'proforma' || inv.type === 'credit' ? null
+                          {inv.superseded || inv.agency
+                           || inv.type === 'proforma' || inv.type === 'credit' ? null
                             : !inv.paid ? (
                             <Button small kind="ghost" disabled={pending}
                               onClick={() => run(() => markPaid(inv.id, null))}>

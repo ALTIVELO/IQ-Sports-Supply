@@ -16,6 +16,18 @@ export async function pushInvoiceToXero(invoiceId: string) {
     .eq('id', invoiceId)
     .single();
   if (!inv) throw new Error('Unknown invoice');
+  /*
+   * An introduced order is not our supply. Posting it to Xero as ACCREC would
+   * put the whole goods value into our sales and our VAT return for stock we
+   * never owned and money we never collect — and the brand is invoicing the
+   * same customer for the same goods at the same time.
+   */
+  if (inv.agency) {
+    throw new Error(
+      'That order was introduced to a brand who invoices the customer themselves. '
+      + 'It is not our sale, so it does not go to Xero — the commission does, when '
+      + 'they pay it.');
+  }
 
   const { data: settings } = await db.from('settings').select('*').eq('id', 1).single();
   const client = inv.clients as { name: string; email: string | null };

@@ -9,7 +9,7 @@ import type { ActionResult } from '../actions';
 /** How a brand is set up: on consignment, and what its partners may see. */
 export async function saveBrandTerms(input: {
   brandId: string; consignment: boolean; showsMargin: boolean;
-  agency?: boolean; agencyTerms?: string;
+  agency?: boolean; agencyTerms?: string; commissionRate?: number;
 }): Promise<ActionResult> {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
@@ -20,6 +20,11 @@ export async function saveBrandTerms(input: {
   if (input.agency !== undefined) patch.agency = input.agency;
   if (input.agencyTerms !== undefined) {
     patch.agency_terms = input.agencyTerms.trim() || null;
+  }
+  if (input.commissionRate !== undefined) {
+    // The database has the same bounds on it. Clamping here as well means a
+    // typed 200 is corrected rather than bounced with a constraint error.
+    patch.commission_rate = Math.min(100, Math.max(0, input.commissionRate || 0));
   }
 
   // Marking a brand as introduced with nothing to say is the one combination
@@ -42,6 +47,7 @@ export async function saveBrandTerms(input: {
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/staff/brands');
+  revalidatePath('/staff/dashboard');
   revalidatePath('/brand');
   revalidatePath('/portal/basket');
   return { ok: true, message: 'Saved' };

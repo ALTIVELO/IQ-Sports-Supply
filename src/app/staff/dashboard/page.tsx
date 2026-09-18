@@ -21,6 +21,10 @@ interface BucketRow {
 interface ClientRow {
   client_id: string; client_name: string; orders: number; revenue: string; profit: string;
 }
+interface AgencyRow {
+  brand_id: string; brand_name: string; orders: number;
+  goods: string; rate: string | null; commission: string;
+}
 
 const totals = (r: TotalsRow | undefined): Totals => ({
   orders: r?.orders ?? 0,
@@ -65,12 +69,16 @@ export default async function DashboardPage({
   if (!currencies.length) currencies.push('GBP');
   const money = currency && currencies.includes(currency) ? currency : currencies[0];
 
-  const [nowRes, beforeRes, seriesRes, clientsRes] = await Promise.all([
+  const [nowRes, beforeRes, seriesRes, clientsRes, agencyRes] = await Promise.all([
     sb.rpc('sales_totals', { p_from: p.from, p_to: p.to, p_currency: money }),
     sb.rpc('sales_totals', { p_from: p.previousFrom, p_to: p.previousTo, p_currency: money }),
     sb.rpc('sales_over_time',
            { p_from: p.from, p_to: p.to, p_grain: p.grain, p_currency: money }),
     sb.rpc('top_clients', { p_from: p.from, p_to: p.to, p_limit: 6, p_currency: money }),
+    // Introduced business is not in any of the figures above — the goods were
+    // never ours to sell. It is reported here as what it is: the goods the
+    // brand invoiced, and the commission they owe us for the introduction.
+    sb.rpc('agency_commission', { p_from: p.from, p_to: p.to, p_currency: money }),
   ]);
 
   const buckets: Bucket[] = ((seriesRes.data ?? []) as BucketRow[]).map((r) => ({
@@ -97,11 +105,17 @@ export default async function DashboardPage({
     before: totals((beforeRes.data ?? [])[0] as TotalsRow | undefined),
     buckets,
     clients,
+    agency: ((agencyRes.data ?? []) as AgencyRow[]).map((r) => ({
+      brandId: r.brand_id, name: r.brand_name, orders: r.orders,
+      goods: Number(r.goods),
+      rate: r.rate === null ? null : Number(r.rate),
+      commission: Number(r.commission),
+    })),
   };
 
   return (
     <>
-      <PageHeading sub="Revenue is net of VAT and recognised on the order date — an order placed in March that settles in April was March's work. Cancelled orders are not sales, and a line we have no cost for is left out of every figure rather than counted as free.">
+      <PageHeading sub="Revenue is net of VAT and recognised on the order date — an order placed in March that settles in April was March's work. Cancelled orders are not sales, and a line we have no cost for is left out of every figure rather than counted as free. Orders we introduced to a brand are not our sales at all and are reported separately.">
         Dashboard
       </PageHeading>
       <DashboardScreen data={data} />

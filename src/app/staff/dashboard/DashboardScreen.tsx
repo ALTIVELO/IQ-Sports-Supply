@@ -29,6 +29,23 @@ export interface DashboardData {
   before: Totals;
   buckets: Bucket[];
   clients: TopClient[];
+  /**
+   * Orders we introduced rather than sold, per brand.
+   *
+   * Kept out of every figure above and reported on its own, because the goods
+   * value on these is the brand's revenue and not ours. Folding it in would
+   * overstate the business by the whole price of every bike; leaving it out
+   * entirely would make it disappear.
+   */
+  agency: AgencyLine[];
+}
+
+export interface AgencyLine {
+  brandId: string; name: string; orders: number;
+  goods: number;
+  /** Null where the period's orders were placed at more than one rate. */
+  rate: number | null;
+  commission: number;
 }
 
 const margin = (t: Totals) => (t.revenue > 0 ? (t.profit / t.revenue) * 100 : 0);
@@ -107,7 +124,60 @@ export default function DashboardScreen({ data }: { data: DashboardData }) {
         <OrdersChart data={data.buckets} />
       </Card>
 
-      <div className="grid lg:grid-cols-[1.4fr_1fr] gap-4 items-start">
+      {data.agency.length > 0 && (
+        <Card>
+          <div className="flex flex-wrap items-baseline gap-3 mb-1">
+            <h2 className="text-[14px] font-semibold">Introduced, not sold</h2>
+            <span className="text-[12px] text-mute ml-auto">
+              Not counted in anything above
+            </span>
+          </div>
+          <p className="text-[12px] text-mute mb-3 max-w-2xl leading-relaxed">
+            These orders went to the brand, who invoiced the customer and shipped them.
+            The goods are their revenue. Ours is the commission.
+          </p>
+          <div className="overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Brand</th>
+                  <th className="text-right">Orders</th>
+                  <th className="text-right">Goods they invoiced</th>
+                  <th className="text-right">Rate</th>
+                  <th className="text-right">Our commission</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.agency.map((a) => (
+                  <tr key={a.brandId}>
+                    <td className="font-semibold">{a.name}</td>
+                    <td className="num text-right">{a.orders}</td>
+                    <td className="num text-right text-mute">
+                      <Money value={a.goods} currency={currency} />
+                    </td>
+                    <td className="num text-right text-mute">
+                      {a.rate === null ? 'several' : `${a.rate}%`}
+                    </td>
+                    <td className="num text-right font-semibold">
+                      {a.commission === 0
+                        ? <span className="text-danger">no rate set</span>
+                        : <Money value={a.commission} currency={currency} />}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/*
+        * Both tracks get a floor. A grid column sized `auto` or `1fr` takes
+        * the min-content width of its widest child, and the widest child here
+        * is a table: at phone width the two cards grew past the viewport and
+        * took the whole page with them, scroll container and all.
+        */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4 items-start">
         <Card>
           <h2 className="text-[14px] font-semibold mb-3">Every period in figures</h2>
           <div className="overflow-x-auto max-h-[420px] overflow-y-auto">

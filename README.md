@@ -99,6 +99,16 @@ with no rebuild.
    one document cannot be a demand from a seller for half its lines and a note
    from an agent for the other half, and the database refuses an order holding
    both.
+
+   An introduced order is not a sale, so it does not behave like one. The
+   document raised against it is an acknowledgement: no VAT, no due date, it
+   cannot be marked paid, it never reaches the packing queue or Xero, and it
+   is not in the sales figures. What IQ earns is the commission — a rate on
+   the brand, snapshotted onto the order — reported on the dashboard under
+   "Introduced, not sold" with the goods the brand invoiced beside it. Where
+   a period's orders were placed at more than one rate no single rate is
+   claimed, because an average rounded to two places multiplies back out to a
+   different figure.
 9. **Returns.** Two reasons are accepted and they are an enum, not a dropdown:
    the goods arrived faulty, or we sent the wrong thing. Nothing comes back
    because a shop over-ordered. A client raises one from the order it is about,
@@ -241,10 +251,10 @@ Postgres rather than mocked:
 PGHOST=/tmp PGPORT=55432 PGUSER=postgres ./tests/run-sql-tests.sh
 ```
 
-513 assertions covering allocation and backordering, invoicing at placement, the
+542 assertions covering allocation and backordering, invoicing at placement, the
 payment gate, receiving by SO reference, the invoice split and its dating, RLS
 isolation between clients and between brand partners, currency, variant grouping,
-returns, introduced brands, and the approval flow. Each suite runs against a freshly migrated
+returns, introduced brands and their commission, and the approval flow. Each suite runs against a freshly migrated
 database.
 
 The pure logic that runs on a screen rather than in Postgres has its own suite:

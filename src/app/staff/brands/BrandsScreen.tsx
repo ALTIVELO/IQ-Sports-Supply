@@ -10,6 +10,8 @@ export interface BrandRow {
   consignment: boolean; showsMargin: boolean;
   /** We introduce this brand's orders rather than selling their goods. */
   agency: boolean; agencyTerms: string;
+  /** Percent of the goods value they pay us for the introduction. */
+  commissionRate: number;
   partners: { id: string; email: string; name: string | null;
               active: boolean; signedIn: boolean }[];
   products: { id: string; sku: string; name: string; dropship: boolean }[];
@@ -62,11 +64,12 @@ function Brand({ brand, company, open, onToggle, onMessage, quiet = false }: {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [terms, setTerms] = useState(brand.agencyTerms);
+  const [rate, setRate] = useState(String(brand.commissionRate));
   const [pending, startTransition] = useTransition();
   const dropshipping = brand.products.filter((p) => p.dropship);
 
   const save = (patch: Partial<Pick<BrandRow, 'consignment' | 'showsMargin' | 'agency'>>
-                     & { agencyTerms?: string }) =>
+                     & { agencyTerms?: string; commissionRate?: number }) =>
     startTransition(async () => {
       const r = await saveBrandTerms({
         brandId: brand.id,
@@ -85,6 +88,11 @@ function Brand({ brand, company, open, onToggle, onMessage, quiet = false }: {
       <span className="text-[14px] font-semibold">{brand.name}</span>
       {brand.consignment && <Tag tone="accent">consignment</Tag>}
       {brand.agency && <Tag tone="ink">we introduce, they invoice</Tag>}
+      {brand.agency && (
+        brand.commissionRate > 0
+          ? <Tag tone="line">{brand.commissionRate}% commission</Tag>
+          : <Tag tone="red">no commission set</Tag>
+      )}
       {!brand.showsMargin && <Tag tone="line">sale prices hidden</Tag>}
       <span className="text-[12px] text-mute num">
         {brand.products.length} SKU{brand.products.length === 1 ? '' : 's'}
@@ -143,6 +151,32 @@ function Brand({ brand, company, open, onToggle, onMessage, quiet = false }: {
 
         {brand.agency && (
           <div className="mt-2.5 space-y-2">
+            {/*
+              * What they pay us. It is the only revenue on these orders — the
+              * goods are theirs — so a rate of nothing means the introduced
+              * business reports as worth nothing, and that should look wrong
+              * rather than look like a quiet zero.
+              */}
+            <label className="flex flex-wrap items-center gap-2 text-[12px] font-semibold">
+              Commission we are paid
+              <input
+                type="number" min={0} max={100} step="0.01"
+                value={rate} disabled={pending}
+                onChange={(e) => setRate(e.target.value)}
+                className="num w-24"
+              />
+              % of the goods
+              <Button small disabled={pending || Number(rate) === brand.commissionRate}
+                      onClick={() => save({ commissionRate: Number(rate) })}>
+                Save rate
+              </Button>
+              {brand.commissionRate === 0 && (
+                <span className="text-[12px] font-normal text-danger">
+                  Nothing set, so these orders report as earning nothing.
+                </span>
+              )}
+            </label>
+
             <textarea
               rows={5}
               value={terms}

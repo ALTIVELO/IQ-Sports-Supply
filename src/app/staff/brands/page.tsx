@@ -23,7 +23,7 @@ export default async function BrandsPage() {
   const [{ data: brands }, { data: partners }, products, { data: settings }] =
     await Promise.all([
     sb.from('brands')
-      .select('id, key, name, consignment, shows_margin, agency, agency_terms')
+      .select('id, key, name, consignment, shows_margin, agency, agency_terms, commission_rate')
       .order('name'),
     sb.from('brand_partners')
       .select('id, brand_id, email, name, active, auth_user_id')
@@ -46,6 +46,7 @@ export default async function BrandsPage() {
     id: b.id, name: b.name,
     consignment: b.consignment, showsMargin: b.shows_margin,
     agency: b.agency, agencyTerms: b.agency_terms ?? '',
+    commissionRate: Number(b.commission_rate ?? 0),
     partners: (partners ?? []).filter((p) => p.brand_id === b.id).map((p) => ({
       id: p.id, email: p.email, name: p.name,
       active: p.active, signedIn: Boolean(p.auth_user_id),

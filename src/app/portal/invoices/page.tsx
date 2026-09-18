@@ -12,7 +12,7 @@ export default async function Invoices() {
 
   const { data: invoices } = await sb
     .from('invoices')
-    .select(`id, number, type, date, due_date, vat_rate, paid, paid_date, superseded, currency,
+    .select(`id, number, type, date, due_date, vat_rate, paid, paid_date, superseded, currency, agency,
              orders(number), invoice_lines(qty, unit_price)`)
     .eq('client_id', user.clientId)
     .order('date', { ascending: false })
@@ -36,15 +36,20 @@ export default async function Invoices() {
   // only ever been invoiced in one currency sees exactly what they saw before.
   const balances = new Map<string, number>();
   for (const i of owed) {
-    if (i.type === 'proforma') continue;
+    // A proforma asks for nothing, and neither does the acknowledgement of an
+    // order the brand invoices. Neither belongs in a balance owed to us.
+    if (i.type === 'proforma' || i.agency) continue;
     const code = i.currency ?? 'GBP';
     const sign = i.type === 'credit' ? -1 : i.paid ? 0 : 1;
     if (sign) balances.set(code, (balances.get(code) ?? 0) + sign * gross(i));
   }
   const outstanding = [...balances].filter(([, v]) => v > 0);
 
-  const overdue = (i: { paid: boolean; due_date: string; type: string; superseded: boolean }) =>
-    !i.superseded && !i.paid && i.type !== 'proforma' && i.type !== 'credit'
+  const overdue = (i: {
+    paid: boolean; due_date: string; type: string; superseded: boolean; agency: boolean;
+  }) =>
+    !i.superseded && !i.paid && !i.agency
+      && i.type !== 'proforma' && i.type !== 'credit'
       && new Date(i.due_date) < new Date();
 
   return (
@@ -105,6 +110,8 @@ export default async function Invoices() {
                       <td className="whitespace-nowrap">
                         {i.superseded
                           ? <VoidTag>withdrawn</VoidTag>
+                          : i.agency
+                            ? <Tag tone="line">the brand invoices this</Tag>
                           : i.type === 'proforma'
                             ? <Tag tone="line">proforma · nothing to pay</Tag>
                             : i.type === 'credit'
