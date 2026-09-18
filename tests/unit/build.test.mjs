@@ -4,7 +4,7 @@
 // order is components at their own SKUs. The arithmetic is the part worth
 // being sure of: a step needing two rotors, ordered as three builds, is six
 // rotors, and nobody notices that being wrong on a busy afternoon.
-const { preselect, missingSteps, buildLines, buildNet } =
+const { preselect, missingSteps, canBuild, buildLines, buildNet } =
   await import('../../.test-build/orders/build.js');
 
 let fail = 0;
@@ -39,7 +39,10 @@ eq('an optional step is never preselected, however few options it has',
 eq('a required step with a real choice is left blank',
   preselect(STEPS), {});
 
-// ── what is still to answer ───────────────────────────────────────────────
+// ── what is not in this build ─────────────────────────────────────────────
+// Naming them, not forbidding them. A shop buying a groupset often already
+// has the brakes; what goes on the order is components at their own SKUs, and
+// there is no groupset line for a missing part to make nonsense of.
 eq('every required step is named while blank',
   missingSteps(STEPS, {}).map((s) => s.name), ['Chainset', 'Cassette', 'Rotors']);
 eq('and none once they are answered', missingSteps(STEPS, FULL), []);
@@ -83,5 +86,19 @@ eq('an optional extra is added when taken',
 eq('a component with no price on this tier does not poison the total',
   buildNet(STEPS, { ...FULL, cassette: 'cs-1134' }, 1, priceOf), 604);
 eq('nothing chosen comes to nothing', buildNet(STEPS, {}, 1, priceOf), 0);
+
+// ── whether there is anything to order ────────────────────────────────────
+// The only real constraint. It used to be "every required step answered",
+// which made every part of a groupset compulsory: clear the brakes and the
+// button went dead with no way forward.
+eq('a build with something in it can be ordered', canBuild(STEPS, FULL), true);
+eq('and so can one with a required step left out',
+   canBuild(STEPS, { cassette: 'cs-1130' }), true);
+eq('even down to a single component',
+   canBuild(STEPS, { rotors: 'rotor-140' }), true);
+eq('but a build of nothing is not an order', canBuild(STEPS, {}), false);
+// A stale choice is not a component either: the same rule buildLines uses.
+eq('nor is one whose only choice is not on offer',
+   canBuild(STEPS, { chainset: 'something-else' }), false);
 
 process.exit(fail ? 1 : 0);

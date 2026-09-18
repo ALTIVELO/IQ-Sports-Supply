@@ -109,7 +109,13 @@ with no rebuild.
    a period's orders were placed at more than one rate no single rate is
    claimed, because an average rounded to two places multiplies back out to a
    different figure.
-9. **Returns.** Two reasons are accepted and they are an enum, not a dropdown:
+9. **Builds.** A groupset is specced by choosing a part per step, and what goes
+   on the order is those components at their own SKUs — there is no groupset
+   line. So a step marked as part of the standard build decides what is
+   specced when the builder opens and nothing else: any part can be left out,
+   on the counter and in the portal alike, and put back again. The only thing
+   that stops a build being ordered is having nothing in it.
+10. **Returns.** Two reasons are accepted and they are an enum, not a dropdown:
    the goods arrived faulty, or we sent the wrong thing. Nothing comes back
    because a shop over-ordered. A client raises one from the order it is about,
    within `returns_days` of dispatch (staff are exempt, so somebody can always do

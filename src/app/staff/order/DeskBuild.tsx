@@ -101,9 +101,9 @@ export default function DeskBuild({
                 value={chosen[step.id] ?? ''}
                 onChange={(e) => setChosen((c) => ({ ...c, [step.id]: e.target.value }))}
               >
-                <option value="">
-                  {step.required ? `Choose ${step.name.toLowerCase()}…` : 'None'}
-                </option>
+                {/* "Not included" rather than "choose one": leaving a part
+                    out is a finished answer, not an unfinished one. */}
+                <option value="">Not included</option>
                 {step.options.map((o) => (
                   <option key={o.id} value={o.product_id}>{label(o)}</option>
                 ))}
@@ -134,9 +134,14 @@ export default function DeskBuild({
           onChange={setKits}
         />
         <span className="text-[12px] text-mute">
-          {missing.length > 0
-            ? `Still to choose: ${missing.map((s) => s.name).join(', ')}`
-            : `${lines.length} component${lines.length === 1 ? '' : 's'}`}
+          {lines.length
+            ? `${lines.length} component${lines.length === 1 ? '' : 's'}`
+            : 'Nothing chosen yet'}
+          {missing.length > 0 && (
+            <span className="block">
+              Without: {missing.map((s) => s.name.toLowerCase()).join(', ')}
+            </span>
+          )}
         </span>
         <span className={`num text-[16px] font-semibold ml-auto
                           ${unpriced.length ? 'text-mute line-through' : ''}`}>
@@ -144,8 +149,9 @@ export default function DeskBuild({
         </span>
         <Button
           small kind="accent"
-          disabled={missing.length > 0 || currencies.length > 1
-                    || unpriced.length > 0 || !lines.length}
+          // A part left out is a decision, not an unfinished form — the only
+          // thing that stops this is a build with nothing in it.
+          disabled={!lines.length || currencies.length > 1 || unpriced.length > 0}
           onClick={() => {
             onAdd(lines.map((l) => ({ product: l.product, qty: l.qty })));
             onClose();

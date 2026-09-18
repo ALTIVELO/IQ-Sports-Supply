@@ -60,6 +60,8 @@ export default function GroupBuilder({
     [steps, chosen],
   );
 
+  // Named "not in this build" rather than "missing": the standard build is
+  // what these steps describe, and a shop is free to order less than all of it.
   const missing = steps.filter((s) => s.required && !chosen[s.id]);
   const net = picked.reduce((a, p) => a + Number(p.option.price) * p.step.qty, 0) * qty;
   const vat = (net * vatRate) / 100;
@@ -101,8 +103,12 @@ export default function GroupBuilder({
           <p className="text-[13px] text-mute mt-1">
             {brand}
             {brand && ' · '}
+            {/* Not "choices to make": leaving a part out is an answer, and a
+                line that counts them all as outstanding reads as a form to
+                finish rather than a build to adjust. */}
             {isBuild
-              ? `Choose each part below — ${steps.length} choices to make.`
+              ? `${steps.length} parts — change any of them, or leave out the ones `
+                + 'you already have.'
               : 'Choose the option you need.'}
           </p>
           {description && (
@@ -141,12 +147,17 @@ export default function GroupBuilder({
               chosenId={chosen[step.id]}
               onChoose={(id) => setChosen((c) => ({ ...c, [step.id]: id }))}
             />
-          ) : step.options.length === 1 && step.required ? (
-            // Nothing to decide. Say what is included and move on rather than
-            // making someone confirm the only answer.
+          ) : step.options.length === 1 ? (
+            // Nothing to decide about which one, so it says what it is rather
+            // than making somebody confirm the only answer. Whether it is in
+            // at all is still a decision, and that lives below.
             <div className="flex flex-wrap items-center gap-2 text-[13px]">
-              <Tag tone="ink">Included</Tag>
-              <span className="font-medium">{step.options[0].label}</span>
+              {chosen[step.id]
+                ? <Tag tone="ink">Included</Tag>
+                : <Tag tone="line">Left out</Tag>}
+              <span className={`font-medium ${chosen[step.id] ? '' : 'text-mute'}`}>
+                {step.options[0].label}
+              </span>
               <span className="num text-[11px] text-mute">{step.options[0].sku}</span>
               <span className="num text-mute ml-auto">
                 <Money value={Number(step.options[0].price)}
@@ -183,19 +194,33 @@ export default function GroupBuilder({
             </div>
           )}
 
-          {!step.required && (
-            chosen[step.id] ? (
-              <button
-                onClick={() => setChosen((c) => {
-                  const next = { ...c }; delete next[step.id]; return next;
-                })}
-                className="text-[12px] text-mute hover:text-ink underline"
-              >
-                Leave this out
-              </button>
-            ) : (
-              <p className="text-[12px] text-mute">Not included. Pick one above to add it.</p>
-            )
+          {/*
+            * Any part can come out, not only the ones marked optional.
+            *
+            * A shop buying a groupset often already has the brakes, or wants
+            * it without the chainset. Each component goes on the order at its
+            * own SKU, so leaving one out simply means one line fewer — there
+            * is no groupset line for it to make nonsense of. Locking them shut
+            * meant clearing one left the button dead with nothing saying why.
+            */}
+          {chosen[step.id] ? (
+            <button
+              onClick={() => setChosen((c) => {
+                const next = { ...c }; delete next[step.id]; return next;
+              })}
+              className="text-[12px] text-mute hover:text-ink underline"
+            >
+              Leave out the {step.name.toLowerCase()}
+            </button>
+          ) : step.options.length === 1 ? (
+            <button
+              onClick={() => setChosen((c) => ({ ...c, [step.id]: step.options[0].option_id }))}
+              className="text-[12px] font-semibold text-flame-text hover:text-ink underline"
+            >
+              Put the {step.name.toLowerCase()} back in
+            </button>
+          ) : (
+            <p className="text-[12px] text-mute">Not included. Pick one above to add it.</p>
           )}
         </Card>
       ))}
@@ -233,7 +258,9 @@ export default function GroupBuilder({
 
         {missing.length > 0 && (
           <Notice tone="info">
-            Still to choose: {missing.map((s) => s.name).join(', ')}.
+            Not in this build: {missing.map((s) => s.name.toLowerCase()).join(', ')}. That
+            is fine — you will be charged for the parts listed above and nothing else. Put
+            any of them back by choosing one above.
           </Notice>
         )}
         <Notice tone="info">
@@ -258,7 +285,8 @@ export default function GroupBuilder({
           <div className="num text-[24px] font-semibold tracking-[-0.02em]">
             <Money value={net + vat} currency={currency} />
           </div>
-          <Button kind="accent" onClick={addAll} disabled={missing.length > 0 || !picked.length}>
+          {/* The only thing that stops it: nothing chosen at all. */}
+          <Button kind="accent" onClick={addAll} disabled={!picked.length}>
             Add to basket
           </Button>
         </div>
