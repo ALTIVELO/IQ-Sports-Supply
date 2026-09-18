@@ -22,6 +22,13 @@ export interface CatalogueRow {
    * existed.
    */
   currency?: string;
+  /**
+   * The range this part belongs to — Dura-Ace, Ultegra, Di2.
+   *
+   * Absent for most of a catalogue, and absent is not the same as blank: a
+   * sheet that says nothing leaves whatever the product already had.
+   */
+  series?: string;
   /** Shared by every size of one bike; absent for a product sold as one thing. */
   variant_group?: string;
   /** This row's size: S, M, 440. */

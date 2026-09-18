@@ -146,6 +146,7 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
             brand: existing.brand || row.brand,
             category: existing.category || row.category,
             image_url: existing.image_url || row.image_url,
+            series: existing.series || row.series?.trim() || undefined,
             currency: existing.currency ?? currency ?? undefined,
             variant_group: existing.variant_group ?? group,
             variant_label: existing.variant_label ?? label,
@@ -156,6 +157,7 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
         : {
             ...row, sku, cost, prices,
             currency: currency ?? undefined,
+            series: row.series?.trim() || undefined,
             variant_group: group, variant_label: label,
             price_note: row.price_note?.trim() || undefined,
           });
@@ -409,8 +411,10 @@ export async function applyCatalogue(input: {
   const existing = await fetchAll<{
     id: string; sku: string; active: boolean; currency: string;
     variant_group: string | null; variant_label: string | null; price_note: string | null;
+    name: string; series: string | null; image_url: string | null;
   }>((from, to) => sb.from('products')
-    .select('id, sku, active, currency, variant_group, variant_label, price_note')
+    .select(`id, sku, active, currency, variant_group, variant_label, price_note,
+             name, series, image_url`)
     .order('sku').range(from, to));
   const byNormSku = new Map(existing.map((p) => [norm(p.sku), p]));
   const bySku = new Map(existing.map((p) => [norm(p.sku), p.id]));
@@ -470,6 +474,7 @@ export async function applyCatalogue(input: {
           sku: r.sku.trim(),
           name: r.name?.trim() || r.sku.trim(),
           brand: r.brand?.trim() || null,
+          series: r.series?.trim() || null,
           category_id: givenId ?? (slug ? categoryId.get(slug) ?? null : null),
           // Only accept a real URL; a sheet often carries a filename here,
           // which would render as a broken image.
@@ -507,12 +512,24 @@ export async function applyCatalogue(input: {
     redenominated += ids.length;
   }
 
-  // ── sizes and price notes on products we already had ──
-  // A re-issued list is how a bike gains its size range, or how a supplier
-  // changes what their price excludes. Row by row rather than batched: these
-  // differ per product, and a wrong batch would file every bike under one
-  // model.
+  /*
+   * What a re-issued list is allowed to correct on a SKU we already hold.
+   *
+   * A supplier's list is the authority on what their product is called, which
+   * range it belongs to, what it looks like and which model it is a size of —
+   * so a re-issue is how a catalogue gets tidied rather than something that
+   * has to be redone by hand afterwards.
+   *
+   * Only where the sheet actually says something. A blank column is silence,
+   * not an instruction to erase: an image uploaded on the Catalogue screen
+   * must survive the next quarter's price list, and so must a name somebody
+   * corrected.
+   *
+   * Row by row rather than batched: these differ per product, and one wrong
+   * batch would file the whole catalogue under one model.
+   */
   let resized = 0;
+  let renamed = 0;
   for (const r of valid) {
     const id = bySku.get(norm(r.sku));
     const before = byNormSku.get(norm(r.sku));
@@ -528,10 +545,25 @@ export async function applyCatalogue(input: {
     if (r.price_note !== undefined && (before.price_note ?? '') !== r.price_note) {
       patch.price_note = r.price_note || null;
     }
+
+    const name = r.name?.trim();
+    if (name && name !== before.name) patch.name = name;
+
+    const series = r.series?.trim();
+    if (series && series !== (before.series ?? '')) patch.series = series;
+
+    // A filename in an image column would render as a broken picture, so the
+    // same test the create path uses applies here.
+    const image = r.image_url?.trim();
+    if (image && /^https?:\/\//i.test(image) && image !== (before.image_url ?? '')) {
+      patch.image_url = image;
+    }
+
     if (!Object.keys(patch).length) continue;
     const { error } = await sb.from('products').update(patch).eq('id', id);
     if (error) return { ok: false, error: `Updating ${r.sku} failed: ${error.message}` };
     resized += 1;
+    if (patch.name || patch.series || patch.image_url) renamed += 1;
   }
 
   // ── sell prices ──
@@ -606,7 +638,13 @@ export async function applyCatalogue(input: {
   if (redenominated) {
     parts.push(`${redenominated} moved to a different currency`);
   }
-  if (resized) parts.push(`${resized} updated`);
+  if (resized) {
+    // Renaming is the one update somebody might not have meant, so it is
+    // counted out separately rather than folded into "updated".
+    parts.push(renamed
+      ? `${resized} updated (${renamed} renamed or re-filed)`
+      : `${resized} updated`);
+  }
 
   return { ok: true, message: `Applied — ${parts.join(', ')}, effective ${input.effectiveFrom}` };
 }

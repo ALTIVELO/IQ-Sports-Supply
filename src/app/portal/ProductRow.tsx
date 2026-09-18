@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, Money, Tag } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
 import { useCart } from './CartContext';
-import { groupName, type VariantGroup } from '@/lib/catalogue/variants';
+import { groupName, skuPrefix, type VariantGroup } from '@/lib/catalogue/variants';
 import type { CatalogueItem } from '@/lib/types';
 
 /**
@@ -40,17 +40,33 @@ export default function ProductRow({ group }: { group: VariantGroup }) {
           sizePx={112}
         />
 
-        <div className="min-w-0 flex-1">
-          <div className="num text-[12px] font-semibold text-mute">
-            {sized ? lead.sku.replace(/[-_ ]?[A-Z0-9]+$/i, '') : lead.sku}
-          </div>
+        {/* On a phone the name takes the whole width. Squeezed into what is
+            left beside a picture, a price and a button, every word of
+            "Dura-Ace FC-R9200 Chainset" wraps onto its own line. */}
+        <div className="min-w-0 flex-1 basis-full sm:basis-0">
+          {/* A range is quoted by the part number its sizes share; a product
+              sold on its own by its own. Nothing is drawn where a range's
+              SKUs have no useful prefix in common. */}
+          {(sized ? skuPrefix(group.sizes.map((s) => s.sku)) : lead.sku) && (
+            <div className="num text-[12px] font-semibold text-mute">
+              {sized ? skuPrefix(group.sizes.map((s) => s.sku)) : lead.sku}
+            </div>
+          )}
           <div className="text-[13px] font-medium">{name}</div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {/* Brand, then the range, then what it is: the order a shop says
+                them in, and the order they narrow the catalogue down. */}
             {lead.brand && <span className="text-[11px] text-mute">{lead.brand}</span>}
+            {lead.series && <Tag tone="ink">{lead.series}</Tag>}
             {lead.category_name && <Tag tone="line">{lead.category_name}</Tag>}
             {sized && (
               <span className="text-[11px] text-mute">
-                {group.sizes.length} sizes · {group.sizes.map((s) => s.variant_label).join(' ')}
+                {group.sizes.length} sizes
+                {/* The list of them is a luxury on a phone: it is three lines
+                    of wrapped text above a button that shows the same thing. */}
+                <span className="hidden sm:inline">
+                  {' · '}{group.sizes.map((s) => s.variant_label).join(' · ')}
+                </span>
               </span>
             )}
           </div>
@@ -99,7 +115,9 @@ function SizeRow({ size }: { size: CatalogueItem }) {
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded px-2 py-1.5
                      ${qty > 0 ? 'bg-parch' : ''}`}>
-      <span className="text-[13px] font-semibold w-10">{size.variant_label}</span>
+      {/* Wide enough for "52/36 172.5mm", which is what a size is here now:
+          w-10 was written for "XL" and broke a chainset over two lines. */}
+      <span className="text-[13px] font-semibold min-w-[6.5rem]">{size.variant_label}</span>
       <span className="num text-[11px] text-mute flex-1 min-w-0 truncate">{size.sku}</span>
       {size.in_stock
         ? <Tag tone="green">in stock</Tag>

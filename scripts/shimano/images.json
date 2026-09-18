@@ -1,0 +1,23 @@
+{
+  "_readme": [
+    "Model key or SKU -> a full https:// URL for that product's photo.",
+    "",
+    "A model key covers every size of that model, which is the point of",
+    "grouping: one photo of an FC-R9200 chainset serves all eighteen of them,",
+    "so this file needs about thirty entries rather than one hundred and",
+    "ninety. A SKU entry beats its model's, for the rare product that needs",
+    "its own picture.",
+    "",
+    "Left empty on purpose. These are Shimano's photographs and the licence to",
+    "publish them in a trade catalogue is IQ's to hold, not this repository's",
+    "to assume — and a URL invented here would 404 into the same placeholder",
+    "the app already draws, having first made the sheet look finished.",
+    "",
+    "Fill it from whatever IQ is entitled to use — Madison's B2B media",
+    "library, Shimano's own asset feed, or photographs taken in the",
+    "warehouse — then run rebuild.mjs again and re-import. Anything still",
+    "missing stays blank and draws the placeholder."
+  ],
+  "models": {},
+  "skus": {}
+}

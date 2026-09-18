@@ -133,3 +133,41 @@ export function groupName(
   );
   return trimmed.trim() || g.lead.name;
 }
+
+/**
+ * The part number a range shares, for the line that stands for all of it.
+ *
+ * Every size has its own SKU and the sizes list them individually; the line
+ * above them needs the part a customer would quote to ask about the model.
+ * Shimano's numbering makes that the common prefix — FCR9200M04, FCR9200A04
+ * and FCR9200E40 are all FC-R9200 — so it is read off the SKUs rather than
+ * stored, and nothing has to be right about any particular supplier's scheme.
+ *
+ * Where the prefix is too short to identify anything, nothing is returned.
+ * "F" over a chainset is worse than no part number at all, and drawing an
+ * empty line where one belongs is worse still.
+ */
+export function skuPrefix(skus: string[], minimum = 4): string | null {
+  if (skus.length === 0) return null;
+  if (skus.length === 1) return skus[0] || null;
+
+  let prefix = skus[0] ?? '';
+  for (const sku of skus.slice(1)) {
+    let i = 0;
+    while (i < prefix.length && i < sku.length && prefix[i] === sku[i]) i++;
+    prefix = prefix.slice(0, i);
+    if (!prefix) break;
+  }
+  /*
+   * Cut back to a separator where the scheme has them.
+   *
+   * DRG-OMEGA-52 and DRG-OMEGA-56 share "DRG-OMEGA-5", and that 5 is half of
+   * a frame size: it reads as a part number and is not one. Where the SKUs
+   * are one run of characters — Shimano's are — there is no boundary to cut
+   * back to and the shared prefix stands as it is found.
+   */
+  const boundary = prefix.search(/[-_ /][^-_ /]*$/);
+  if (boundary > 0 && /[-_ /]/.test(prefix)) prefix = prefix.slice(0, boundary);
+  prefix = prefix.replace(/[-_ /]+$/, '');
+  return prefix.length >= minimum ? prefix : null;
+}

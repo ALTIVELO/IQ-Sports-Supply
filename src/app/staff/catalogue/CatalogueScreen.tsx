@@ -14,7 +14,7 @@ import CollectionPicker, { collectionName } from '@/components/CollectionPicker'
 import { catalogueHref, type CollectionGroup } from '@/lib/catalogue/collections';
 
 interface Product {
-  id: string; sku: string; name: string; brand: string | null;
+  id: string; sku: string; name: string; brand: string | null; series: string | null;
   active: boolean; category_id: string | null; image_url: string | null;
   /** The money this product's cost and every tier price are quoted in. */
   currency: string;
@@ -298,13 +298,16 @@ function StockMatrix({
    * of them belong together, which is what was missing.
    */
   const rows = useMemo(() => {
-    const out: ({ kind: 'head'; key: string; name: string; count: number }
+    const out: ({ kind: 'head'; key: string; name: string;
+                  series: string | null; count: number }
               | { kind: 'row'; key: string; product: Product })[] = [];
     for (const shelf of groupSizes(products)) {
       if (shelf.sizes.length > 1) {
         out.push({
           kind: 'head', key: `h-${shelf.key}`,
-          name: groupName(shelf), count: shelf.sizes.length,
+          name: groupName(shelf),
+          series: shelf.lead.series,
+          count: shelf.sizes.length,
         });
       }
       for (const product of shelf.sizes) {
@@ -429,7 +432,7 @@ function StockMatrix({
                 </th>
               )}
               <th className="w-[60px]">Image</th>
-              <th>SKU</th><th>Product</th><th>Brand</th><th>Category</th>
+              <th>SKU</th><th>Product</th><th>Brand</th><th>Series</th><th>Category</th>
               {locations.map((l) => <th key={l.id} className="text-right">{l.name}</th>)}
               <th className="text-right">Total</th>
               <th className="text-right">Cost</th>
@@ -443,6 +446,10 @@ function StockMatrix({
                 return (
                   <tr key={entry.key} className="bg-parch">
                     <td colSpan={99} className="!py-1.5">
+                      {entry.series && (
+                        <span className="text-[11px] font-semibold uppercase tracking-wide
+                                         text-mute mr-2">{entry.series}</span>
+                      )}
                       <span className="text-[12px] font-semibold">{entry.name}</span>
                       <span className="text-[11px] text-mute num"> · {entry.count} sizes</span>
                     </td>
@@ -486,6 +493,7 @@ function StockMatrix({
                     ) : p.name}
                   </td>
                   <td className="text-mute">{p.brand}</td>
+                  <td className="text-mute whitespace-nowrap">{p.series ?? '—'}</td>
                   <td>
                     <select
                       className="text-[12px] min-w-[150px]"

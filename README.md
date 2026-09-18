@@ -173,6 +173,24 @@ chip when anything is unfiled.
 45 assertions in `tests/unit/categories.test.mjs` cover the real catalogue rows,
 the ordering traps, and the cases that must stay uncategorised.
 
+## Brand, series, model
+
+A catalogue line says four things, in the order a shop says them: the brand
+(Shimano), the series (Dura-Ace), the model, and the part number. The series is
+a column on the product rather than a category, because a series cuts across
+categories — Dura-Ace is a chainset and a cassette and a rotor — and filing by
+range would break filing by what the thing is, which is what people browse by.
+It is blank for most of a catalogue, and a made-up one would be worse than none.
+
+A model's sizes are one line. `suggest_variant_groups()` proposes the grouping
+and `apply_variant_groups()` writes it, never automatically: a wrong grouping
+hides a real product behind another one's name, which is not something to
+discover from a customer. The series is part of the key, because the Dura-Ace
+and Ultegra power meters are called exactly the same thing and differ by £105.
+
+A supplier's sheet can state the grouping itself instead, in a Model and a Size
+column — see `scripts/shimano/` for the script that works one out.
+
 ## Product images
 
 Supplier price sheets carry no images, so `products.image_url` holds a full URL

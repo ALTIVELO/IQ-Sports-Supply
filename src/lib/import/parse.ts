@@ -57,6 +57,9 @@ export function guessMapping(header: string[], fields: string[]): ColumnMapping 
     image_url: /\b(image|photo|picture|img)\s*(url|link)?\b/i,
     category: /\b(categor(y|ies)|collection|group|type|department|section)\b/i,
     currency: /\b(currency|ccy|curr)\b/i,
+    // Asked for before "model", which would otherwise take a Series column
+    // headed "range" or "family" — both read as groupings.
+    series: /\b(series|range|family|groupset|group\s*set)\b/i,
     // "Model" is what a bike list calls the thing the sizes belong to.
     variant_group: /\b(variant\s*group|model\s*(code|group|key)?|style|parent(\s*sku)?)\b/i,
     variant_label: /\b(size|frame\s*size|variant)\b/i,

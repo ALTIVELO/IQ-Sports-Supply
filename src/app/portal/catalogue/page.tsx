@@ -17,7 +17,7 @@ export default async function PortalCatalogue() {
          { data: client }, { data: settings }] =
     await Promise.all([
     fetchAll((from, to) => sb.from('client_catalogue')
-      .select(`id, sku, name, brand, price, currency, price_note, in_stock, image_url,
+      .select(`id, sku, name, brand, series, price, currency, price_note, in_stock, image_url,
                variant_group, variant_label, variant_sort,
                category_slug, category_name, configurator_only`)
       .order('sku').range(from, to)),

@@ -4,7 +4,7 @@
 // one line per bike. Getting this wrong is visible immediately — five lines
 // where there should be one — but the subtle failures are the ones tested
 // here: the order sizes come out in, and which row the tile is drawn from.
-const { groupVariants, groupName, sizeRank, knownSize } =
+const { groupVariants, groupName, sizeRank, knownSize, skuPrefix } =
   await import('../../.test-build/catalogue/variants.js');
 
 let fail = 0;
@@ -93,5 +93,28 @@ eq('a size in the middle of a name is left alone',
   named('M-series chainring', 'M'), 'M-series chainring');
 eq('a product with no sizes keeps its whole name',
   groupName(groupVariants([p('A', { name: 'Bar tape M' })])[0]), 'Bar tape M');
+
+// ── the part number a range shares ────────────────────────────────────────
+// Every size has its own SKU; the line that stands for all of them needs the
+// part somebody would quote to ask about the model.
+eq('Shimano numbering leaves the model as the common prefix',
+   skuPrefix(['FCR9200M04', 'FCR9200A04', 'FCR9200E40']), 'FCR9200');
+eq('a rotor range too', skuPrefix(['RTCL900LJ', 'RTCL900SSE', 'RTCL900MI']), 'RTCL900');
+eq('one product on its own is its own part number',
+   skuPrefix(['BBUN300B07']), 'BBUN300B07');
+// 52 and 56 share a 5, so the raw prefix is "DRG-OMEGA-5": half a frame size,
+// reading as a part number. Where the scheme has separators, cut back to one.
+eq('half a size is not left on the end',
+   skuPrefix(['DRG-OMEGA-52', 'DRG-OMEGA-56']), 'DRG-OMEGA');
+eq('and a whole segment is kept',
+   skuPrefix(['DRG-OMEGA-52', 'DRG-OMEGA-XL']), 'DRG-OMEGA');
+// "F" over a chainset is worse than nothing, and an empty line worse still.
+eq('a prefix too short to identify anything is nothing',
+   skuPrefix(['FCR9200', 'FDR8150']), null);
+eq('and no shared prefix at all is nothing',
+   skuPrefix(['ABC123', 'XYZ789']), null);
+eq('nothing at all is nothing', skuPrefix([]), null);
+eq('the floor can be moved where a scheme is shorter',
+   skuPrefix(['AB1', 'AB2'], 2), 'AB');
 
 process.exit(fail ? 1 : 0);

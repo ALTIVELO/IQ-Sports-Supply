@@ -34,10 +34,12 @@ export default async function CataloguePage({
   }
 
   let productQuery = sb.from('products')
-    .select(`id, sku, name, brand, active, category_id, image_url, currency,
+    .select(`id, sku, name, brand, series, active, category_id, image_url, currency,
              variant_group, variant_label, variant_sort`)
     .order('sku').limit(500);
-  if (q?.trim()) productQuery = productQuery.or(`sku.ilike.%${q.trim()}%,name.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%`);
+  if (q?.trim()) productQuery = productQuery.or(
+    `sku.ilike.%${q.trim()}%,name.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%,` +
+    `series.ilike.%${q.trim()}%`);
   // Filtered in the database rather than after the fact: the 500-row limit is
   // on what comes back, so filtering here would show the first 500 SKUs of the
   // whole catalogue and then hide most of them.

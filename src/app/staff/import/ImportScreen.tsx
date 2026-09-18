@@ -54,6 +54,7 @@ const FIXED_FIELDS: Record<ImportScope, Field[]> = {
     { key: 'sku', label: 'SKU', required: true },
     { key: 'name', label: 'Product name', required: false },
     { key: 'brand', label: 'Brand', required: false },
+    { key: 'series', label: 'Series (Dura-Ace, Ultegra)', required: false },
     { key: 'category', label: 'Category', required: false },
     { key: 'image_url', label: 'Image URL', required: false },
     { key: 'currency', label: 'Currency', required: false },
