@@ -7,6 +7,7 @@ import {
   saveStep, deleteStep, addOptions, deleteOption,
   setCategoryConfiguratorOnly,
 } from './actions';
+import QtyStepper from '@/components/QtyStepper';
 
 export interface ProductLite {
   id: string; sku: string; name: string; brand: string | null; active: boolean;
@@ -289,8 +290,12 @@ function StepEditor({ group, products, bySku, pending, run }: {
           <input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={100} />
         </Field>
         <Field label="How many per build">
-          <input type="number" min={1} max={99} value={newQty} className="num w-20"
-                 onChange={(e) => setNewQty(Math.max(1, Number(e.target.value) || 1))} />
+          <QtyStepper
+            value={newQty}
+            min={1} max={99}
+            label="of this component per build"
+            onChange={setNewQty}
+          />
         </Field>
         <Button small disabled={pending || !newName.trim()}
                 onClick={() => {

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate, today } from '@/lib/format';
 import { createSupplierOrder, receivePo, resendSupplierOrder } from '../actions';
+import QtyStepper from '@/components/QtyStepper';
 
 interface PendingLine {
   id: string; sku: string; name: string; qty: number; bo_qty: number; po_qty: number;
@@ -66,7 +67,7 @@ export default function SupplierScreen({
                 <tr>
                   <th>SKU</th><th>Description</th>
                   <th className="text-right">Outstanding</th>
-                  <th className="w-[90px]">Order now</th>
+                  <th className="w-[150px]">Order now</th>
                   <th>Reference</th>
                 </tr>
               </thead>
@@ -79,15 +80,13 @@ export default function SupplierScreen({
                       <td>{l.name}</td>
                       <td className="num text-right">{max}</td>
                       <td>
-                        <input
-                          type="number" min={0} max={max} className="num"
+                        {/* Capped at what is still outstanding, so a purchase
+                            order cannot ask for more than was short. */}
+                        <QtyStepper
                           value={selected[l.id] ?? 0}
-                          onChange={(e) =>
-                            setSelected((s) => ({
-                              ...s,
-                              [l.id]: Math.min(max, Math.max(0, Number(e.target.value) || 0)),
-                            }))
-                          }
+                          min={0} max={max}
+                          label={`${l.sku} on this order`}
+                          onChange={(qty) => setSelected((s) => ({ ...s, [l.id]: qty }))}
                         />
                       </td>
                       <td className="num text-[12px] text-mute">{l.orders.number}</td>
@@ -110,9 +109,12 @@ export default function SupplierScreen({
                     </td>
                     <td />
                     <td>
-                      <input
-                        type="number" min={1} className="num" value={e.qty}
-                        onChange={(ev) => setExtras((xs) => xs.map((x, j) => j === i ? { ...x, qty: Number(ev.target.value) || 0 } : x))}
+                      <QtyStepper
+                        value={e.qty}
+                        min={1}
+                        label={e.sku || 'this stock top-up'}
+                        onChange={(qty) => setExtras((xs) =>
+                          xs.map((x, j) => (j === i ? { ...x, qty } : x)))}
                       />
                     </td>
                     <td className="text-[12px] text-mute">Stock top-up</td>
@@ -247,7 +249,7 @@ function PoCard({
                   <th>SKU</th><th>Description</th><th>Reference</th>
                   <th className="text-right">Ordered</th>
                   <th className="text-right">Already in</th>
-                  <th className="w-[100px]">Receiving</th>
+                  <th className="w-[150px]">Receiving</th>
                 </tr>
               </thead>
               <tbody>
@@ -259,9 +261,14 @@ function PoCard({
                     <td className="num text-right">{l.qty}</td>
                     <td className="num text-right text-mute">{l.received_qty || '—'}</td>
                     <td>
-                      <input
-                        type="number" min={0} className="num" value={qty[l.id] ?? 0}
-                        onChange={(e) => setQty((q) => ({ ...q, [l.id]: Math.max(0, Number(e.target.value) || 0) }))}
+                      {/* No ceiling: a supplier can send more than was ordered,
+                          and a short delivery is the commoner case — one tap
+                          down from what was expected. */}
+                      <QtyStepper
+                        value={qty[l.id] ?? 0}
+                        min={0}
+                        label={`${l.sku} received`}
+                        onChange={(next) => setQty((q) => ({ ...q, [l.id]: next }))}
                       />
                     </td>
                   </tr>

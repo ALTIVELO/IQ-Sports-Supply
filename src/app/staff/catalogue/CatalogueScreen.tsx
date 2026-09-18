@@ -12,6 +12,7 @@ import GroupVariants from './GroupVariants';
 import { groupSizes, groupName } from '@/lib/catalogue/variants';
 import CollectionPicker, { collectionName } from '@/components/CollectionPicker';
 import { catalogueHref, type CollectionGroup } from '@/lib/catalogue/collections';
+import QtyStepper from '@/components/QtyStepper';
 
 interface Product {
   id: string; sku: string; name: string; brand: string | null; series: string | null;
@@ -649,9 +650,12 @@ function Transfers({
                 </option>
               ))}
             </select>
-            <input
-              type="number" min={1} className="num" value={l.qty}
-              onChange={(e) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, qty: Number(e.target.value) || 0 } : x))}
+            <QtyStepper
+              value={l.qty}
+              min={1}
+              label="units to move"
+              onChange={(qty) => setLines((ls) =>
+                ls.map((x, j) => (j === i ? { ...x, qty } : x)))}
             />
             <Button small kind="ghost" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>
               Remove

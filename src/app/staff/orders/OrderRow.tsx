@@ -6,6 +6,7 @@ import { Button, Card, Money, Notice, Tag, VoidTag,
 import { fmtDate, today } from '@/lib/format';
 import Timeline from '@/components/Timeline';
 import AgencyNotice from '@/components/AgencyNotice';
+import QtyStepper from '@/components/QtyStepper';
 import { splitInvoice, editOrder, cancelOrder, deleteOrder,
          proformaForBackorder, creditInvoice, markPaid } from '../actions';
 import type { InvoiceType, OrderEvent } from '@/lib/types';
@@ -418,11 +419,12 @@ function EditLines({ lines, products, pending, onSave, onCancel }: {
           <div key={d.product_id} className="flex flex-wrap items-center gap-2 text-[12px]">
             <span className="num font-semibold w-[120px]">{d.sku}</span>
             <span className="flex-1 min-w-0">{d.name}</span>
-            <input
-              type="number" min={1} value={d.qty} className="num w-20 text-center"
-              aria-label={`Quantity of ${d.sku}`}
-              onChange={(e) => setDraft((prev) => prev.map((x, j) =>
-                j === i ? { ...x, qty: Math.max(1, Number(e.target.value) || 1) } : x))}
+            <QtyStepper
+              value={d.qty}
+              min={1}
+              label={`${d.sku} on this order`}
+              onChange={(qty) => setDraft((prev) => prev.map((x, j) =>
+                j === i ? { ...x, qty } : x))}
             />
             <button
               onClick={() => setDraft((prev) => prev.filter((_, j) => j !== i))}
