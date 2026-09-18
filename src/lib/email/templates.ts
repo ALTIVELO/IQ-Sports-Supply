@@ -235,3 +235,100 @@ ${o.company}
 `,
   };
 }
+
+/** ── goods coming back ──────────────────────────────────────────────────── */
+
+const returnLines = (lines: { sku: string; name: string; qty: number; reason: string; note: string | null }[]) =>
+  lines.map((l) =>
+    `  ${l.sku.padEnd(16)} ${String(l.qty).padStart(4)}  ${l.name}\n`
+    + `  ${' '.repeat(16)}      ${l.reason}${l.note ? ` — ${l.note}` : ''}`,
+  ).join('\n\n');
+
+/** To the desk, the moment a client reports one. */
+export function returnRaised(r: {
+  company: string; number: string; clientName: string;
+  orderNumber: string; wanted: string;
+  lines: { sku: string; name: string; qty: number; reason: string; note: string | null }[];
+  reviewUrl: string;
+}) {
+  return {
+    subject: `${r.company} — ${r.clientName} has reported a problem (${r.number})`,
+    body: `${r.clientName} has reported a problem with order ${r.orderNumber}.
+
+Return   ${r.number}
+Asked for ${r.wanted === 'exchange' ? 'a replacement' : 'a credit'}
+
+${returnLines(r.lines)}
+
+Approve or decline it here:
+
+  ${r.reviewUrl}
+
+${r.company}
+`,
+  };
+}
+
+/**
+ * To the client, once somebody has looked.
+ *
+ * An approval says what to do next, because a customer told "approved" and
+ * nothing else will ring up to ask where to send it.
+ */
+export function returnDecision(r: {
+  company: string; number: string; companyName: string; orderNumber: string;
+  approved: boolean; note: string | null;
+  returnAddress: string; portalUrl: string;
+}) {
+  return {
+    subject: `${r.company} — return ${r.number} ${r.approved ? 'approved' : 'not accepted'}`,
+    body: r.approved
+      ? `We have approved return ${r.number} against order ${r.orderNumber}.
+${r.note ? `\n${r.note}\n` : ''}
+Please send the goods back to:
+
+${r.returnAddress.split('\n').map((l) => `  ${l}`).join('\n')}
+
+Write ${r.number} on the outside of the parcel so we can match it up. We will
+email you again as soon as it reaches us.
+
+  ${r.portalUrl}
+
+${r.company}
+`
+      : `We are sorry — we cannot accept return ${r.number} against order ${r.orderNumber}.
+${r.note ? `\n${r.note}\n` : ''}
+We take goods back when they arrive faulty or when we sent the wrong thing.
+If you think we have this wrong, reply to this email and we will look again.
+
+  ${r.portalUrl}
+
+${r.company}
+`,
+  };
+}
+
+/** To the client, once it is settled one way or the other. */
+export function returnSettled(r: {
+  company: string; number: string; companyName: string;
+  outcome: string; creditNumber: string | null; replacementOrder: string | null;
+  portalUrl: string;
+}) {
+  const what = r.outcome === 'refund'
+    ? `We have raised credit note ${r.creditNumber ?? ''} against your account.`.trim()
+    : `Your replacement is on order${r.replacementOrder ? ` as ${r.replacementOrder}` : ''} and will be dispatched in the usual way.`;
+
+  return {
+    subject: `${r.company} — return ${r.number} settled`,
+    body: `Your goods are back with us and return ${r.number} is settled.
+
+${what}
+
+Thank you for your patience, and sorry for the trouble.
+
+  ${r.portalUrl}
+
+${r.company}
+`,
+  };
+}

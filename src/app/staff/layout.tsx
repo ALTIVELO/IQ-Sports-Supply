@@ -8,17 +8,23 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   const sb = await supabaseServer();
 
   // Counts for the nav badges — the queues that need someone's attention.
-  const [backorders, packing, applications] = await Promise.all([
+  const [backorders, packing, applications, returns] = await Promise.all([
     sb.from('order_lines').select('bo_qty').gt('bo_qty', 0),
     sb.from('invoices').select('id', { count: 'exact', head: true })
       .eq('paid', true).eq('ready_to_pack', true).eq('packed', false).eq('superseded', false),
     sb.from('account_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    // Anything not yet settled: waiting on a decision, on the goods, or on
+    // a credit. A return that has been decided and forgotten is the one that
+    // costs a customer, so the badge counts all three.
+    sb.from('returns').select('id', { count: 'exact', head: true })
+      .in('status', ['requested', 'approved', 'received']),
   ]);
 
   const badges: NavBadges = {
     backorderUnits: (backorders.data ?? []).reduce((a, l) => a + l.bo_qty, 0),
     packing: packing.count ?? 0,
     applications: applications.count ?? 0,
+    returns: returns.count ?? 0,
   };
 
   return (

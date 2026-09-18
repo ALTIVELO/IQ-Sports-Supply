@@ -1,7 +1,10 @@
 import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
+import { fetchAll } from '@/lib/supabase/chunk';
+import { claimedByLine, lastDispatch, windowClosed } from '@/lib/returns/returnable';
 import { Card, Empty, Money, Tag, VoidTag, voidedRow, voidedText } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
+import ReportProblem from '../returns/ReportProblem';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,14 +16,38 @@ export default async function OrderHistory({
   const { q } = await searchParams;
   const sb = await supabaseServer();
 
-  const { data: orders } = await sb
-    .from('orders')
-    .select(`id, number, date, status, currency,
-             order_lines(id, sku, name, qty, unit_price, bo_qty),
-             invoices(id, number, paid, shipped, delivered, superseded)`)
-    .eq('client_id', user.clientId)
-    .order('date', { ascending: false })
-    .limit(300);
+  const [{ data: orders }, { data: settings }] = await Promise.all([
+    sb.from('orders')
+      .select(`id, number, date, status, currency,
+               order_lines(id, sku, name, qty, unit_price, bo_qty),
+               invoices(id, number, paid, shipped, shipped_at, delivered, superseded)`)
+      .eq('client_id', user.clientId)
+      .order('date', { ascending: false })
+      .limit(300),
+    sb.from('settings').select('returns_days').eq('id', 1).single(),
+  ]);
+
+  const days = settings?.returns_days ?? 30;
+
+  /*
+   * How much of each line has already been spoken for by a return.
+   *
+   * returnable_qty() in the database is the authority and is what
+   * request_return() checks against; this is the same arithmetic done once
+   * for the whole page so the form can show a number and cap an input,
+   * rather than one round trip per line. Row-paged, because a client with
+   * years of history can have more return lines than a single response
+   * carries — and a truncated read here would offer back stock that is
+   * already on its way.
+   */
+  const claimed = await fetchAll<{ order_line_id: string; qty: number }>((from, to) =>
+    sb.from('return_lines')
+      .select('order_line_id, qty, returns!inner(status)')
+      .not('returns.status', 'in', '(declined,cancelled)')
+      .order('order_line_id')
+      .range(from, to),
+  );
+  const used = claimedByLine(claimed);
 
   const term = q?.trim().toLowerCase() ?? '';
   const filtered = (orders ?? []).filter((o) => {
@@ -58,6 +85,11 @@ export default async function OrderHistory({
           const allDelivered = live.length > 0 && live.every((i) => i.delivered);
           const allShipped = live.length > 0 && live.every((i) => i.shipped);
           const cancelled = o.status === 'cancelled';
+
+          // The returns window runs from the last dispatch on the order, the
+          // same date request_return() measures from.
+          const shippedOn = lastDispatch(o.invoices);
+          const closed = windowClosed(shippedOn, days);
 
           return (
             <Card key={o.id} className={cancelled ? voidedRow : ''}>
@@ -109,7 +141,7 @@ export default async function OrderHistory({
                   </table>
                 </div>
 
-                <div className="flex flex-wrap gap-2 mt-3">
+                <div className="flex flex-wrap items-center gap-2 mt-3">
                   {live.map((i) => (
                     <a
                       key={i.id} href={`/api/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer"
@@ -118,6 +150,18 @@ export default async function OrderHistory({
                       {i.number} PDF
                     </a>
                   ))}
+                  {!cancelled && (
+                    <ReportProblem
+                      orderId={o.id}
+                      dispatched={shippedOn !== null}
+                      windowClosed={closed}
+                      days={days}
+                      lines={o.order_lines.map((l) => ({
+                        id: l.id, sku: l.sku, name: l.name,
+                        left: Math.max(0, l.qty - (used.get(l.id) ?? 0)),
+                      }))}
+                    />
+                  )}
                 </div>
               </details>
             </Card>

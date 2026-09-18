@@ -31,6 +31,8 @@ export async function saveSettings(formData: FormData): Promise<ActionResult> {
     confirmation_cc: emails(str('confirmation_cc')),
     supplier_recipient: str('supplier_recipient'),
     application_recipients: emails(str('application_recipients')),
+    returns_recipients: emails(str('returns_recipients')),
+    returns_days: Math.max(0, num('returns_days')),
     email_from: str('email_from'),
   }).eq('id', 1);
 

@@ -3,8 +3,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sendEmail } from '@/lib/email/send';
 import {
   orderConfirmation, supplierOrder, shippedNotice, deliveredNotice, welcomeEmail,
-  rejectionEmail, dropshipNotice,
+  rejectionEmail, dropshipNotice, returnRaised, returnDecision, returnSettled,
 } from '@/lib/email/templates';
+import { RETURN_REASONS } from '@/lib/types';
 import { invoiceDocData, renderInvoicePdf } from '@/lib/pdf/render';
 import { appUrl } from '@/lib/app-url';
 
@@ -302,4 +303,122 @@ export async function notifyDropshipPartners(orderId: string) {
     await db.from('dropship_notices')
       .update({ notified_at: new Date().toISOString() }).eq('id', notice.id);
   }
+}
+
+/** ── goods coming back ──────────────────────────────────────────────────── */
+
+const REASON_TEXT = Object.fromEntries(RETURN_REASONS.map((r) => [r.key, r.label]));
+
+interface ReturnRow {
+  number: string; wanted: string; decision_note: string | null;
+  credit_id: string | null; replacement_order_id: string | null;
+  clients: { name: string; email: string | null } | null;
+  orders: { number: string } | null;
+  return_lines: { sku: string; name: string; qty: number; reason: string; note: string | null }[];
+}
+
+/** One read, shared by all three notices, so they cannot describe it differently. */
+async function readReturn(returnId: string) {
+  const db = supabaseAdmin();
+  const [{ data: row }, { data: settings }] = await Promise.all([
+    db.from('returns')
+      .select(`number, wanted, decision_note, credit_id, replacement_order_id,
+               clients(name, email), orders(number),
+               return_lines(sku, name, qty, reason, note)`)
+      .eq('id', returnId).single(),
+    db.from('settings')
+      .select('company, company_address, returns_recipients').eq('id', 1).single(),
+  ]);
+  return { db, row: row as unknown as ReturnRow | null, settings };
+}
+
+/** To the desk, when a client reports a fault or a wrong item. */
+export async function notifyReturnRaised(returnId: string) {
+  const { row, settings } = await readReturn(returnId);
+  if (!row) return;
+
+  const msg = returnRaised({
+    company: settings?.company ?? 'IQ Sports Supply',
+    number: row.number,
+    clientName: row.clients?.name ?? '',
+    orderNumber: row.orders?.number ?? '',
+    wanted: row.wanted,
+    lines: (row.return_lines ?? []).map((l) => ({
+      ...l, reason: REASON_TEXT[l.reason] ?? l.reason,
+    })),
+    reviewUrl: `${appUrl()}/staff/returns`,
+  });
+
+  await sendEmail({
+    kind: 'return_raised',
+    to: settings?.returns_recipients ?? [],
+    subject: msg.subject,
+    body: msg.body,
+  });
+}
+
+/**
+ * To the client, when staff approve or decline.
+ *
+ * An approval carries the address to send to. Our own company address is the
+ * right one: goods come back to the people who sent them, not to whichever
+ * warehouse the order happened to ship from.
+ */
+export async function notifyReturnDecided(returnId: string, approved: boolean) {
+  const { row, settings } = await readReturn(returnId);
+  if (!row?.clients?.email) return;
+
+  const msg = returnDecision({
+    company: settings?.company ?? 'IQ Sports Supply',
+    number: row.number,
+    companyName: row.clients.name,
+    orderNumber: row.orders?.number ?? '',
+    approved,
+    note: row.decision_note,
+    returnAddress: `${settings?.company ?? ''}\n${settings?.company_address ?? ''}`,
+    portalUrl: `${appUrl()}/portal/returns`,
+  });
+
+  await sendEmail({
+    kind: 'return_decision',
+    to: [row.clients.email],
+    cc: settings?.returns_recipients ?? [],
+    subject: msg.subject,
+    body: msg.body,
+  });
+}
+
+/** To the client, when it is settled as a credit or a replacement. */
+export async function notifyReturnResolved(returnId: string) {
+  const { db, row, settings } = await readReturn(returnId);
+  if (!row?.clients?.email) return;
+
+  // Whichever document the resolution produced, named rather than described:
+  // "credit note IQ-2026-0041" is something a bookkeeper can find.
+  const [credit, replacement] = await Promise.all([
+    row.credit_id
+      ? db.from('invoices').select('number').eq('id', row.credit_id).single()
+      : Promise.resolve({ data: null }),
+    row.replacement_order_id
+      ? db.from('orders').select('number').eq('id', row.replacement_order_id).single()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const msg = returnSettled({
+    company: settings?.company ?? 'IQ Sports Supply',
+    number: row.number,
+    companyName: row.clients.name,
+    outcome: row.credit_id ? 'refund' : 'exchange',
+    creditNumber: credit.data?.number ?? null,
+    replacementOrder: replacement.data?.number ?? null,
+    portalUrl: `${appUrl()}/portal/returns`,
+  });
+
+  await sendEmail({
+    kind: 'return_settled',
+    to: [row.clients.email],
+    cc: settings?.returns_recipients ?? [],
+    subject: msg.subject,
+    body: msg.body,
+  });
 }

@@ -11,6 +11,7 @@ export interface NavBadges {
   backorderUnits: number;
   packing: number;
   applications: number;
+  returns: number;
 }
 
 type Item = { href: string; label: string; roles?: Role[]; badge?: keyof NavBadges };
@@ -24,6 +25,7 @@ const ITEMS: Item[] = [
   { href: '/staff/supplier', label: 'Supplier', badge: 'backorderUnits' },
   { href: '/staff/packing', label: 'Packing', badge: 'packing' },
   { href: '/staff/invoices', label: 'Invoices' },
+  { href: '/staff/returns', label: 'Returns', badge: 'returns' },
   { href: '/staff/catalogue', label: 'Catalogue' },
   { href: '/staff/groups', label: 'Variants & builds', roles: ['admin', 'accounts'] },
   { href: '/staff/clients', label: 'Clients' },

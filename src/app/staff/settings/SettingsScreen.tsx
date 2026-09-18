@@ -65,6 +65,10 @@ export default function SettingsScreen({
             <Field label="Payment terms (days)">
               <input name="payment_days" type="number" min={0} defaultValue={settings.payment_days} className="num" />
             </Field>
+            <Field label="Returns window (days)"
+                   hint="How long after dispatch a client may report a fault or a wrong item. Staff can still raise one after that.">
+              <input name="returns_days" type="number" min={0} defaultValue={settings.returns_days} className="num" />
+            </Field>
           </div>
         </Card>
 
@@ -92,6 +96,11 @@ export default function SettingsScreen({
                    hint="Comma separated. Told about every new trade account application.">
               <input name="application_recipients"
                      defaultValue={settings.application_recipients?.join(', ') ?? ''} />
+            </Field>
+            <Field label="Returns notifications"
+                   hint="Comma separated. Told whenever a client reports a fault or a wrong item.">
+              <input name="returns_recipients"
+                     defaultValue={settings.returns_recipients?.join(', ') ?? ''} />
             </Field>
           </div>
         </Card>

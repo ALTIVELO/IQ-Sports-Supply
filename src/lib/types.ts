@@ -63,6 +63,8 @@ export interface Settings {
   confirmation_cc: string[];
   supplier_recipient: string;
   application_recipients: string[];
+  returns_recipients: string[];
+  returns_days: number;
   email_from: string;
 }
 
@@ -149,3 +151,25 @@ export const TIMELINE: { type: OrderEventType; label: string }[] = [
   { type: 'shipped', label: 'Shipped' },
   { type: 'delivered', label: 'Delivered' },
 ];
+
+/** The only two reasons IQ accepts goods back. */
+export type ReturnReason = 'faulty' | 'wrong_item';
+export type ReturnStatus =
+  'requested' | 'approved' | 'declined' | 'received' | 'resolved' | 'cancelled';
+export type ReturnOutcome = 'refund' | 'exchange';
+
+export const RETURN_REASONS: { key: ReturnReason; label: string; hint: string }[] = [
+  { key: 'faulty', label: 'It arrived faulty',
+    hint: 'Damaged in transit, or it failed in normal use.' },
+  { key: 'wrong_item', label: 'We sent the wrong item',
+    hint: 'What arrived is not what is on your order.' },
+];
+
+export const RETURN_STATUS_LABEL: Record<ReturnStatus, string> = {
+  requested: 'With us to look at',
+  approved: 'Approved — send it back',
+  declined: 'Not accepted',
+  received: 'Back with us',
+  resolved: 'Settled',
+  cancelled: 'Withdrawn',
+};

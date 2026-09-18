@@ -4,10 +4,27 @@
 -- ============================================================================
 
 with checks as (
-  select 'tables created' as item,
-         (select count(*) from information_schema.tables
-           where table_schema='public' and table_type='BASE TABLE')::text as found,
-         '30' as expected
+  -- Named rather than counted. A bare count of tables fails the day a
+  -- migration adds one and nobody remembers to bump the number here, which
+  -- teaches whoever pastes this file that a FAIL row is normal — and the next
+  -- real FAIL is then read as normal too.
+  select 'every table the app needs is present' as item,
+         (select count(*) from unnest(array[
+            'account_requests','audit_log','brand_partners','brands','categories',
+            'client_addresses','clients','dropship_notices','email_log',
+            'import_templates','invoice_lines','invoices','locations',
+            'ops_locations','order_events','order_line_costs','order_lines',
+            'orders','po_lines','price_imports','product_costs',
+            'product_group_options','product_group_steps','product_groups',
+            'products','profiles','purchase_orders','return_lines','returns',
+            'settings','staff_invites','stock_levels','stock_transfer_lines',
+            'stock_transfers','tier_prices','tiers','xero_connection'
+          ]) t
+          where not exists (
+            select 1 from information_schema.tables
+             where table_schema='public' and table_type='BASE TABLE'
+               and table_name = t))::text || ' missing' as found,
+         '0 missing' as expected
 
   union all
   select 'RLS enabled on every table',

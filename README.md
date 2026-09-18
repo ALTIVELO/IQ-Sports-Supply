@@ -87,6 +87,15 @@ with no rebuild.
 7. **Timeline.** Placed → Invoice sent → Payment received → Ordered from supplier →
    Stock arrived → Packed → Shipped, driven entirely by `order_events`. There is no
    manually editable status anywhere.
+8. **Returns.** Two reasons are accepted and they are an enum, not a dropdown:
+   the goods arrived faulty, or we sent the wrong thing. Nothing comes back
+   because a shop over-ordered. A client raises one from the order it is about,
+   within `returns_days` of dispatch (staff are exempt, so somebody can always do
+   the right thing); it goes requested → approved → received → resolved. Booking
+   the parcel in restocks the wrongly-picked lines and never the faulty ones —
+   the reason sits on the line because one parcel can hold both. Settling it
+   raises a credit note through the same `credit_invoice()` a hand-typed credit
+   uses, or points at the replacement order raised on the order desk.
 
 ## Roles
 
@@ -95,7 +104,7 @@ with no rebuild.
 | `admin` | Everything. |
 | `accounts` | Invoices, Xero, settings, applications, imports. |
 | `ops` | Orders, packing, supplier POs, receiving — scoped to their assigned site(s). |
-| `client` | Only their own catalogue view, orders, backorders and invoices. |
+| `client` | Only their own catalogue view, orders, backorders, invoices and returns. |
 
 A client never sees another client, another tier's prices, supplier information,
 or stock levels. Availability reaches the portal as a boolean through
@@ -205,8 +214,8 @@ left out.
 
 ## Numbering
 
-`next_order_number()`, `next_invoice_number()`, `next_po_number()` and
-`next_transfer_number()` each run `UPDATE settings SET n = n + 1 RETURNING`,
+`next_order_number()`, `next_invoice_number()`, `next_po_number()`,
+`next_transfer_number()` and `next_return_number()` each run `UPDATE settings SET n = n + 1 RETURNING`,
 taking a row lock on the single settings row. Concurrent callers serialise, so a
 number is never issued twice. Invoice numbering continues from the `IQ-2026-001`
 and `002` already issued: the next is `003`.
@@ -220,20 +229,29 @@ Postgres rather than mocked:
 PGHOST=/tmp PGPORT=55432 PGUSER=postgres ./tests/run-sql-tests.sh
 ```
 
-61 assertions covering allocation and backordering, invoicing at placement, the
+491 assertions covering allocation and backordering, invoicing at placement, the
 payment gate, receiving by SO reference, the invoice split and its dating, RLS
-isolation between clients, and the approval flow. Each suite runs against a
-freshly migrated database.
+isolation between clients and between brand partners, currency, variant grouping,
+returns, and the approval flow. Each suite runs against a freshly migrated
+database.
+
+The pure logic that runs on a screen rather than in Postgres has its own suite:
+
+```bash
+./tests/run-unit-tests.sh
+```
 
 ## Layout
 
 ```
 src/app/            (public) apply · login
                     staff/   order desk · orders · supplier · packing · invoices
-                             catalogue · clients · applications · locations
+                             returns · catalogue · variants & builds · clients
+                             brand partners · applications · locations
                              import · outbox · settings
                     portal/  catalogue · current orders · history · invoices
-                             back orders · shipping
+                             returns · back orders · shipping
+                    brand/   a partner's own sales, margin and dispatch list
 src/lib/            domain helpers: supabase clients, auth guards, email,
                     xero, pdf, import parsing
 supabase/migrations 0001 schema · 0002 domain logic · 0003 RLS · 0004 seed
