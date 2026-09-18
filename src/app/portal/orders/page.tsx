@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { Card, Empty, Money, VoidTag, voidedRow, voidedText } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 import Timeline from '@/components/Timeline';
+import AgencyNotice from '@/components/AgencyNotice';
 import type { OrderEvent } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -12,15 +13,19 @@ export default async function CurrentOrders() {
   const user = await requireClient();
   const sb = await supabaseServer();
 
-  const { data: orders } = await sb
-    .from('orders')
-    .select(`id, number, date, status, currency,
+  const [{ data: orders }, { data: settings }] = await Promise.all([
+    sb.from('orders')
+    .select(`id, number, date, status, currency, agency_terms, brands!orders_agent_brand_id_fkey(name),
              order_lines(id, sku, name, qty, unit_price, alloc_qty, bo_qty),
              invoices(id, number, type, paid, packed, shipped, delivered, superseded, carrier, tracking_number, tracking_url),
              order_events(id, order_id, type, created_at, meta)`)
     .eq('client_id', user.clientId)
     .order('date', { ascending: false })
-    .limit(100);
+    .limit(100),
+    sb.from('settings').select('company').eq('id', 1).single(),
+  ]);
+
+  const company = settings?.company ?? 'IQ Sports Supply';
 
   // "Not yet fully delivered" = at least one live invoice still undelivered —
   // a shipped parcel still in transit belongs here, not in history.
@@ -69,6 +74,13 @@ export default async function CurrentOrders() {
                   <span className="text-mute font-normal text-[12px]">net</span>
                 </span>
               </div>
+
+              <AgencyNotice
+                className="mt-3"
+                terms={o.agency_terms}
+                brand={(o.brands as unknown as { name: string } | null)?.name}
+                company={company}
+              />
 
               <div className="grid md:grid-cols-[1fr_220px] gap-5 mt-4">
                 <div className="min-w-0 overflow-x-auto">

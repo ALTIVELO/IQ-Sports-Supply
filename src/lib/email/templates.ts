@@ -1,4 +1,5 @@
 import { fmtDate, money, totals } from '@/lib/format';
+import { agencyHeading, agencyLines } from '@/lib/orders/agency';
 
 interface Line { sku: string; name: string; qty: number; unit_price: number }
 
@@ -16,8 +17,50 @@ export function orderConfirmation(o: {
   date: string; dueDate: string; vatRate: number; currency?: string; lines: Line[];
   backordered: { sku: string; name: string; qty: number }[];
   portalUrl: string;
+  /** Set where we introduced this order rather than sold it. */
+  agencyTerms?: string | null;
+  agentBrand?: string | null;
 }) {
   const { net, vat, gross } = totals(o.lines, o.vatRate);
+  const names = { brand: o.agentBrand || 'the brand', company: o.company };
+  const terms = agencyLines(o.agencyTerms, names);
+
+  /*
+   * An introduced order is a different email with the same lines on it.
+   *
+   * Everything after the goods is wrong for it: we are not collecting the
+   * money, we are not dispatching, and the total does not include the
+   * shipping and taxes the brand will add. Writing one paragraph that covers
+   * both would have to be vague about all of it, so the two are written
+   * separately and the order decides which it gets.
+   */
+  if (terms.length) {
+    return {
+      subject: `${o.company} — order ${o.orderNumber} received, going to ${names.brand}`,
+      body: `Thank you for your order.
+
+Order    ${o.orderNumber}
+Ref      ${o.invoiceNumber}
+Date     ${fmtDate(o.date)}
+
+${table(o.lines, true, o.currency)}
+
+  Goods         ${money(net, o.currency)}
+  (before shipping and taxes, which ${names.brand} add on their invoice)
+
+${agencyHeading(names).toUpperCase()}
+
+${terms.map((line) => `  ${line}`).join('\n\n')}
+
+The order confirmation is attached. Nothing is due to us on it. You can follow
+the order here at any time:
+
+  ${o.portalUrl}
+
+${o.company}`,
+    };
+  }
+
   // Every line goes to our supplier when the order arrives, so singling some
   // out as "on back order" would name the whole order and read as a problem.
   const bo = '\nWe have placed this with our supplier and will confirm dates with you '

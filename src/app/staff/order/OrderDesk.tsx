@@ -11,6 +11,8 @@ import CollectionPicker from '@/components/CollectionPicker';
 import { groupCollections, idsUnderSlug, type CategoryLite } from '@/lib/catalogue/collections';
 import { groupSizes } from '@/lib/catalogue/variants';
 import DeskBuild from './DeskBuild';
+import AgencyNotice from '@/components/AgencyNotice';
+import type { AgencyBrand } from '@/lib/types';
 import type { DeskProduct, DeskBuild as Build } from './page';
 
 interface ClientRow {
@@ -24,14 +26,18 @@ interface DraftLine {
   /** The tier price, kept so an override is visible as an override. */
   tierPrice: number;
   currency: string;
+  /** The brand key where we introduce this line rather than sell it. */
+  agentBrand: string | null;
 }
 
 export default function OrderDesk({
   clients, locations, tiers, products, categories, builds, vatRate,
+  company, agencyBrands,
 }: {
   clients: ClientRow[]; locations: Named[]; tiers: Named[];
   products: DeskProduct[]; categories: CategoryLite[];
   builds: Build[]; vatRate: number;
+  company: string; agencyBrands: AgencyBrand[];
 }) {
   const [clientId, setClientId] = useState('');
   const [locationId, setLocationId] = useState('');
@@ -71,6 +77,14 @@ export default function OrderDesk({
   const priceFor = (p: DeskProduct): number | undefined =>
     tierPrice(p.prices, client?.tier_id);
   const stockAt = (p: DeskProduct, loc: string) => p.stock[loc] ?? 0;
+
+  // brands.key is the product's brand text normalised the way the database
+  // normalises it, so this is the same match it made when filing the product.
+  const agencyKeys = new Set(agencyBrands.map((b) => b.key));
+  const agentBrandOf = (p: DeskProduct): string | null => {
+    const key = (p.brand ?? '').trim().toLowerCase();
+    return agencyKeys.has(key) ? key : null;
+  };
   const totalStock = (p: DeskProduct) => Object.values(p.stock).reduce((a, b) => a + b, 0);
 
   // Counted over the whole catalogue, not over what is currently listed, so
@@ -167,10 +181,30 @@ export default function OrderDesk({
       return [...ls, {
         productId: p.id, sku: p.sku, name: p.name, qty: add,
         unitPrice: price, tierPrice: price, currency: p.currency,
+        agentBrand: agentBrandOf(p),
       }];
     });
     setQuery('');
   }
+
+  /*
+   * The brands on this draft we introduce rather than sell.
+   *
+   * Told while the order is still being built, because the person on the
+   * phone is the one who has to say it out loud, and finding out after the
+   * order is raised is finding out too late to say it.
+   */
+  const agencyOnOrder = useMemo(() => {
+    const byKey = new Map(agencyBrands.map((b) => [b.key, b]));
+    return [...new Set(lines.map((l) => l.agentBrand).filter(Boolean) as string[])]
+      .map((k) => byKey.get(k))
+      .filter(Boolean) as AgencyBrand[];
+  }, [lines, agencyBrands]);
+
+  // Goods we sell and goods we introduce are invoiced by different companies,
+  // so each becomes its own order — the same split the portal basket makes.
+  const sellerSplit =
+    agencyOnOrder.length + (lines.some((l) => !l.agentBrand) ? 1 : 0);
 
   const patch = (i: number, next: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...next } : l)));
@@ -536,6 +570,23 @@ export default function OrderDesk({
               </Notice>
             </div>
           )}
+
+          {sellerSplit > 1 && !split && (
+            <div className="mt-3">
+              <Notice tone="info">
+                Not everything on this order is sold by us, so it will be raised as{' '}
+                {sellerSplit} orders. Goods invoiced by different companies cannot
+                share one invoice.
+              </Notice>
+            </div>
+          )}
+
+          {agencyOnOrder.map((b) => (
+            <AgencyNotice
+              key={b.key} className="mt-3"
+              terms={b.terms} brand={b.name} company={company}
+            />
+          ))}
 
           {shortfall.length > 0 && (
             <div className="mt-3 border border-line rounded bg-parch px-3 py-2.5">

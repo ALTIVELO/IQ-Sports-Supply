@@ -13,7 +13,7 @@
 insert into auth.users (id, email) values
   ('11111111-1111-1111-1111-111111111111','james@iqsportsupply.com'),
   ('22222222-2222-2222-2222-222222222222','dave@mikedixonimports.co.uk'),
-  ('33333333-3333-3333-3333-333333333333','sales@dragbicycles.com'),
+  ('33333333-3333-3333-3333-333333333333','sales@apexbikes.test'),
   ('44444444-4444-4444-4444-444444444444','sales@rivalbrand.test');
 update profiles set role='admin' where id='11111111-1111-1111-1111-111111111111';
 update profiles set role='partner' where id in
@@ -25,10 +25,13 @@ grant select, insert, update, delete on all tables in schema public to app_user;
 grant execute on all functions in schema public to app_user;
 grant select on auth.users to app_user;
 
--- Two brands. DRAG ships its own; Rival leaves stock with us.
+-- Two brands. Apex ships its own; Rival leaves stock with us.
+-- Deliberately not Apex: Apex is a real agency brand in the seed, and
+-- an order mixing it with another brand is refused. This suite is about
+-- what a partner can see, not about who is selling.
 insert into products (sku, name, brand, active, dropship) values
-  ('BP-DRAG-1','Drag gravel frame','DRAG',true,true),
-  ('BP-DRAG-2','Drag bar tape','DRAG',true,false),
+  ('BP-APEX-1','Apex gravel frame','Apex',true,true),
+  ('BP-APEX-2','Apex bar tape','Apex',true,false),
   ('BP-RIVAL-1','Rival wheelset','RivalBrand',true,false);
 
 insert into tier_prices (product_id, tier_id, price, effective_from)
@@ -40,8 +43,8 @@ insert into stock_levels (product_id, location_id, qty)
   select p.id, l.id, 20 from products p, locations l where p.sku like 'BP-%';
 
 insert into brand_partners (brand_id, auth_user_id, email)
-select b.id, '33333333-3333-3333-3333-333333333333', 'sales@dragbicycles.com'
-  from brands b where b.key = 'drag';
+select b.id, '33333333-3333-3333-3333-333333333333', 'sales@apexbikes.test'
+  from brands b where b.key = 'apex';
 insert into brand_partners (brand_id, auth_user_id, email)
 select b.id, '44444444-4444-4444-4444-444444444444', 'sales@rivalbrand.test'
   from brands b where b.key = 'rivalbrand';
@@ -69,21 +72,21 @@ set session "test.user_id" = '11111111-1111-1111-1111-111111111111';
 \echo '───────── Brands are rows, kept in step with what was typed ─────────'
 do $$
 begin
-  perform assert_eq((select count(*)::integer from brands where key = 'drag'), 1,
+  perform assert_eq((select count(*)::integer from brands where key = 'apex'), 1,
     'the brand on a product becomes a brand');
   perform assert_eq(
     (select b.key from products p join brands b on b.id = p.brand_id
-      where p.sku = 'BP-DRAG-1'), 'drag',
+      where p.sku = 'BP-APEX-1'), 'apex',
     'and the product points at it');
 
   -- The same brand typed three ways is one brand, not three.
-  insert into products (sku, name, brand) values ('BP-CASE','Case test',' drag ');
+  insert into products (sku, name, brand) values ('BP-CASE','Case test',' apex ');
   perform assert_eq(
-    (select count(*)::integer from brands where key = 'drag'), 1,
+    (select count(*)::integer from brands where key = 'apex'), 1,
     'spelling it differently does not make a second');
   perform assert_eq(
     (select b.key from products p join brands b on b.id = p.brand_id where p.sku='BP-CASE'),
-    'drag', 'it lands on the same one');
+    'apex', 'it lands on the same one');
   delete from products where sku = 'BP-CASE';
 end $$;
 
@@ -94,10 +97,10 @@ declare v_mdi uuid := (select id from clients where name='MDI Ltd');
         v_corn uuid := (select id from clients where name='Cornwall Cycles');
 begin
   perform import_historic_order(v_mdi, (current_date - 40)::date,
-    jsonb_build_array(jsonb_build_object('sku','BP-DRAG-1','qty',2,'unit_price',500.00)),
+    jsonb_build_array(jsonb_build_object('sku','BP-APEX-1','qty',2,'unit_price',500.00)),
     'BP-A', null);
   perform import_historic_order(v_corn, (current_date - 10)::date,
-    jsonb_build_array(jsonb_build_object('sku','BP-DRAG-1','qty',3,'unit_price',500.00),
+    jsonb_build_array(jsonb_build_object('sku','BP-APEX-1','qty',3,'unit_price',500.00),
                       jsonb_build_object('sku','BP-RIVAL-1','qty',1,'unit_price',500.00)),
     'BP-B', null);
   perform import_historic_order(v_mdi, (current_date - 5)::date,
@@ -106,7 +109,7 @@ begin
 end $$;
 
 \echo ''
-\echo '───────── DRAG sees DRAG ─────────'
+\echo '───────── Apex sees Apex ─────────'
 reset role;
 set role app_user;
 set session "test.user_id" = '33333333-3333-3333-3333-333333333333';
@@ -216,7 +219,7 @@ end $$;
 do $$
 declare v_notice uuid;
 begin
-  -- BP-DRAG-1 ships from the brand; BP-DRAG-2 and the Rival wheels do not.
+  -- BP-APEX-1 ships from the brand; BP-APEX-2 and the Rival wheels do not.
   perform assert_eq(
     (select count(*)::integer from partner_dropship_orders()), 2,
     'both orders carrying their drop-shipped frame raise a notice');
@@ -262,7 +265,7 @@ do $$
 declare v_notice uuid := (select id from dropship_notices where not shipped limit 1);
 begin
   perform assert_eq(v_notice is not null, true, 'staff can see the notice');
-  insert into _leaked values ('drag_notice', v_notice)
+  insert into _leaked values ('apex_notice', v_notice)
   on conflict (what) do update set id = excluded.id;
 end $$;
 
@@ -271,7 +274,7 @@ set role app_user;
 set session "test.user_id" = '44444444-4444-4444-4444-444444444444';
 select assert_fails(
   format($$select mark_dropship_shipped(%L, 'X', 'Y')$$,
-         (select id from _leaked where what = 'drag_notice')),
+         (select id from _leaked where what = 'apex_notice')),
   'marking another brand''s box as shipped, knowing its id');
 
 \echo ''

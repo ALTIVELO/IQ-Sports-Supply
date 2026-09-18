@@ -2,6 +2,7 @@ import { requireClient } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase/server';
 import { fetchAll } from '@/lib/supabase/chunk';
 import { claimedByLine, lastDispatch, windowClosed } from '@/lib/returns/returnable';
+import AgencyNotice from '@/components/AgencyNotice';
 import { Card, Empty, Money, Tag, VoidTag, voidedRow, voidedText } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
 import ReportProblem from '../returns/ReportProblem';
@@ -18,16 +19,17 @@ export default async function OrderHistory({
 
   const [{ data: orders }, { data: settings }] = await Promise.all([
     sb.from('orders')
-      .select(`id, number, date, status, currency,
+      .select(`id, number, date, status, currency, agency_terms, brands!orders_agent_brand_id_fkey(name),
                order_lines(id, sku, name, qty, unit_price, bo_qty),
                invoices(id, number, paid, shipped, shipped_at, delivered, superseded)`)
       .eq('client_id', user.clientId)
       .order('date', { ascending: false })
       .limit(300),
-    sb.from('settings').select('returns_days').eq('id', 1).single(),
+    sb.from('settings').select('returns_days, company').eq('id', 1).single(),
   ]);
 
   const days = settings?.returns_days ?? 30;
+  const company = settings?.company ?? 'IQ Sports Supply';
 
   /*
    * How much of each line has already been spoken for by a return.
@@ -112,6 +114,13 @@ export default async function OrderHistory({
                     <Money value={total} currency={o.currency} />
                   </span>
                 </summary>
+
+                <AgencyNotice
+                  className="mt-3"
+                  terms={o.agency_terms}
+                  brand={(o.brands as unknown as { name: string } | null)?.name}
+                  company={company}
+                />
 
                 <div className="overflow-x-auto mt-3">
                   <table>

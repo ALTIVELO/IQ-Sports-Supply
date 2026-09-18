@@ -153,6 +153,14 @@ export const TIMELINE: { type: OrderEventType; label: string }[] = [
 ];
 
 /** The only two reasons IQ accepts goods back. */
+/**
+ * A brand whose orders we introduce rather than sell.
+ *
+ * `terms` is the disclosure shown to the customer, one statement per line,
+ * with {brand} and {company} filled in at the point of showing.
+ */
+export interface AgencyBrand { key: string; name: string; terms: string | null }
+
 export type ReturnReason = 'faulty' | 'wrong_item';
 export type ReturnStatus =
   'requested' | 'approved' | 'declined' | 'received' | 'resolved' | 'cancelled';

@@ -9,17 +9,41 @@ import type { ActionResult } from '../actions';
 /** How a brand is set up: on consignment, and what its partners may see. */
 export async function saveBrandTerms(input: {
   brandId: string; consignment: boolean; showsMargin: boolean;
+  agency?: boolean; agencyTerms?: string;
 }): Promise<ActionResult> {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
 
-  const { error } = await sb.from('brands')
-    .update({ consignment: input.consignment, shows_margin: input.showsMargin })
-    .eq('id', input.brandId);
+  const patch: Record<string, unknown> = {
+    consignment: input.consignment, shows_margin: input.showsMargin,
+  };
+  if (input.agency !== undefined) patch.agency = input.agency;
+  if (input.agencyTerms !== undefined) {
+    patch.agency_terms = input.agencyTerms.trim() || null;
+  }
+
+  // Marking a brand as introduced with nothing to say is the one combination
+  // that looks configured and discloses nothing, so it is refused here rather
+  // than discovered on a customer's order.
+  if (patch.agency === true && !(patch.agency_terms ?? input.agencyTerms)) {
+    const { data: existing } = await sb.from('brands')
+      .select('agency_terms').eq('id', input.brandId).single();
+    if (!existing?.agency_terms) {
+      return {
+        ok: false,
+        error: 'Write what the customer should be told before marking this brand '
+             + 'as one we introduce. An order that discloses nothing is worse '
+             + 'than one that is not marked at all.',
+      };
+    }
+  }
+
+  const { error } = await sb.from('brands').update(patch).eq('id', input.brandId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/staff/brands');
   revalidatePath('/brand');
+  revalidatePath('/portal/basket');
   return { ok: true, message: 'Saved' };
 }
 

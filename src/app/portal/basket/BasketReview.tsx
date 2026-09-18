@@ -7,7 +7,8 @@ import ProductImage from '@/components/ProductImage';
 import { useCart } from '../CartContext';
 import type { Address } from '../account/AddressBook';
 import { placeClientOrder } from '../actions';
-import type { CatalogueItem } from '@/lib/types';
+import AgencyNotice from '@/components/AgencyNotice';
+import type { AgencyBrand, CatalogueItem } from '@/lib/types';
 import { currencyOf } from '@/lib/format';
 import { totalsByCurrency } from '@/lib/orders/split';
 
@@ -22,13 +23,19 @@ import { totalsByCurrency } from '@/lib/orders/split';
  * than as how the business works.
  */
 export default function BasketReview({
-  products, vatRate, paymentDays, addresses,
+  products, vatRate, paymentDays, addresses, company, agencyBrands,
 }: {
   products: CatalogueItem[]; vatRate: number; paymentDays: number; addresses: Address[];
+  company: string; agencyBrands: AgencyBrand[];
 }) {
   const { quantities, setQty, add, clear, ready } = useCart();
-  const [placed, setPlaced] = useState<
-    { orders: { number: string; currency: string }[]; warning?: string } | null>(null);
+  const [placed, setPlaced] = useState<{
+    orders: {
+      number: string; currency: string;
+      agencyTerms?: string | null; agentBrand?: string | null;
+    }[];
+    warning?: string;
+  } | null>(null);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
   const [addressId, setAddressId] = useState(
@@ -73,6 +80,30 @@ export default function BasketReview({
     [lines],
   );
 
+  /*
+   * The brands in this basket we introduce rather than sell.
+   *
+   * Told before placing, not after. A customer who finds out on the
+   * confirmation that the warranty is somebody else's has been told at the
+   * one moment they can no longer act on it.
+   */
+  const agencyInBasket = useMemo(() => {
+    const byKey = new Map(agencyBrands.map((b) => [b.key, b]));
+    const keys = new Set(
+      lines.map((l) => (l.product.brand ?? '').trim().toLowerCase())
+        .filter((k) => byKey.has(k)));
+    return [...keys].map((k) => byKey.get(k)!);
+  }, [lines, agencyBrands]);
+
+  // Those lines are invoiced by the brand, so they cannot share an order with
+  // goods we sell — each agency brand is an order of its own.
+  const ownLines = useMemo(
+    () => lines.filter((l) =>
+      !agencyInBasket.some((b) => b.key === (l.product.brand ?? '').trim().toLowerCase())),
+    [lines, agencyInBasket],
+  );
+  const sellerSplit = agencyInBasket.length + (ownLines.length ? 1 : 0);
+
   function checkout() {
     setError('');
     startTransition(async () => {
@@ -94,18 +125,33 @@ export default function BasketReview({
         </h1>
         {placed.orders.length > 1 && (
           <p className="text-[13px] text-mute mt-2 leading-relaxed">
-            Your basket held more than one currency, so it was raised as{' '}
-            {placed.orders.length} orders — {placed.orders.map((o) =>
-              `${o.number} in ${o.currency}`).join(', ')} — each with its own invoice.
-            An invoice can only ask for one currency, and a total that added them
-            together would be a figure nobody owes.
+            Your basket was raised as {placed.orders.length} orders —{' '}
+            {placed.orders.map((o) => `${o.number} in ${o.currency}`).join(', ')} — each
+            with its own invoice. An invoice asks for one currency and comes from one
+            seller, so goods in different currencies, or sold by different companies,
+            cannot share one.
           </p>
         )}
-        <p className="text-[13px] text-mute mt-2 leading-relaxed">
-          {placed.orders.length > 1 ? 'Both invoices have' : 'Your invoice has'} been
-          raised, due {paymentDays} days from today. Your order has gone straight to our
-          supplier. Nothing is dispatched until payment reaches us.
-        </p>
+        {/* Our own goods and an introduced brand's are settled completely
+            differently, so the two sentences are told apart rather than
+            averaged into one that is wrong for both. */}
+        {placed.orders.some((o) => !o.agencyTerms) && (
+          <p className="text-[13px] text-mute mt-2 leading-relaxed">
+            {placed.orders.filter((o) => !o.agencyTerms).length > 1
+              ? 'Your invoices have' : 'Your invoice has'} been raised, due{' '}
+            {paymentDays} days from today. Your order has gone straight to our
+            supplier. Nothing is dispatched until payment reaches us.
+          </p>
+        )}
+        {placed.orders.filter((o) => o.agencyTerms).map((o) => (
+          <div key={o.number} className="mt-3">
+            <p className="text-[13px] text-mute mb-2 leading-relaxed">
+              Order <span className="num font-semibold">{o.number}</span> is with{' '}
+              {o.agentBrand ?? 'the brand'}:
+            </p>
+            <AgencyNotice terms={o.agencyTerms} brand={o.agentBrand} company={company} />
+          </div>
+        ))}
         {placed.warning && <div className="mt-3"><Notice tone="info">{placed.warning}</Notice></div>}
         <div className="flex flex-wrap gap-2 mt-4">
           <Link href="/portal/orders"
@@ -169,13 +215,25 @@ export default function BasketReview({
           are what each invoice will ask for.
         </Notice>
       )}
+      {sellerSplit > 1 && (
+        <Notice tone="info">
+          Not everything in this basket is sold by us. It will be raised as{' '}
+          {sellerSplit} separate orders, because the goods below are invoiced by
+          different companies and one invoice cannot come from two of them.
+        </Notice>
+      )}
+      {agencyInBasket.map((b) => (
+        <AgencyNotice key={b.key} terms={b.terms} brand={b.name} company={company} />
+      ))}
       {priceNotes.map((note) => (
         <Notice tone="info" key={note}>{note}</Notice>
       ))}
-      <Notice tone="info">
-        Everything is ordered from our supplier as soon as you place this order.
-        We will confirm dates with you once we have them.
-      </Notice>
+      {ownLines.length > 0 && (
+        <Notice tone="info">
+          Everything we sell is ordered from our supplier as soon as you place this
+          order. We will confirm dates with you once we have them.
+        </Notice>
+      )}
 
       <div className="space-y-2">
         {lines.map(({ product, qty }) => (

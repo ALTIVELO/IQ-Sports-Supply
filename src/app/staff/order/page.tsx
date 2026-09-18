@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { PageHeading } from '@/components/ui';
 import OrderDesk from './OrderDesk';
 import { fetchAll, inChunks } from '@/lib/supabase/chunk';
+import type { AgencyBrand } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,10 +80,11 @@ export default async function OrderDeskPage() {
       .eq('active', true).order('sku').range(from, to)),
   ]);
 
-  const [{ data: tiers }, { data: settings }, { data: categories }, { data: groups }] =
+  const [{ data: tiers }, { data: settings }, { data: categories }, { data: groups },
+         { data: agency }] =
     await Promise.all([
       sb.from('tiers').select('id, name').order('sort'),
-      sb.from('settings').select('vat_rate').eq('id', 1).single(),
+      sb.from('settings').select('vat_rate, company').eq('id', 1).single(),
       sb.from('categories').select('id, name, slug, sort, parent_id').order('sort'),
       // The build structure only — no prices. What a component costs this
       // client comes from the same tier table the rest of the desk uses, so a
@@ -94,6 +96,9 @@ export default async function OrderDeskPage() {
                                      product_group_options(id, product_id, label, sort,
                                                            axis1_value, axis2_value))`)
         .eq('active', true).order('sort'),
+      // The brands whose orders we introduce, so the desk can say so before
+      // the person on the phone has quoted anything.
+      sb.rpc('agency_brands'),
     ]);
 
   // The price in force per product and tier, asked for in batches. Reading the
@@ -145,6 +150,8 @@ export default async function OrderDeskPage() {
         categories={(categories ?? []) as never}
         builds={toBuilds(groups ?? [])}
         vatRate={Number(settings?.vat_rate ?? 20)}
+        company={settings?.company ?? 'IQ Sports Supply'}
+        agencyBrands={(agency ?? []) as AgencyBrand[]}
       />
     </>
   );

@@ -12,16 +12,16 @@ export class DocDataError extends Error {
   }
 }
 
-// ship_to and invoicing_address arrived with the client-account migration.
-// Selecting them against a database that has not had it applied yet fails the
-// whole query, which used to surface as a blank PDF, so they are asked for
-// separately and the document still renders without them.
+// ship_to and invoicing_address arrived with the client-account migration, and
+// the agency columns with 0034. Selecting them against a database that has not
+// had those applied yet fails the whole query, which used to surface as a blank
+// PDF — so BASE_SELECT asks for none of them and the document still renders.
 const BASE_SELECT = `*, orders(number),
              clients(name, address, vat_no),
              locations(name),
              invoice_lines(sku, name, qty, unit_price)`;
 
-const FULL_SELECT = `*, orders(number, ship_to),
+const FULL_SELECT = `*, orders(number, ship_to, agency_terms, brands!orders_agent_brand_id_fkey(name)),
              clients(name, address, invoicing_address, vat_no),
              locations(name),
              invoice_lines(sku, name, qty, unit_price)`;
@@ -92,7 +92,10 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     name: string; address: string | null;
     invoicing_address?: string | null; vat_no: string | null;
   };
-  const order = inv.orders as { number: string; ship_to?: string | null };
+  const order = inv.orders as {
+    number: string; ship_to?: string | null;
+    agency_terms?: string | null; brands?: { name: string } | null;
+  };
   const lines = (inv.invoice_lines ?? []) as DocData['lines'];
 
   return {
@@ -107,6 +110,10 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     // it was written under.
     currency: inv.currency,
     priceNotes: await priceNotesFor(db, lines.map((l) => l.sku)),
+    // Snapshotted on the order when it was placed, so this document says what
+    // the customer was told at the time even if the arrangement changes.
+    agencyTerms: order.agency_terms ?? null,
+    agentBrand: order.brands?.name ?? null,
     lines: [...lines].sort((a, b) => a.sku.localeCompare(b.sku)),
     clientName: client.name,
     clientAddress: client.invoicing_address ?? client.address,

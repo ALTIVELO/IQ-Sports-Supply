@@ -5,6 +5,7 @@ import { Button, Card, Money, Notice, Tag, VoidTag,
          voidedRow, voidedText } from '@/components/ui';
 import { fmtDate, today } from '@/lib/format';
 import Timeline from '@/components/Timeline';
+import AgencyNotice from '@/components/AgencyNotice';
 import { splitInvoice, editOrder, cancelOrder, deleteOrder,
          proformaForBackorder, creditInvoice, markPaid } from '../actions';
 import type { InvoiceType, OrderEvent } from '@/lib/types';
@@ -24,6 +25,9 @@ interface Inv {
 export interface OrderData {
   id: string; number: string; date: string; status: string; notes: string | null;
   currency: string;
+  /** Set where we introduced this order rather than sold it. */
+  agency_terms: string | null;
+  brands: { name: string } | null;
   cancelled_reason: string | null;
   clients: { id: string; name: string };
   locations: { name: string } | null;
@@ -32,10 +36,13 @@ export interface OrderData {
   order_events: OrderEvent[];
 }
 
-export default function OrderRow({ order, products, costOf, canAmend, canDelete }: {
+export default function OrderRow({
+  order, products, costOf, company, canAmend, canDelete,
+}: {
   order: OrderData; products: ProductLite[];
   /** Order line id → what it cost us, where we know. */
   costOf: Record<string, number>;
+  company: string;
   canAmend: boolean; canDelete: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -117,6 +124,11 @@ export default function OrderRow({ order, products, costOf, canAmend, canDelete 
           : backordered > 0
             ? <Tag tone="red">{backordered} on back order</Tag>
             : <Tag tone="green">Fully allocated</Tag>}
+        {order.agency_terms && (
+          <Tag tone="ink">
+            {order.brands?.name ?? 'the brand'} invoices · we introduced it
+          </Tag>
+        )}
         {live.map((i) => (
           <Tag key={i.id} tone={i.shipped ? 'green' : i.paid ? 'accent' : 'line'}>
             {i.number}
@@ -142,6 +154,15 @@ export default function OrderRow({ order, products, costOf, canAmend, canDelete 
           )}
         </span>
       </div>
+
+      {open && (
+        <AgencyNotice
+          className="mt-3"
+          terms={order.agency_terms}
+          brand={order.brands?.name}
+          company={company}
+        />
+      )}
 
       {open && (
         <div className="mt-4 grid lg:grid-cols-[1fr_240px] gap-6">

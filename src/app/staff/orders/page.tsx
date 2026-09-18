@@ -15,7 +15,7 @@ export default async function OrdersPage({
 
   let query = sb
     .from('orders')
-    .select(`id, number, date, status, notes, currency,
+    .select(`id, number, date, status, notes, currency, agency_terms, brands!orders_agent_brand_id_fkey(name),
              clients(id, name), locations(name),
              cancelled_reason,
              order_lines(id, product_id, sku, name, qty, unit_price, alloc_qty, bo_qty, po_qty),
@@ -28,7 +28,8 @@ export default async function OrdersPage({
 
   if (q?.trim()) query = query.ilike('number', `%${q.trim()}%`);
 
-  const [{ data: orders }, products, { data: lineCosts }] = await Promise.all([
+  const [{ data: orders }, products, { data: lineCosts }, { data: settings }] =
+    await Promise.all([
     query,
     // For adding a line while editing. The catalogue, not this order's lines.
     fetchAll((from, to) => sb.from('products').select('id, sku, name')
@@ -36,6 +37,7 @@ export default async function OrdersPage({
     // What each line cost us, as recorded when it was placed. A separate table
     // because a client reads their own order lines and may never read this.
     sb.from('order_line_costs').select('order_line_id, unit_cost'),
+    sb.from('settings').select('company').eq('id', 1).single(),
   ]);
 
   const costOf: Record<string, number> = {};
@@ -76,6 +78,7 @@ export default async function OrdersPage({
               order={o as never}
               products={products as never}
               costOf={costOf}
+              company={settings?.company ?? 'IQ Sports Supply'}
               canAmend={user.role === 'admin' || user.role === 'accounts'}
               canDelete={user.role === 'admin'}
             />

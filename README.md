@@ -87,7 +87,19 @@ with no rebuild.
 7. **Timeline.** Placed → Invoice sent → Payment received → Ordered from supplier →
    Stock arrived → Packed → Shipped, driven entirely by `order_events`. There is no
    manually editable status anywhere.
-8. **Returns.** Two reasons are accepted and they are an enum, not a dropdown:
+8. **Introduced brands.** Not everything IQ sells, IQ sells. A DRAG order is
+   introduced: it goes to DRAG for confirmation, DRAG raises the final invoice
+   with shipping and taxes on it, DRAG ships and carries the warranty and
+   product liability, and DRAG pays IQ a commission. So a brand can be marked
+   as one we introduce, with the wording the customer is told, and that
+   wording is snapshotted onto every order for it — shown on the basket before
+   placing, on the confirmation, in the portal, in the emailed confirmation
+   and on the PDF, which calls itself an order confirmation rather than an
+   invoice and asks for nothing. Such lines are split into their own order:
+   one document cannot be a demand from a seller for half its lines and a note
+   from an agent for the other half, and the database refuses an order holding
+   both.
+9. **Returns.** Two reasons are accepted and they are an enum, not a dropdown:
    the goods arrived faulty, or we sent the wrong thing. Nothing comes back
    because a shop over-ordered. A client raises one from the order it is about,
    within `returns_days` of dispatch (staff are exempt, so somebody can always do
@@ -229,10 +241,10 @@ Postgres rather than mocked:
 PGHOST=/tmp PGPORT=55432 PGUSER=postgres ./tests/run-sql-tests.sh
 ```
 
-491 assertions covering allocation and backordering, invoicing at placement, the
+513 assertions covering allocation and backordering, invoicing at placement, the
 payment gate, receiving by SO reference, the invoice split and its dating, RLS
 isolation between clients and between brand partners, currency, variant grouping,
-returns, and the approval flow. Each suite runs against a freshly migrated
+returns, introduced brands, and the approval flow. Each suite runs against a freshly migrated
 database.
 
 The pure logic that runs on a screen rather than in Postgres has its own suite:

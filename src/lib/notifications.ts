@@ -18,7 +18,7 @@ export async function notifyOrderPlaced(orderId: string) {
 
   const { data: order } = await db
     .from('orders')
-    .select(`number, date, clients(name, email),
+    .select(`number, date, agency_terms, brands!orders_agent_brand_id_fkey(name), clients(name, email),
              order_lines(sku, name, qty, unit_price, bo_qty)`)
     .eq('id', orderId)
     .single();
@@ -51,6 +51,10 @@ export async function notifyOrderPlaced(orderId: string) {
     lines,
     backordered: lines.filter((l) => l.bo_qty > 0).map((l) => ({ sku: l.sku, name: l.name, qty: l.bo_qty })),
     portalUrl: `${appUrl()}/portal/orders`,
+    // Where we introduced this order rather than sold it, the confirmation
+    // says so and stops describing itself as an invoice we will collect on.
+    agencyTerms: (order as { agency_terms?: string | null }).agency_terms ?? null,
+    agentBrand: (order.brands as unknown as { name: string } | null)?.name ?? null,
   });
 
   // The invoice PDF travels with the confirmation.

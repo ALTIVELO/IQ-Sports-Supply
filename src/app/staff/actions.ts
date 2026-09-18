@@ -5,7 +5,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireStaff } from '@/lib/auth';
 import { trackingUrlFor } from '@/lib/format';
-import { splitByCurrency } from '@/lib/orders/split';
+import { splitOrders } from '@/lib/orders/split';
 import {
   notifyOrderPlaced, notifySupplierOrder, notifyShipped, notifyDelivered, notifyDropshipPartners,
 } from '@/lib/notifications';
@@ -54,10 +54,11 @@ export interface DraftLine { product_id: string; qty: number; unit_price?: numbe
 /**
  * Takes an order at the counter.
  *
- * A mixed-currency order becomes one order per currency, as it does in the
- * portal: an order and an invoice can each only ask for one currency, so the
- * split has to happen somewhere, and doing it here saves the person on the
- * phone re-keying half the lines.
+ * A mixed order becomes several, as it does in the portal: an order and an
+ * invoice can each ask for only one currency, and can be a demand from a
+ * seller or a note from an agent but not both. The split has to happen
+ * somewhere, and doing it here saves the person on the phone re-keying half
+ * the lines.
  */
 export async function placeOrder(input: {
   clientId: string;
@@ -70,11 +71,22 @@ export async function placeOrder(input: {
 
   // From the catalogue, never from the screen: what decides how many orders
   // are raised must not be something a browser can set.
-  const { data: priced } = await sb.from('products')
-    .select('id, currency').in('id', input.lines.map((l) => l.product_id));
-  const currencyOfProduct = new Map((priced ?? []).map((p) => [p.id, p.currency ?? 'GBP']));
+  const [{ data: priced }, { data: agencyBrands }] = await Promise.all([
+    sb.from('products').select('id, currency, brand')
+      .in('id', input.lines.map((l) => l.product_id)),
+    sb.rpc('agency_brands'),
+  ]);
+  const agencyKeys = new Set(
+    ((agencyBrands ?? []) as { key: string }[]).map((b) => b.key));
+  const keyOf = new Map((priced ?? []).map((p) => {
+    const brandKey = (p.brand ?? '').trim().toLowerCase();
+    return [p.id, {
+      currency: p.currency ?? 'GBP',
+      agentBrand: agencyKeys.has(brandKey) ? brandKey : null,
+    }];
+  }));
 
-  const parts = splitByCurrency(input.lines, (id) => currencyOfProduct.get(id));
+  const parts = splitOrders(input.lines, (id) => keyOf.get(id));
 
   const placed: string[] = [];
   const warnings: string[] = [];
@@ -121,7 +133,8 @@ export async function placeOrder(input: {
     ok: true,
     orderId: placed[0],
     message: placed.length > 1
-      ? `Raised as ${placed.length} orders, one per currency, each with its own invoice`
+      ? `Raised as ${placed.length} orders — goods in different currencies, or `
+        + 'sold by different companies, cannot share an invoice'
       : undefined,
     warning: warnings[0],
   };

@@ -16,6 +16,7 @@ $TSC src/lib/import/*.ts    --outDir .test-build/import    >/dev/null 2>&1
 $TSC src/lib/reporting/*.ts --outDir .test-build/reporting >/dev/null 2>&1
 $TSC src/lib/orders/*.ts    --outDir .test-build/orders    >/dev/null 2>&1
 $TSC src/lib/returns/*.ts   --outDir .test-build/returns   >/dev/null 2>&1
+$TSC src/lib/email/templates.ts --outDir .test-build/email >/dev/null 2>&1
 $TSC src/lib/supabase/chunk.ts --outDir .test-build/supabase >/dev/null 2>&1
 # chunk.ts is server-only; the marker import means nothing to Node and would
 # just fail to resolve, so it is dropped from the compiled copy the tests read.
@@ -23,6 +24,9 @@ sed -i "/^import 'server-only';$/d" .test-build/supabase/chunk.js 2>/dev/null ||
 # The chart's axis maths. JSX, so it needs the React preset to emit at all.
 $TSC src/app/staff/dashboard/Charts.tsx --jsx react-jsx \
      --outDir .test-build/dashboard >/dev/null 2>&1
+# What the PDF's built-in fonts cannot print. Also JSX.
+$TSC src/lib/pdf/documents.tsx --jsx react-jsx \
+     --outDir .test-build/pdf >/dev/null 2>&1
 
 # tsc emits the specifier as written ("./types"), which Node's ESM loader will
 # not resolve. Nothing here imports a directory, so appending .js to relative
@@ -31,9 +35,12 @@ find .test-build -name '*.js' -print0 |
   xargs -0 sed -i -E "s#(from '\\.[^']*)'#\\1.js'#g"
 
 # Next resolves "@/lib/x" through tsconfig paths; Node does not. Everything
-# compiled here lands one directory below .test-build, so the alias is the
-# same relative hop every time. Done after the rule above so the specifier it
-# writes is not then given a second .js.
+# compiled here lands one directory below .test-build, named after the folder
+# it came from, so the alias is the same relative hop every time: "@/lib/x"
+# is ../lib/x, and "@/lib/orders/x" is ../orders/x. Done after the rule above
+# so the specifier it writes is not then given a second .js.
+find .test-build -name '*.js' -print0 |
+  xargs -0 sed -i -E "s#from '@/lib/([a-z-]+)/([a-z-]+)'#from '../\\1/\\2.js'#g"
 find .test-build -name '*.js' -print0 |
   xargs -0 sed -i -E "s#from '@/lib/([a-z-]+)'#from '../lib/\\1.js'#g"
 

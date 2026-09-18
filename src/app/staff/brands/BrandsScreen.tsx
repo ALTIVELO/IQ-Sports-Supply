@@ -2,11 +2,14 @@
 
 import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
+import AgencyNotice from '@/components/AgencyNotice';
 import { invitePartner, saveBrandTerms, setDropship, setPartnerActive } from './actions';
 
 export interface BrandRow {
   id: string; name: string;
   consignment: boolean; showsMargin: boolean;
+  /** We introduce this brand's orders rather than selling their goods. */
+  agency: boolean; agencyTerms: string;
   partners: { id: string; email: string; name: string | null;
               active: boolean; signedIn: boolean }[];
   products: { id: string; sku: string; name: string; dropship: boolean }[];
@@ -14,7 +17,9 @@ export interface BrandRow {
 
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
 
-export default function BrandsScreen({ brands }: { brands: BrandRow[] }) {
+export default function BrandsScreen({
+  brands, company,
+}: { brands: BrandRow[]; company: string }) {
   const [message, setMessage] = useState<Msg>(null);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -26,7 +31,7 @@ export default function BrandsScreen({ brands }: { brands: BrandRow[] }) {
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
       {withPartners.map((b) => (
-        <Brand key={b.id} brand={b} open={open === b.id}
+        <Brand key={b.id} brand={b} company={company} open={open === b.id}
                onToggle={() => setOpen(open === b.id ? null : b.id)}
                onMessage={setMessage} />
       ))}
@@ -39,7 +44,7 @@ export default function BrandsScreen({ brands }: { brands: BrandRow[] }) {
         {rest.length === 0 ? <Empty>Every brand has a partner.</Empty> : (
           <div className="space-y-2">
             {rest.map((b) => (
-              <Brand key={b.id} brand={b} open={open === b.id} quiet
+              <Brand key={b.id} brand={b} company={company} open={open === b.id} quiet
                      onToggle={() => setOpen(open === b.id ? null : b.id)}
                      onMessage={setMessage} />
             ))}
@@ -50,19 +55,36 @@ export default function BrandsScreen({ brands }: { brands: BrandRow[] }) {
   );
 }
 
-function Brand({ brand, open, onToggle, onMessage, quiet = false }: {
-  brand: BrandRow; open: boolean; onToggle: () => void;
+function Brand({ brand, company, open, onToggle, onMessage, quiet = false }: {
+  brand: BrandRow; company: string; open: boolean; onToggle: () => void;
   onMessage: (m: Msg) => void; quiet?: boolean;
 }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [terms, setTerms] = useState(brand.agencyTerms);
   const [pending, startTransition] = useTransition();
   const dropshipping = brand.products.filter((p) => p.dropship);
+
+  const save = (patch: Partial<Pick<BrandRow, 'consignment' | 'showsMargin' | 'agency'>>
+                     & { agencyTerms?: string }) =>
+    startTransition(async () => {
+      const r = await saveBrandTerms({
+        brandId: brand.id,
+        consignment: brand.consignment,
+        showsMargin: brand.showsMargin,
+        agency: brand.agency,
+        ...patch,
+      });
+      onMessage(r.ok
+        ? { tone: 'success', text: r.message ?? 'Saved' }
+        : { tone: 'error', text: r.error ?? 'Failed' });
+    });
 
   const header = (
     <button onClick={onToggle} className="flex w-full flex-wrap items-center gap-3 text-left">
       <span className="text-[14px] font-semibold">{brand.name}</span>
       {brand.consignment && <Tag tone="accent">consignment</Tag>}
+      {brand.agency && <Tag tone="ink">we introduce, they invoice</Tag>}
       {!brand.showsMargin && <Tag tone="line">sale prices hidden</Tag>}
       <span className="text-[12px] text-mute num">
         {brand.products.length} SKU{brand.products.length === 1 ? '' : 's'}
@@ -88,20 +110,59 @@ function Brand({ brand, open, onToggle, onMessage, quiet = false }: {
                 type="checkbox"
                 checked={brand[field]}
                 disabled={pending}
-                onChange={(e) => startTransition(async () => {
-                  const r = await saveBrandTerms({
-                    brandId: brand.id,
-                    consignment: field === 'consignment' ? e.target.checked : brand.consignment,
-                    showsMargin: field === 'showsMargin' ? e.target.checked : brand.showsMargin,
-                  });
-                  onMessage(r.ok
-                    ? { tone: 'success', text: r.message ?? 'Saved' }
-                    : { tone: 'error', text: r.error ?? 'Failed' });
-                })}
+                onChange={(e) => save({ [field]: e.target.checked })}
               />
               {label}
             </label>
           ))}
+      </div>
+
+      {/*
+        * Whether we are the seller on this brand's orders.
+        *
+        * It is on this screen rather than in Settings because it is a fact
+        * about one brand, and it sits next to the terms it switches on so
+        * nobody can turn it on without reading what the customer will be told.
+        */}
+      <div>
+        <label className="flex items-center gap-2 text-[12px] font-semibold">
+          <input
+            type="checkbox" checked={brand.agency} disabled={pending}
+            onChange={(e) => save({ agency: e.target.checked, agencyTerms: terms })}
+          />
+          We introduce these orders — {brand.name} invoices the customer and carries
+          the warranty
+        </label>
+        <p className="text-[12px] text-mute mt-1.5 max-w-2xl leading-relaxed">
+          Orders for this brand are raised on their own — they cannot share an invoice
+          with goods we sell — and every one of them carries the statement below, on
+          the basket, the confirmation, the portal, the emailed confirmation and the
+          PDF. It is copied onto each order as it is placed, so changing it here never
+          rewrites what a customer was told at the time.
+        </p>
+
+        {brand.agency && (
+          <div className="mt-2.5 space-y-2">
+            <textarea
+              rows={5}
+              value={terms}
+              disabled={pending}
+              onChange={(e) => setTerms(e.target.value)}
+              className="w-full text-[12px] leading-relaxed"
+              placeholder="One statement per line. {brand} and {company} are filled in."
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <Button small disabled={pending || terms === brand.agencyTerms}
+                      onClick={() => save({ agencyTerms: terms })}>
+                Save wording
+              </Button>
+              <span className="text-[12px] text-mute">
+                This is what the customer sees:
+              </span>
+            </div>
+            <AgencyNotice terms={terms} brand={brand.name} company={company} />
+          </div>
+        )}
       </div>
 
       <div>
