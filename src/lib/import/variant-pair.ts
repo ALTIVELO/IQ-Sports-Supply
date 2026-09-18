@@ -21,9 +21,17 @@ export interface VariantPair {
 export function variantPair(
   rawGroup: string | undefined, rawLabel: string | undefined,
 ): VariantPair {
-  const group = rawGroup?.trim() || undefined;
-  const label = rawLabel?.trim() || undefined;
+  const group = rawGroup?.trim();
+  const label = rawLabel?.trim();
   if (group && label) return { group, label, halfPaired: false };
+  /*
+   * Both columns there and both empty is not the same as neither column.
+   *
+   * It is the sheet saying this product is not one of a range — which an
+   * import told to take blanks as instructions can act on, and one that is
+   * not can ignore. Kept apart here because after this the two look alike.
+   */
+  if (group === '' && label === '') return { group: '', label: '', halfPaired: false };
   return { halfPaired: Boolean(group) !== Boolean(label) };
 }
 

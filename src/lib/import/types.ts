@@ -114,6 +114,17 @@ export interface CataloguePreview {
    * listed and never silent.
    */
   currencyChanges: { sku: string; name: string; from: string; to: string }[];
+  /**
+   * What this file would restate about the SKUs we already hold.
+   *
+   * Counted per column rather than per row, because "42 updated" does not
+   * tell anybody whether the list corrects a few names or re-files the whole
+   * catalogue. Worked out by the same rule the apply then uses, so nothing is
+   * changed that the preview did not say would be.
+   */
+  restated: { field: string; rows: number }[];
+  /** A handful of them written out, so the rule can be seen working. */
+  restatedExamples: { sku: string; field: string; from: string | null; to: string | null }[];
   /** In the system but absent from the file — reported only, never deleted. */
   missing: { sku: string; name: string }[];
   invalid: { row: number; reason: string }[];

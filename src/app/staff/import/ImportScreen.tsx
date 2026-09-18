@@ -14,6 +14,7 @@ import {
 } from '@/lib/import/types';
 import { previewCatalogue, applyCatalogue, applyClients, applyStock,
          applyHistoricOrders, saveTemplate } from './actions';
+import Restated from './Restated';
 
 interface Named { id: string; name: string }
 interface Template {
@@ -120,6 +121,10 @@ export default function ImportScreen({
   // it as there is, and the alternative is an import that lands on a withdrawn
   // product in silence.
   const [reactivateWithdrawn, setReactivateWithdrawn] = useState(true);
+  // Off by default. A price list routinely carries an empty Image column on
+  // every row, and reading those as deletions would empty the catalogue of
+  // photographs on an import that looked like it only changed prices.
+  const [clearBlanks, setClearBlanks] = useState(false);
   const [preview, setPreview] = useState<CataloguePreview | null>(null);
   const [message, setMessage] = useState<Msg>(null);
   const [dragging, setDragging] = useState(false);
@@ -290,7 +295,7 @@ export default function ImportScreen({
       return;
     }
     startTransition(async () => {
-      const r = await previewCatalogue(buildSheets(), effectiveFrom);
+      const r = await previewCatalogue(buildSheets(), effectiveFrom, clearBlanks);
       if (r.ok) {
         setPreview(r.preview);
         setMessage(null);
@@ -304,7 +309,7 @@ export default function ImportScreen({
     startTransition(async () => {
       const r = await applyCatalogue({
         sheets: buildSheets(), effectiveFrom, filename,
-        deactivateMissing, reactivateWithdrawn,
+        deactivateMissing, reactivateWithdrawn, clearBlanks,
       });
       setMessage(r.ok
         ? { tone: 'success', text: r.message ?? 'Applied' }
@@ -546,6 +551,20 @@ export default function ImportScreen({
                     />
                     Mark SKUs missing from the sheet inactive
                   </label>
+                  <label className="flex items-start gap-1.5 text-[12px]">
+                    <input
+                      type="checkbox" checked={clearBlanks} className="mt-[3px]"
+                      onChange={(e) => setClearBlanks(e.target.checked)}
+                    />
+                    <span>
+                      Let blank cells clear what we hold
+                      <span className="block text-[11px] text-mute">
+                        Off, a column left empty is left alone — so a photograph you
+                        uploaded survives a price list that has no images in it. On,
+                        this sheet is the whole truth about the SKUs on it.
+                      </span>
+                    </span>
+                  </label>
                 </div>
                 <Button small kind="ghost" onClick={doPreview} disabled={pending}>
                   {pending ? 'Checking…' : 'Preview changes'}
@@ -595,6 +614,8 @@ function PreviewCards({ preview }: { preview: CataloguePreview }) {
       {preview.currencyChanges.length > 0 && (
         <Redenominated changes={preview.currencyChanges} />
       )}
+
+      {preview.restated.length > 0 && <Restated preview={preview} />}
 
       {preview.newSkus.length > 0 && (
         <Card>

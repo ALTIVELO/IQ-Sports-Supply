@@ -29,8 +29,15 @@ eq('and neither carries a group or a label onward',
 
 eq('neither half is the ordinary case, and is not flagged',
   variantPair(undefined, undefined), { halfPaired: false });
-eq('blank cells count as neither half',
-  variantPair('  ', ''), { halfPaired: false });
+// Both columns there and both empty is not the same as neither column: it is
+// the sheet saying this product is not one of a range, which an import told to
+// take blanks as instructions can act on.
+eq('two blank cells are a statement, not a silence',
+  variantPair('  ', ''), { group: '', label: '', halfPaired: false });
+eq('and are still not half a pair',
+  variantPair('  ', '').halfPaired, false);
+eq('no columns at all stays a silence',
+  variantPair(undefined, undefined), { halfPaired: false });
 eq('whitespace around a real pair is trimmed',
   variantPair('  DRAG-STORM-7-0 ', ' M '),
   { group: 'DRAG-STORM-7-0', label: 'M', halfPaired: false });

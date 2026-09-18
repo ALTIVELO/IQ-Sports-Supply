@@ -140,6 +140,17 @@ to tiers by tab name. Column mappings are saved, so subsequent quarters need no
 setup. It tolerates title blocks above the header row and blank rows in the
 middle.
 
+A re-issued list is the authority on the supplier's own products, so what it
+states replaces what we hold: the name, the brand, the series, the collection,
+the photograph, the price note, and which model a SKU is a size of. A column
+that is not on the sheet says nothing. A column that is there with an empty
+cell says nothing either, unless the import is told to take blanks as
+instructions — off by default, because a price list routinely carries an empty
+Image column on every row and reading those as deletions would empty the
+catalogue of photographs. One rule, in `src/lib/import/overwrite.ts`, shared
+with the preview, so the import never changes something the preview did not
+say it would.
+
 A saved mapping is a set of column letters, and letters only mean anything
 against the headers they were read from — insert one column upstream and every
 letter after it points at the wrong thing. So the headers are saved with it: a

@@ -11,6 +11,10 @@ import type { ActionResult } from '../actions';
 import { classifyProduct } from '@/lib/catalogue/categories';
 import { knownSize } from '@/lib/catalogue/variants';
 import { variantPair, sizesLookWrong } from '@/lib/import/variant-pair';
+import {
+  restatements, restatementPatch, restatementTally, restatementLabel,
+  type ProductNow, type Restatement,
+} from '@/lib/import/overwrite';
 import { fetchAll } from '@/lib/supabase/chunk';
 
 const norm = (sku: string) => sku.trim().toLowerCase();
@@ -160,20 +164,24 @@ function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
             brand: existing.brand || row.brand,
             category: existing.category || row.category,
             image_url: existing.image_url || row.image_url,
-            series: existing.series || row.series?.trim() || undefined,
+            series: existing.series || row.series?.trim(),
             currency: existing.currency ?? currency ?? undefined,
             variant_group: existing.variant_group ?? group,
             variant_label: existing.variant_label ?? label,
-            price_note: existing.price_note || row.price_note?.trim() || undefined,
+            price_note: existing.price_note || row.price_note?.trim(),
             cost: cost ?? existing.cost,
             prices: { ...existing.prices, ...prices },
           }
         : {
             ...row, sku, cost, prices,
             currency: currency ?? undefined,
-            series: row.series?.trim() || undefined,
+            // Trimmed, not emptied to undefined: a column that is there and
+            // blank is a different thing from a column that is not there, and
+            // an import told to take blanks as instructions needs to tell them
+            // apart.
+            series: row.series?.trim(),
             variant_group: group, variant_label: label,
-            price_note: row.price_note?.trim() || undefined,
+            price_note: row.price_note?.trim(),
           });
     }
   }
@@ -288,18 +296,32 @@ function describeChange(
 export async function previewCatalogue(
   sheets: { rows: CatalogueRow[] }[],
   effectiveFrom: string,
+  clearBlanks = false,
 ): Promise<{ ok: true; preview: CataloguePreview } | { ok: false; error: string }> {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
 
-  const [{ data: tiers }, products] = await Promise.all([
+  const [{ data: tiers }, products, { data: categories }] = await Promise.all([
     sb.from('tiers').select('id, name').order('sort'),
     // Withdrawn products included. They still hold the SKU, so a preview that
     // cannot see them calls a SKU new that the import will not create, and
     // says nothing about the one place the prices are actually going.
-    fetchAll((from, to) => sb.from('products')
-      .select('id, sku, name, active, currency').order('sku').range(from, to)),
+    fetchAll<{
+      id: string; sku: string; name: string; active: boolean; currency: string;
+      brand: string | null; series: string | null; image_url: string | null;
+      price_note: string | null; category_id: string | null;
+      variant_group: string | null; variant_label: string | null;
+    }>((from, to) => sb.from('products')
+      .select(`id, sku, name, active, currency, brand, series, image_url,
+               price_note, category_id, variant_group, variant_label`)
+      .order('sku').range(from, to)),
+    sb.from('categories').select('id, slug, name'),
   ]);
+
+  const categoryByLabel = new Map((categories ?? []).flatMap((c) => [
+    [norm(c.slug), c.id] as const,
+    [norm(c.name), c.id] as const,
+  ]));
 
   const { rows, invalid, notes } = mergeSheets(sheets);
   if (!rows.length) return { ok: false, error: 'That file had no product rows in it' };
@@ -376,12 +398,39 @@ export async function previewCatalogue(
     costs = { created, changed, unchanged, belowCost };
   }
 
+  /*
+   * Everything this file restates about a SKU we already hold.
+   *
+   * The same rule the apply runs, over the same rows, so the two cannot
+   * disagree. Without this the import quietly renamed and re-filed products
+   * the preview had described only as price changes.
+   */
+  const restatedPerRow: Restatement[][] = [];
+  const restatedExamples: CataloguePreview['restatedExamples'] = [];
+  for (const row of rows) {
+    const before = bySku.get(norm(row.sku));
+    if (!before) continue;
+    const given = row.category?.trim();
+    const changes = restatements(row, productNow(before), {
+      categoryId: given ? categoryByLabel.get(norm(given)) : undefined,
+      clearBlanks,
+    });
+    restatedPerRow.push(changes);
+    for (const c of changes) {
+      if (restatedExamples.length < 8) {
+        restatedExamples.push({ sku: before.sku, field: c.field, from: c.from, to: c.to });
+      }
+    }
+  }
+
   const inFile = new Set(rows.map((r) => norm(r.sku)));
   return {
     ok: true,
     preview: {
       tiers: tierPreviews,
       costs,
+      restated: restatementTally(restatedPerRow),
+      restatedExamples,
       newSkus: rows.filter((r) => !bySku.has(norm(r.sku)))
         .map((r) => ({ sku: r.sku, name: r.name || r.sku })),
       withdrawn: rows
@@ -414,6 +463,22 @@ export async function previewCatalogue(
  * rows dated to the effective date. Both are dated histories: nothing is
  * overwritten, and last quarter's margin still reads as last quarter's.
  */
+/** A product as the restatement rule wants it, from the row we already read. */
+const productNow = (p: {
+  name: string; brand?: string | null; series: string | null;
+  image_url: string | null; price_note: string | null; category_id?: string | null;
+  variant_group: string | null; variant_label: string | null;
+}): ProductNow => ({
+  name: p.name,
+  brand: p.brand ?? null,
+  series: p.series,
+  image_url: p.image_url,
+  price_note: p.price_note,
+  category_id: p.category_id ?? null,
+  variant_group: p.variant_group,
+  variant_label: p.variant_label,
+});
+
 export async function applyCatalogue(input: {
   sheets: { rows: CatalogueRow[] }[];
   effectiveFrom: string;
@@ -428,6 +493,15 @@ export async function applyCatalogue(input: {
    * statement of intent to sell it as there is.
    */
   reactivateWithdrawn: boolean;
+  /**
+   * Whether a column that is present but empty means "clear this".
+   *
+   * Off by default, and deliberately: a price list routinely carries an empty
+   * Image column on every row, and reading those as deletions would empty the
+   * catalogue of photographs on an import that looked like it only changed
+   * prices. On, the sheet is the whole truth about the SKUs it lists.
+   */
+  clearBlanks: boolean;
 }): Promise<ActionResult> {
   const user = await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();
@@ -446,10 +520,11 @@ export async function applyCatalogue(input: {
   const existing = await fetchAll<{
     id: string; sku: string; active: boolean; currency: string;
     variant_group: string | null; variant_label: string | null; price_note: string | null;
-    name: string; series: string | null; image_url: string | null;
+    name: string; brand: string | null; series: string | null;
+    image_url: string | null; category_id: string | null;
   }>((from, to) => sb.from('products')
     .select(`id, sku, active, currency, variant_group, variant_label, price_note,
-             name, series, image_url`)
+             name, brand, series, image_url, category_id`)
     .order('sku').range(from, to));
   const byNormSku = new Map(existing.map((p) => [norm(p.sku), p]));
   const bySku = new Map(existing.map((p) => [norm(p.sku), p.id]));
@@ -485,20 +560,23 @@ export async function applyCatalogue(input: {
     members.forEach((m, i) => sortOf.set(norm(m.sku), i));
   }
 
+  // A category column in the sheet is taken at its word — a supplier's own
+  // section headings know more than any classifier can read out of a line
+  // like "RTCL900LJ". Where the sheet says nothing, the description is
+  // classified, so nobody has to maintain a category column in Excel.
+  //
+  // Read once for both paths: a re-issued list re-files the SKUs we already
+  // hold by the same rule it files the new ones under.
+  const { data: categories } = await sb.from('categories').select('id, slug, name');
+  const categoryId = new Map((categories ?? []).map((c) => [c.slug, c.id]));
+  const byLabel = new Map((categories ?? []).flatMap((c) => [
+    [norm(c.slug), c.id] as const,
+    [norm(c.name), c.id] as const,
+  ]));
+
   const toCreate = valid.filter((r) => !bySku.has(norm(r.sku)));
   let added = 0;
   if (toCreate.length) {
-    // A category column in the sheet is taken at its word — a supplier's own
-    // section headings know more than any classifier can read out of a line
-    // like "RTCL900LJ". Where the sheet says nothing, the description is
-    // classified, so nobody has to maintain a category column in Excel.
-    const { data: categories } = await sb.from('categories').select('id, slug, name');
-    const categoryId = new Map((categories ?? []).map((c) => [c.slug, c.id]));
-    const byLabel = new Map((categories ?? []).flatMap((c) => [
-      [norm(c.slug), c.id] as const,
-      [norm(c.name), c.id] as const,
-    ]));
-
     const { data: inserted, error } = await sb.from('products')
       .insert(toCreate.map((r) => {
         const given = r.category?.trim();
@@ -517,10 +595,13 @@ export async function applyCatalogue(input: {
           // Silence means sterling, which is what every list said before the
           // column existed.
           currency: r.currency ?? 'GBP',
-          variant_group: r.variant_group ?? null,
-          variant_label: r.variant_label ?? null,
+          // An empty string means the sheet stated the column and left the
+          // cell blank, which on a product that does not exist yet is the
+          // same as saying nothing.
+          variant_group: r.variant_group || null,
+          variant_label: r.variant_label || null,
           variant_sort: sortOf.get(norm(r.sku)) ?? null,
-          price_note: r.price_note ?? null,
+          price_note: r.price_note || null,
         };
       }))
       .select('id, sku');
@@ -548,57 +629,36 @@ export async function applyCatalogue(input: {
   }
 
   /*
-   * What a re-issued list is allowed to correct on a SKU we already hold.
+   * What this list restates about the SKUs we already hold.
    *
-   * A supplier's list is the authority on what their product is called, which
-   * range it belongs to, what it looks like and which model it is a size of —
-   * so a re-issue is how a catalogue gets tidied rather than something that
-   * has to be redone by hand afterwards.
-   *
-   * Only where the sheet actually says something. A blank column is silence,
-   * not an instruction to erase: an image uploaded on the Catalogue screen
-   * must survive the next quarter's price list, and so must a name somebody
-   * corrected.
-   *
-   * Row by row rather than batched: these differ per product, and one wrong
-   * batch would file the whole catalogue under one model.
+   * One rule, in overwrite.ts, shared with the preview — so the import never
+   * changes something the preview did not say it would. Row by row rather
+   * than batched: these differ per product, and one wrong batch would file
+   * the whole catalogue under one model.
    */
-  let resized = 0;
-  let renamed = 0;
+  let restated = 0;
+  const tally: Restatement[][] = [];
   for (const r of valid) {
     const id = bySku.get(norm(r.sku));
     const before = byNormSku.get(norm(r.sku));
     if (!id || !before) continue;
-    const patch: Record<string, unknown> = {};
-    if (r.variant_group && r.variant_label
-        && (before.variant_group !== r.variant_group
-            || before.variant_label !== r.variant_label)) {
-      patch.variant_group = r.variant_group;
-      patch.variant_label = r.variant_label;
-      patch.variant_sort = sortOf.get(norm(r.sku)) ?? null;
-    }
-    if (r.price_note !== undefined && (before.price_note ?? '') !== r.price_note) {
-      patch.price_note = r.price_note || null;
-    }
 
-    const name = r.name?.trim();
-    if (name && name !== before.name) patch.name = name;
+    const given = r.category?.trim();
+    const changes = restatements(r, productNow(before), {
+      categoryId: given ? byLabel.get(norm(given)) : undefined,
+      clearBlanks: input.clearBlanks,
+    });
+    tally.push(changes);
+    if (!changes.length) continue;
 
-    const series = r.series?.trim();
-    if (series && series !== (before.series ?? '')) patch.series = series;
+    const patch = restatementPatch(changes);
+    // The order a size sits in comes from the file, not from the row, so it
+    // is set alongside whatever moved the size.
+    if (patch.variant_group) patch.variant_sort = sortOf.get(norm(r.sku)) ?? null;
 
-    // A filename in an image column would render as a broken picture, so the
-    // same test the create path uses applies here.
-    const image = r.image_url?.trim();
-    if (image && /^https?:\/\//i.test(image) && image !== (before.image_url ?? '')) {
-      patch.image_url = image;
-    }
-
-    if (!Object.keys(patch).length) continue;
     const { error } = await sb.from('products').update(patch).eq('id', id);
     if (error) return { ok: false, error: `Updating ${r.sku} failed: ${error.message}` };
-    resized += 1;
-    if (patch.name || patch.series || patch.image_url) renamed += 1;
+    restated += 1;
   }
 
   // ── sell prices ──
@@ -673,12 +733,13 @@ export async function applyCatalogue(input: {
   if (redenominated) {
     parts.push(`${redenominated} moved to a different currency`);
   }
-  if (resized) {
-    // Renaming is the one update somebody might not have meant, so it is
-    // counted out separately rather than folded into "updated".
-    parts.push(renamed
-      ? `${resized} updated (${renamed} renamed or re-filed)`
-      : `${resized} updated`);
+  if (restated) {
+    // Named by column, because "42 updated" does not tell anybody whether
+    // this list corrected some names or refiled the whole catalogue.
+    const by = restatementTally(tally)
+      .map((t) => `${t.rows} ${restatementLabel(t.field, t.rows)}`)
+      .join(', ');
+    parts.push(`${restated} SKU${restated === 1 ? '' : 's'} restated — ${by}`);
   }
 
   return { ok: true, message: `Applied — ${parts.join(', ')}, effective ${input.effectiveFrom}` };
