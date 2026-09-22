@@ -104,7 +104,9 @@ function main() {
   }));
 
   const csv = toCsv(OUT_COLUMNS, out);
-  if (output) writeFileSync(resolve(output), csv);
+  // A byte-order mark, so a reader with no encoding to go on does not guess
+  // latin-1 and turn an em dash into mojibake in a product name.
+  if (output) writeFileSync(resolve(output), '\uFEFF' + csv);
   else process.stdout.write(csv);
 
   // To stderr, so piping the sheet somewhere still gets you the sheet.

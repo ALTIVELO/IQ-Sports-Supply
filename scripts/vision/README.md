@@ -37,6 +37,33 @@ So it is named on the command line by somebody who knows:
   about what we pay or what any other tier pays.
 
 Shopify does have a cost field — `Cost per item` — but an export only carries
-it when the shop has filled it in. Where it is there, the numbers are the
-supplier's own and `--price-is cost` is reading a real cost rather than
-assuming one.
+it when the shop has filled it in. Vision's has no such column at all.
+
+## `--costs`, for when the export and the quote disagree
+
+An export is a shop's file and can have been through anybody's hands before it
+reaches us. Vision's had a 14.5% discount applied to every row: each `Variant
+Price` is exactly 0.855 of what Vision quoted by email. A quote in an email is
+what the supplier said they would charge, so `--costs` points at a JSON file of
+those figures, keyed by handle (one price per model — a freehub does not change
+what a wheelset costs) or by SKU for the odd variant priced on its own.
+
+Where a row has both and they differ, the gap is printed on every run rather
+than silently resolved:
+
+```
+! vision-sc-45-wheelset: the quote says 560.00, the export says 478.80
+  (85.5% of it). Using the quote.
+```
+
+Two models sharing one photograph is reported the same way. Vision's export
+hangs `metron_45_rs` on the Metron 45 SL as well as the RS, and the RS is the
+one with carbon spokes — so without saying so the SL listing would show a wheel
+it is not.
+
+## Encoding
+
+The output carries a byte-order mark. Without one, a reader with no encoding to
+go on guesses, and both the importer and Excel guess latin-1 — so "Wheelset —
+Shimano freehub" arrives as mojibake, in the product name, on the order line
+and on the invoice.

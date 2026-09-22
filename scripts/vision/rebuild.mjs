@@ -17,6 +17,13 @@
  * `cost` and the tiers are worked out from it at the markups given; name a
  * tier and the figure goes in that column alone, with the rest left blank,
  * because there is no way to derive a cost from one selling price.
+ *
+ * `--costs` overrides the export's figures with a supplier's own written
+ * quote, keyed by handle or SKU. A Shopify export is a shop's file and can
+ * have been through anybody's hands before it reaches us — Vision's had a
+ * 14.5% discount applied to every row — whereas a quote in an email is what
+ * the supplier said they would charge. Where both exist and differ, the gap
+ * is reported on every run rather than silently resolved.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { flattenShopify } from './classify.mjs';
@@ -24,7 +31,7 @@ import { flattenShopify } from './classify.mjs';
 const TIERS = ['Distributor', 'Shop', 'Club', 'Retail'];
 const COLUMNS = [
   'Name', 'SKU', 'Brand', 'Series', 'Model', 'Size', 'Category', 'Image',
-  'Currency', 'Our cost', ...TIERS,
+  'Currency', 'Price note', 'Our cost', ...TIERS,
 ];
 
 /** A CSV reader that survives quoted fields holding commas and newlines. */
@@ -52,6 +59,17 @@ export function parseCsv(text) {
     .map((r) => Object.fromEntries(header.map((h, i) => [h.trim(), r[i] ?? ''])));
 }
 
+/*
+ * Written with a byte-order mark.
+ *
+ * Without one, a reader with no encoding to go on guesses, and both the
+ * importer's parser and Excel guess latin-1 — so "Wheelset — Shimano freehub"
+ * arrives as "Wheelset â€" Shimano freehub" and the mojibake goes into the
+ * product name, the order line and the invoice. Three bytes at the front
+ * settle it.
+ */
+const BOM = '\uFEFF';
+
 const cell = (v) => {
   const s = String(v ?? '').trim();
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -68,9 +86,14 @@ const money = (v) => {
 
 function parseArgs(argv) {
   const [input, output, ...rest] = argv;
-  const args = { input, output, markup: [], category: '', currency: 'GBP', priceIs: null };
+  const args = {
+    input, output, markup: [], category: '', currency: 'GBP',
+    priceIs: null, costs: null, priceNote: '',
+  };
   for (let i = 0; i < rest.length; i += 1) {
     if (rest[i] === '--price-is') args.priceIs = rest[++i].trim().toLowerCase();
+    else if (rest[i] === '--costs') args.costs = rest[++i];
+    else if (rest[i] === '--price-note') args.priceNote = rest[++i];
     else if (rest[i] === '--markup') {
       args.markup = rest[++i].split(',').map((pair) => {
         const [name, pct] = pair.split('=');
@@ -85,7 +108,8 @@ function parseArgs(argv) {
   if (!args.input || !args.output || !args.priceIs) {
     throw new Error('usage: rebuild.mjs <in.csv> <out.csv> --price-is '
       + `<${columns.join('|')}> [--markup "Distributor=10,Shop=15,Club=20"] `
-      + '[--category wheels] [--currency GBP]');
+      + '[--costs prices.json] [--category wheels] [--currency GBP] '
+      + '[--price-note "…"]');
   }
   if (!columns.includes(args.priceIs)) {
     throw new Error(`--price-is must be one of ${columns.join(', ')} — `
@@ -102,13 +126,34 @@ function main() {
   const source = parseCsv(readFileSync(args.input, 'utf8'));
   const built = flattenShopify(source);
 
+  // The supplier's own written quote, where we have one. Keyed by handle
+  // because a quote is per model and a freehub does not change what a
+  // wheelset costs; a SKU key wins over its handle's, for the odd variant
+  // priced on its own.
+  const quoted = args.costs ? JSON.parse(readFileSync(args.costs, 'utf8')) : null;
+  const quoteFor = (r) =>
+    quoted?.skus?.[r.sku] ?? quoted?.handles?.[r.handle] ?? null;
+
+  // Where both exist and disagree, somebody needs to know which to buy against.
+  const disagreed = new Map();
+  for (const r of built) {
+    const quote = quoteFor(r);
+    const exported = money(r.price);
+    if (quote === null || exported === null) continue;
+    if (Math.abs(quote - exported) < 0.005) continue;
+    disagreed.set(r.handle, { quote, exported, ratio: exported / quote });
+  }
+
   const out = built.map((r) => {
-    const price = money(r.price);
+    // The quote is the authority where there is one: an export is a shop's
+    // file and can have been through anybody's hands on the way here.
+    const price = quoteFor(r) ?? money(r.price);
     const row = {
       Name: r.name, SKU: r.sku, Brand: r.brand,
       Series: r.series ?? '', Model: r.model ?? '', Size: r.size ?? '',
       Category: args.category, Image: r.image,
       Currency: args.currency,
+      'Price note': args.priceNote,
       'Our cost': '', Distributor: '', Shop: '', Club: '', Retail: '',
     };
     if (price === null) return row;
@@ -128,10 +173,11 @@ function main() {
   });
 
   const csv = toCsv(COLUMNS, out);
-  if (args.output) writeFileSync(args.output, csv); else process.stdout.write(csv);
+  if (args.output) writeFileSync(args.output, BOM + csv);
+  else process.stdout.write(csv);
 
   const models = new Set(out.filter((r) => r.Model).map((r) => r.Model));
-  const unpriced = out.filter((r) => !COLUMNS.slice(9).some((c) => r[c]));
+  const unpriced = out.filter((r) => !['Our cost', ...TIERS].some((c) => r[c]));
   // To stderr, so piping the sheet somewhere still gets you the sheet.
   console.error(
     `${out.length} SKUs · ${models.size} model${models.size === 1 ? '' : 's'} · `
@@ -140,6 +186,33 @@ function main() {
     + `${out.filter((r) => r.Image).length} with a photograph · `
     + `${args.priceIs === 'cost' ? 'tiers from cost' : `price filed as ${args.priceIs}`}`
     + (unpriced.length ? ` · ${unpriced.length} with no price` : ''));
+
+  /*
+   * Two different models wearing one photograph.
+   *
+   * Vision's export hangs metron_45_rs on the Metron 45 SL as well as the RS,
+   * and the RS is the one with carbon spokes — so the SL listing shows a wheel
+   * it is not. A shared photo is worth saying out loud rather than leaving to
+   * be noticed by a customer who ordered from it.
+   */
+  const byPhoto = new Map();
+  for (const r of out) {
+    if (!r.Image) continue;
+    const file = r.Image.split('/').pop();
+    byPhoto.set(file, new Set([...(byPhoto.get(file) ?? []), r.Model || r.SKU]));
+  }
+  for (const [file, models] of byPhoto) {
+    if (models.size < 2) continue;
+    console.error(`  ! ${file} is the photograph for ${models.size} different `
+      + `models: ${[...models].join(', ')}`);
+  }
+
+  for (const [handle, d] of disagreed) {
+    console.error(
+      `  ! ${handle}: the quote says ${d.quote.toFixed(2)}, the export says `
+      + `${d.exported.toFixed(2)} (${(d.ratio * 100).toFixed(1)}% of it). `
+      + 'Using the quote.');
+  }
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) main();

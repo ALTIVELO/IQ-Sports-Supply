@@ -7,6 +7,7 @@
 // this is about what the bare rows inherit and what they do not.
 const { flattenShopify, optionLabel, seriesOf, brandOf } =
   await import('../../scripts/vision/classify.mjs');
+const { parseCsv, toCsv } = await import('../../scripts/vision/rebuild.mjs');
 
 let fail = 0;
 const eq = (label, got, want) => {
@@ -96,5 +97,27 @@ eq('a row with no SKU is not a product',
    flattenShopify([{ Handle: 'x', Title: 'X', 'Variant SKU': '' }]).length, 0);
 eq('and neither is one with no handle',
    flattenShopify([{ Handle: '', 'Variant SKU': 'ABC' }]).length, 0);
+
+// ── reading and writing the file itself ───────────────────────────────────
+// A product name out of a Shopify export routinely holds a comma inside
+// quotes, and splitting on every comma turns one field into two.
+eq('a quoted comma stays one field',
+   parseCsv('A,B\n"one, two",three')[0], { A: 'one, two', B: 'three' });
+eq('a doubled quote is one quote',
+   parseCsv('A\n"say ""hello"""')[0].A, 'say "hello"');
+eq('carriage returns do not become fields', parseCsv('A,B\r\n1,2').length, 1);
+eq('and a blank line is not a row', parseCsv('A,B\n1,2\n\n').length, 1);
+// Shopify writes a byte-order mark; it is not part of the first column's name.
+eq('a byte-order mark is not part of a heading',
+   Object.keys(parseCsv('﻿Handle,Title\na,b')[0]), ['Handle', 'Title']);
+
+eq('writing quotes only what needs it',
+   toCsv(['A', 'B'], [{ A: 'plain', B: 'has, comma' }]),
+   'A,B\nplain,"has, comma"\n');
+// Round trip, because the em dash in a variant name is the thing that broke:
+// read back as latin-1 it becomes mojibake in a product name and on an invoice.
+eq('an em dash survives the round trip',
+   parseCsv(toCsv(['Name'], [{ Name: 'Wheelset — Shimano freehub' }]))[0].Name,
+   'Wheelset — Shimano freehub');
 
 process.exit(fail ? 1 : 0);

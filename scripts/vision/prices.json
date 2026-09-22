@@ -1,0 +1,24 @@
+{
+  "_source": [
+    "Vision's own quote to IQ, by email, 22 September 2026. Euros, excluding VAT.",
+    "",
+    "One price per model: a freehub does not change what a wheelset costs, so",
+    "all three of them take their model's figure.",
+    "",
+    "These are here rather than read out of the Shopify export because the",
+    "export does not agree with them: every price in it is exactly 0.855 of the",
+    "quote — a 14.5% discount somebody applied on the way. Which of the two is",
+    "right is a question for Vision, and until it is answered the supplier's own",
+    "written quote is the one to buy against. rebuild.mjs reports the gap on",
+    "every run rather than quietly preferring one."
+  ],
+  "currency": "EUR",
+  "handles": {
+    "vision-sc-45-wheelset": 560.00,
+    "vision-sc-60-wheelset": 615.00,
+    "vision-metron-sl-45-wheelset": 900.00,
+    "vision-metron-sl-60-wheelset": 900.00,
+    "vision-metron-rs-45-wheelset": 1150.00,
+    "vision-metron-rs-60-wheelset": 1150.00
+  }
+}
