@@ -193,7 +193,7 @@ is('and neither does a missing one', sameHeaders(null, LAST_QUARTER), false);
 // advertised price — the one on every screen.
 const OUTER_SHEET = [
   'Name', 'SKU', 'Brand', 'Series', 'Model', 'Size', 'Category', 'Image', 'Outer',
-  'Our cost under outer', 'Our cost',
+  'Our cost',
   'Distributor under outer', 'Distributor',
   'Shop under outer', 'Shop',
   'Club under outer', 'Club',
@@ -218,12 +218,22 @@ check('the outer is read as a quantity, and the price columns are not',
 
 const outerMap = guessCatalogueColumns(OUTER_SHEET, 'Shimano', TIERS, outerBase);
 check('each tier takes the advertised price and the loose one beside it', outerMap, {
-  cost: 'K', break_cost: 'J',
-  'price:dist': 'M', 'break:dist': 'L',
-  'price:shop': 'O', 'break:shop': 'N',
-  'price:club': 'Q', 'break:club': 'P',
-  'price:retl': 'R',
+  cost: 'J',
+  'price:dist': 'L', 'break:dist': 'K',
+  'price:shop': 'N', 'break:shop': 'M',
+  'price:club': 'P', 'break:club': 'O',
+  'price:retl': 'Q',
 });
+// Our cost has no loose column: we buy by the outer and ship loose units out
+// of a carton already paid for at the carton rate, so what a part costs us
+// does not change with what a customer takes.
+is('and our cost has no loose column to take', 'break_cost' in outerMap, false);
+// The capability is still there for a supplier who does price singles.
+check('a sheet that does price a single-unit cost still maps it',
+      guessCatalogueColumns(
+        ['SKU', 'Our cost under outer', 'Our cost', 'Distributor'], 'S', TIERS,
+        guessMapping(['SKU', 'Our cost under outer', 'Our cost', 'Distributor'], ['sku'])),
+      { break_cost: 'B', cost: 'C', 'price:dist': 'D' });
 // Retail is the number on the box and does not change with how many boxes
 // there are, so it has no loose column and must not acquire one.
 is('a tier with no loose column gets no loose key',

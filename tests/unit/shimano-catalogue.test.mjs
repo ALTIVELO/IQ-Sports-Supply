@@ -230,19 +230,22 @@ eq('a sheet with no outer column yields nothing',
    readSheet([['Code', 'Cost (no vat)'], ['BBUN300B07', 5.28]]), []);
 
 // ── what a tier pays for one ──────────────────────────────────────────────
-// Worked out from the row's own margin rather than a markup written down in
-// the script, so the two prices always sit at the same margin as each other.
-// Distributor at 204.34 on a cost of 189.20 is 8% over; one loose unit at a
-// cost of 230 is the same 8% over.
-eq('the loose price keeps the row\'s own margin',
-   Number(looseTierPrice(189.20, 204.34, 230).toFixed(2)), 248.40);
-eq('a row with no cost cannot have one worked out',
-   looseTierPrice(0, 204.34, 230), null);
-eq('nor can one with no tier price', looseTierPrice(189.20, null, 230), null);
-eq('nor one the supplier did not price loose', looseTierPrice(189.20, 204.34, null), null);
-// The loose cost is dearer, so the loose price must come out dearer too —
-// the invariant the database refuses to store a violation of.
-eq('and it comes out above the outer price',
-   looseTierPrice(189.20, 204.34, 230) > 204.34, true);
+// A flat uplift on our own advertised price, not a margin worked back from
+// what a single costs the supplier — because we do not buy singles. We buy
+// the carton and split it, and the uplift is the charge for splitting it.
+eq('a distributor pays five per cent over the carton price',
+   Number(looseTierPrice(204.34, 0.05).toFixed(2)), 214.56);
+eq('a shop pays ten', Number(looseTierPrice(211.91, 0.10).toFixed(2)), 233.10);
+eq('and a team the same as a shop',
+   Number(looseTierPrice(223.26, 0.10).toFixed(2)), 245.59);
+eq('a row with no advertised price has nothing to uplift',
+   looseTierPrice(null, 0.05), null);
+eq('and neither does one priced at zero', looseTierPrice(0, 0.05), null);
+// The invariant the database refuses to store a violation of: the loose
+// price is always the dearer of the two.
+eq('the loose price always comes out above the outer price',
+   looseTierPrice(204.34, 0.05) > 204.34, true);
+eq('no uplift would make them equal, which is allowed but not what we do',
+   looseTierPrice(204.34, 0), 204.34);
 
 process.exit(fail ? 1 : 0);

@@ -20,7 +20,7 @@ comes out untouched, and no two rows are ever merged.
 | `Size`   | What distinguishes this one from its siblings. |
 | `Image`  | A photograph, where `images.json` has one for that model. |
 | `Outer`  | The carton the part ships in, and so the least that buys the advertised price. Blank where it is sold in ones. |
-| `… under outer` | One per price column: what one unit costs outside a full carton. |
+| `… under outer` | One per tier: what one unit costs outside a full carton. |
 
 Rows that turn out to be one of a range are also renamed — `Dura-Ace FC-R9200
 Chainset 52/36 172.5mm` — with the size kept on the end, because the catalogue
@@ -58,7 +58,8 @@ nowhere. A shop ordering three of something that comes in tens was quoted the
 carton price on the screen and corrected at invoice time.
 
 `outers.mjs` reads the supplier's groupset workbook and writes `outers.json`:
-the carton quantity per SKU, and what one unit costs outside one.
+the carton quantity per SKU, and — for the warning below — what the supplier
+charges for a single.
 
 ```
 57 SKUs with an outer · 48 with a loose-unit price · higher of the two columns
@@ -66,31 +67,56 @@ the carton quantity per SKU, and what one unit costs outside one.
   Bottom Brackets: no outer column — sold in ones
 ```
 
-The workbook carries **two** loose-unit prices side by side, headed by a bare
-number that changes per range — 1400 and 1200 on Dura-Ace, 850 and 750 on
-Ultegra — and the second is the first scaled by the ratio of those two numbers,
-exactly, on every row. Which of them applies to us is a commercial fact the
-workbook does not state, so `--below-outer higher|lower` names it rather than
-the script guessing.
+### What the loose price is
 
-It defaults to `higher`, the dearer of the two, because that is the one that
-cannot lose money if the guess is wrong: a loose price set too high costs a
-sale and is visible, one set too low costs margin on every line and is not.
-Switch it with one flag and re-run.
+A flat uplift on our own advertised price:
 
-The selling prices that go with it are worked out from each row's own margin
-rather than from a markup written down here, so both prices always sit at the
-same margin as each other. A row whose Distributor price is 8% over cost keeps
-being 8% over cost when the cost is the loose one — whatever that 8% was, and
-whoever changes it next.
+| Tier | Under the outer |
+| --- | --- |
+| Distributor | +5% |
+| Shop | +10% |
+| Club (teams) | +10% |
+| Retail | no change — it is the number on the box |
+| Our cost | no change — see below |
 
-A SKU absent from `outers.json` is sold in ones: an MOQ of one and a single
-price at any quantity. Bottom brackets, rotors and bulk pads are all of them,
-because those sheets have no Outer column at all.
+It is an uplift rather than a margin worked back from what a single costs the
+supplier, because we do not buy singles. We buy the carton and split it, so
+the charge is for splitting it. A distributor taking a few is still buying
+volume across the order and pays five; a shop or a team taking one is the case
+the carton was broken for and pays ten.
 
-Nine Dura-Ace power chainsets have an outer and no loose price. They sell at
-the carton price whatever the quantity, which is what happened before, and
-every run says so by name.
+**Our cost has no loose figure.** A part we ship loose came out of a carton we
+already paid the carton rate for, so what it costs us is the same either way.
+Writing the supplier's single-unit price into a cost column would make 48 SKUs
+read as selling below cost on the Catalogue screen and on every import
+preview, when nothing of the sort is happening.
+
+The workbook does still quote a single-unit price, and every run reports where
+buying one in — rather than splitting one out of stock — would cost more than
+we are charging for it:
+
+```
+! 48 would lose money if the loose unit were bought in as a single rather
+  than split out of an outer: R9270DLR (buy 230.00, sell 214.56), … Order
+  the carton.
+```
+
+That is a purchasing instruction, not a pricing problem. The answer is to
+order the carton, which is what the outer is for.
+
+`--below-outer higher|lower` picks which of the workbook's **two** single-unit
+columns that warning is measured against. They are headed by a bare number
+that changes per range — 1400 and 1200 on Dura-Ace, 850 and 750 on Ultegra —
+and the second is the first scaled by the ratio of those two, exactly, on
+every row. Which applies to us is a commercial fact the workbook does not
+state, so it is named rather than guessed, and defaults to the dearer.
+
+### Ranges with no outer
+
+Bottom brackets, brake pads and rotors are sold in ones: standard prices, no
+minimum, no second price. Their sheets have no Outer column at all, and the
+rebuild also refuses them one by name — so a future workbook that lists a
+rotor with a carton quantity cannot quietly put every rotor behind a minimum.
 
 ## Images
 

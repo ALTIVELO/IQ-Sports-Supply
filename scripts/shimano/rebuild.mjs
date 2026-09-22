@@ -29,18 +29,45 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const PRICES = ['Our cost', 'Distributor', 'Shop', 'Club', 'Retail'];
 
 /*
- * The columns that have a second price for buying fewer than an outer.
+ * The columns that carry a second price for buying fewer than an outer.
  *
- * Retail is not one of them. It is the manufacturer's recommended price, the
+ * Retail is not one of them: it is the manufacturer's recommended price, the
  * number on the box, and it does not change with how many boxes there are.
+ *
+ * Neither is Our cost. We buy by the outer and ship loose units out of a
+ * carton we have already paid the carton price for, so what a part costs us
+ * does not change with what a customer takes. The second price is a charge
+ * for breaking the box, not a different cost being passed on.
  */
-const BY_THE_OUTER = ['Our cost', 'Distributor', 'Shop', 'Club'];
+const BY_THE_OUTER = ['Distributor', 'Shop', 'Club'];
 export const underOuter = (column) => `${column} under outer`;
+
+/**
+ * What breaking a carton adds, per tier.
+ *
+ * A flat uplift on our own advertised price rather than anything read off the
+ * supplier's sheet, because that is what it is: the carton is what we buy and
+ * splitting one is work we do. A distributor taking singles is still buying
+ * volume across the order, so they pay five; a shop or a team taking one is
+ * the case the carton was broken for, so they pay ten.
+ */
+const LOOSE_UPLIFT = { Distributor: 0.05, Shop: 0.10, Club: 0.10 };
+
+/*
+ * Ranges bought and sold in ones, whatever any sheet says.
+ *
+ * Bottom brackets, brake pads and rotors have no outer price from the
+ * supplier and no carton quantity on their sheets — they are stated here as a
+ * rule rather than left to be true by accident, so a future workbook that
+ * lists a rotor with an outer does not quietly put every rotor behind a
+ * minimum.
+ */
+const NO_OUTER = new Set(['bottom-brackets', 'brake-pads', 'rotors']);
 
 /*
  * Two prices per tier, the loose one first.
  *
- * Left to right is cheapest-last, which is the order somebody reads the sheet
+ * Left to right is dearest-first, which is the order somebody reads the sheet
  * in: this is what one costs, and this is what one costs if you take the
  * carton. Putting the outer price on the right also leaves the columns that
  * were there before in the order they were in.
@@ -51,16 +78,15 @@ const OUT_COLUMNS = [
 ];
 
 /**
- * What a tier pays for one loose unit.
+ * What a tier pays for one loose unit: the advertised price plus the uplift.
  *
- * Worked out from the row's own outer price rather than from a markup written
- * down here, so the two prices always sit at the same margin as each other. A
- * sheet whose Distributor price is 8% over cost keeps being 8% over cost when
- * the cost is the loose one, whatever that 8% was and whoever changes it next.
+ * Deliberately not worked back from what a single costs the supplier. We do
+ * not buy singles — we buy the carton and split it — so a price built on a
+ * single-unit cost would be a price for a transaction that does not happen.
  */
-export function looseTierPrice(outerCost, outerPrice, looseCost) {
-  if (!(outerCost > 0) || !(outerPrice > 0) || !(looseCost > 0)) return null;
-  return looseCost * (outerPrice / outerCost);
+export function looseTierPrice(outerPrice, uplift) {
+  if (!(outerPrice > 0) || !(uplift >= 0)) return null;
+  return outerPrice * (1 + uplift);
 }
 
 /**
@@ -154,8 +180,13 @@ function main() {
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
+  // Where the supplier prices a single, so a loose sale that has to be bought
+  // in rather than split out of stock can be seen for what it costs.
+  const singleCost = new Map();
+
   const out = built.map((r) => {
-    const o = outerFor(r.sku);
+    // Three ranges are sold in ones by rule, whatever the workbook says.
+    const o = NO_OUTER.has(r.category) ? null : outerFor(r.sku);
     const row = {
       Name: r.name, SKU: r.sku, Brand: r.brand,
       Series: r.series ?? '', Model: r.model ?? '', Size: r.size ?? '',
@@ -166,15 +197,16 @@ function main() {
       ...Object.fromEntries(BY_THE_OUTER.map((c) => [underOuter(c), ''])),
       ...r.prices,
     };
-    const outerCost = money(r.prices['Our cost']);
-    if (!o || o.below === null || o.below === undefined) return row;
+    if (!o || o.outer <= 1) return row;
 
-    row[underOuter('Our cost')] = o.below.toFixed(2);
     for (const column of BY_THE_OUTER) {
-      if (column === 'Our cost') continue;
-      const loose = looseTierPrice(outerCost, money(r.prices[column]), o.below);
+      const loose = looseTierPrice(money(r.prices[column]), LOOSE_UPLIFT[column]);
       if (loose !== null) row[underOuter(column)] = loose.toFixed(2);
     }
+    // Every part with an outer gets a loose price now, because the uplift is
+    // worked out from our own price rather than from a single-unit cost the
+    // supplier may not have quoted.
+    if (o.below != null) singleCost.set(r.sku, { single: o.below, row });
     return row;
   });
 
@@ -207,8 +239,32 @@ function main() {
   if (dumb.length) {
     console.error(`  ! ${dumb.length} with an outer but no loose price: `
       + `${dumb.slice(0, 6).map((r) => r.SKU).join(', ')}`
-      + `${dumb.length > 6 ? ', …' : ''}. These sell at the outer price `
-      + 'whatever the quantity, until the supplier prices a single.');
+      + `${dumb.length > 6 ? ', …' : ''}. These have no advertised price to `
+      + 'uplift from.');
+  }
+
+  /*
+   * A loose sale we would have to buy in rather than split.
+   *
+   * The uplift is a charge for breaking a carton we already own. It is not a
+   * margin on a single bought from the supplier for the purpose: those cost
+   * far more than the carton rate, and on some parts more than the uplifted
+   * price we would be charging. Worth knowing by name, because the answer is
+   * to order the carton rather than to reprice the part.
+   */
+  const underwater = [];
+  for (const [sku, { single, row }] of singleCost) {
+    const sell = Number(row[underOuter('Distributor')]);
+    if (Number.isFinite(sell) && sell < single) {
+      underwater.push(`${sku} (buy ${single.toFixed(2)}, sell ${sell.toFixed(2)})`);
+    }
+  }
+  if (underwater.length) {
+    console.error(`  ! ${underwater.length} would lose money if the loose unit `
+      + 'were bought in as a single rather than split out of an outer: '
+      + `${underwater.slice(0, 4).join(', ')}`
+      + `${underwater.length > 4 ? `, and ${underwater.length - 4} more` : ''}. `
+      + 'Order the carton.');
   }
 }
 
