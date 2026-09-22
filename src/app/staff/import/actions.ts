@@ -10,31 +10,12 @@ import { SUSPICIOUS_DELTA, type CatalogueRow, type CataloguePreview,
 import type { ActionResult } from '../actions';
 import { classifyProduct } from '@/lib/catalogue/categories';
 import { knownSize } from '@/lib/catalogue/variants';
-import { variantPair, sizesLookWrong } from '@/lib/import/variant-pair';
+import { mergeSheets, norm } from '@/lib/import/merge';
 import {
   restatements, restatementPatch, restatementTally, restatementLabel,
   type ProductNow, type Restatement,
 } from '@/lib/import/overwrite';
 import { fetchAll } from '@/lib/supabase/chunk';
-
-const norm = (sku: string) => sku.trim().toLowerCase();
-
-/**
- * Reads a currency cell.
- *
- * Returns undefined for silence — most price lists have no such column and
- * are sterling — and null for something there that we cannot read, which is
- * reported as a bad row. Guessing sterling from an unreadable cell would put
- * a euro price list into the system under the wrong symbol, and every margin
- * taken off it afterwards would be wrong by the rate.
- */
-function readCurrency(raw: string | undefined): 'GBP' | 'EUR' | null | undefined {
-  const text = (raw ?? '').trim().toUpperCase();
-  if (!text) return undefined;
-  if (['GBP', '£', 'POUND', 'POUNDS', 'STERLING', 'GBP £'].includes(text)) return 'GBP';
-  if (['EUR', '€', 'EURO', 'EUROS', 'EUR €'].includes(text)) return 'EUR';
-  return null;
-}
 
 // ── saved column mappings ───────────────────────────────────────────────────
 
@@ -87,159 +68,6 @@ function tiersPriced(rows: CatalogueRow[], tiers: { id: string; name: string }[]
   return tiers.filter((t) => seen.has(t.id));
 }
 
-/**
- * Folds every included sheet into one row per SKU.
- *
- * A workbook may hold the whole catalogue on one tab with a column per tier,
- * or a tab per tier with one price column each. Merging by SKU makes both the
- * same thing by the time anything is compared, so the rest of this file only
- * ever deals with "this product, these prices, this cost".
- */
-function mergeSheets(sheets: { rows: CatalogueRow[] }[]) {
-  const merged = new Map<string, CatalogueRow>();
-  const invalid: { row: number; reason: string }[] = [];
-  let line = 0;
-  // Rows carrying one half of a size-and-model pair. Counted rather than
-  // listed: on a sheet with a stray Size column that is every row, and a
-  // hundred identical complaints would bury the ones that matter.
-  let halfPaired = 0;
-
-  for (const sheet of sheets) {
-    const seenHere = new Set<string>();
-    for (const row of sheet.rows) {
-      line += 1;
-      const sku = row.sku?.trim();
-      if (!sku) { invalid.push({ row: line, reason: 'No SKU' }); continue; }
-      const key = norm(sku);
-
-      // Twice on one sheet is a mistake in the sheet. Twice across sheets is
-      // the tab-per-tier shape, and is the whole point of merging.
-      if (seenHere.has(key)) {
-        invalid.push({ row: line, reason: `${sku} appears twice on the same sheet` });
-        continue;
-      }
-      seenHere.add(key);
-
-      for (const price of Object.values(row.prices)) {
-        if (!Number.isFinite(price) || price < 0) {
-          invalid.push({ row: line, reason: `Unreadable price for ${sku}` });
-        }
-      }
-      if (row.cost !== undefined && (!Number.isFinite(row.cost) || row.cost < 0)) {
-        invalid.push({ row: line, reason: `Unreadable cost for ${sku}` });
-      }
-
-      const currency = readCurrency(row.currency);
-      if (currency === null) {
-        invalid.push({ row: line, reason: `${sku}: "${row.currency}" is not a currency we hold` });
-      }
-
-      const { group, label, halfPaired: unpaired } =
-        variantPair(row.variant_group, row.variant_label);
-      if (unpaired) halfPaired += 1;
-
-      const prices = Object.fromEntries(
-        Object.entries(row.prices).filter(([, v]) => Number.isFinite(v) && v >= 0),
-      );
-      const cost = row.cost !== undefined && Number.isFinite(row.cost) && row.cost >= 0
-        ? row.cost : undefined;
-
-      const existing = merged.get(key);
-
-      // Two tabs pricing one SKU in two currencies is not a merge, it is a
-      // contradiction: one of the two numbers is about to be read as the
-      // other's money. Say so rather than letting the last tab win.
-      if (existing?.currency && currency && existing.currency !== currency) {
-        invalid.push({
-          row: line,
-          reason: `${sku} is priced in both ${existing.currency} and ${currency}`,
-        });
-        continue;
-      }
-
-      merged.set(key, existing
-        ? {
-            ...existing,
-            name: existing.name || row.name,
-            brand: existing.brand || row.brand,
-            category: existing.category || row.category,
-            image_url: existing.image_url || row.image_url,
-            series: existing.series || row.series?.trim(),
-            currency: existing.currency ?? currency ?? undefined,
-            variant_group: existing.variant_group ?? group,
-            variant_label: existing.variant_label ?? label,
-            price_note: existing.price_note || row.price_note?.trim(),
-            cost: cost ?? existing.cost,
-            prices: { ...existing.prices, ...prices },
-          }
-        : {
-            ...row, sku, cost, prices,
-            currency: currency ?? undefined,
-            // Trimmed, not emptied to undefined: a column that is there and
-            // blank is a different thing from a column that is not there, and
-            // an import told to take blanks as instructions needs to tell them
-            // apart.
-            series: row.series?.trim(),
-            variant_group: group, variant_label: label,
-            price_note: row.price_note?.trim(),
-          });
-    }
-  }
-
-  /*
-   * Before listing the clashes, ask whether the Size column is a size column.
-   *
-   * A model whose members are all one size has no sizes in it, and a sheet
-   * where most models look like that has had something else read as the Size.
-   * Saying that once beats eighty-one rows each reporting that two products
-   * are the same size as each other, all of which are true and none of which
-   * name the cause.
-   */
-  const wrongColumn = sizesLookWrong([...merged.values()]);
-  if (wrongColumn) {
-    invalid.push({
-      row: 0,
-      reason: `The Size column does not look like sizes: ${wrongColumn.rows} products `
-            + `across ${wrongColumn.models} models all give the same one `
-            + `("${wrongColumn.value}"). A size is what tells the members of a model `
-            + 'apart, so point Size at the column that does — and check Model too, '
-            + 'since a saved layout that has slipped by one usually takes both.',
-    });
-  }
-
-  // The database refuses two products claiming one size of one model, and it
-  // would do so halfway through writing the import. Better to say which rows
-  // clash while nothing has been written.
-  const takenSize = new Map<string, string>();
-  for (const row of merged.values()) {
-    if (!row.variant_group || !row.variant_label) continue;
-    const key = `${row.variant_group.toLowerCase()}\u0000${row.variant_label.toLowerCase()}`;
-    const already = takenSize.get(key);
-    if (already) {
-      invalid.push({
-        row: 0,
-        reason: `${already} and ${row.sku} are both `
-              + `${row.variant_group} size ${row.variant_label}`,
-      });
-    } else {
-      takenSize.set(key, row.sku);
-    }
-  }
-
-  // Said once, and not as a skipped row: nothing was skipped, and a sheet
-  // whose Size column means rotor diameters would otherwise report every row
-  // it has as a problem.
-  const notes: string[] = [];
-  if (halfPaired) {
-    notes.push(
-      `${halfPaired} row${halfPaired === 1 ? '' : 's'} gave a size without a model to put `
-      + 'it under (or a model with no size), so those import as ordinary products rather '
-      + 'than as sizes of one thing. Prices and costs are unaffected. If this file really '
-      + 'does hold frame sizes, point the Model column at whatever names the bike.');
-  }
-
-  return { rows: [...merged.values()], invalid, notes };
-}
 
 /** The price in force for each product on a tier, as at a date. */
 async function pricesAsAt(
