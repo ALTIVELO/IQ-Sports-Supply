@@ -12,6 +12,8 @@ import QtyStepper from '@/components/QtyStepper';
 import type { AgencyBrand, CatalogueItem } from '@/lib/types';
 import { currencyOf } from '@/lib/format';
 import { totalsByCurrency } from '@/lib/orders/split';
+import { OuterNote } from '@/components/OuterPrice';
+import { hasOuter, priceAtQty } from '@/lib/catalogue/outer';
 
 /**
  * The basket, line by line, before committing to it.
@@ -67,7 +69,10 @@ export default function BasketReview({
     () => totalsByCurrency(
       lines,
       (l) => currencyOf(l.product.currency),
-      (l) => l.qty * Number(l.product.price),
+      // At the rate the quantity actually buys, which is what place_order
+      // will charge. A basket that totals three shifters at the carton price
+      // is a basket that lies to the customer right up to the invoice.
+      (l) => l.qty * priceAtQty(l.product, l.qty),
       vatRate,
     ),
     [lines, vatRate],
@@ -256,7 +261,7 @@ export default function BasketReview({
               </div>
 
               <div className="num text-[12px] text-mute w-[80px] text-right">
-                <Money value={Number(product.price)} currency={product.currency} /> each
+                <Money value={priceAtQty(product, qty)} currency={product.currency} /> each
               </div>
 
               {/* Down to nothing, which takes the line off the basket. */}
@@ -268,7 +273,7 @@ export default function BasketReview({
               />
 
               <div className="num text-[15px] font-semibold w-[90px] text-right">
-                <Money value={qty * Number(product.price)} currency={product.currency} />
+                <Money value={qty * priceAtQty(product, qty)} currency={product.currency} />
               </div>
 
               <button onClick={() => setQty(product.id, 0)}
@@ -276,6 +281,15 @@ export default function BasketReview({
                       className="text-mute hover:text-danger text-[16px] leading-none px-1">
                 ×
               </button>
+
+              {/* The last chance to notice. Three of something that comes in
+                  tens is priced as three here, and this is the line that says
+                  what the other seven would be worth. */}
+              {hasOuter(product) && (
+                <div className="basis-full">
+                  <OuterNote item={product} qty={qty} currency={product.currency} />
+                </div>
+              )}
             </div>
           </Card>
         ))}

@@ -310,10 +310,10 @@ export async function previewCatalogue(
       id: string; sku: string; name: string; active: boolean; currency: string;
       brand: string | null; series: string | null; image_url: string | null;
       price_note: string | null; category_id: string | null;
-      variant_group: string | null; variant_label: string | null;
+      variant_group: string | null; variant_label: string | null; moq: number | null;
     }>((from, to) => sb.from('products')
       .select(`id, sku, name, active, currency, brand, series, image_url,
-               price_note, category_id, variant_group, variant_label`)
+               price_note, category_id, variant_group, variant_label, moq`)
       .order('sku').range(from, to)),
     sb.from('categories').select('id, slug, name'),
   ]);
@@ -467,10 +467,11 @@ export async function previewCatalogue(
 const productNow = (p: {
   name: string; brand?: string | null; series: string | null;
   image_url: string | null; price_note: string | null; category_id?: string | null;
-  variant_group: string | null; variant_label: string | null;
+  variant_group: string | null; variant_label: string | null; moq?: number | null;
 }): ProductNow => ({
   name: p.name,
   brand: p.brand ?? null,
+  moq: p.moq ?? 1,
   series: p.series,
   image_url: p.image_url,
   price_note: p.price_note,
@@ -521,10 +522,10 @@ export async function applyCatalogue(input: {
     id: string; sku: string; active: boolean; currency: string;
     variant_group: string | null; variant_label: string | null; price_note: string | null;
     name: string; brand: string | null; series: string | null;
-    image_url: string | null; category_id: string | null;
+    image_url: string | null; category_id: string | null; moq: number | null;
   }>((from, to) => sb.from('products')
     .select(`id, sku, active, currency, variant_group, variant_label, price_note,
-             name, brand, series, image_url, category_id`)
+             name, brand, series, image_url, category_id, moq`)
     .order('sku').range(from, to));
   const byNormSku = new Map(existing.map((p) => [norm(p.sku), p]));
   const bySku = new Map(existing.map((p) => [norm(p.sku), p.id]));
@@ -602,6 +603,9 @@ export async function applyCatalogue(input: {
           variant_label: r.variant_label || null,
           variant_sort: sortOf.get(norm(r.sku)) ?? null,
           price_note: r.price_note || null,
+          // A blank outer is a part sold in ones, which is the default the
+          // column has anyway.
+          moq: r.moq && r.moq > 1 ? Math.round(r.moq) : 1,
         };
       }))
       .select('id, sku');
@@ -670,6 +674,10 @@ export async function applyCatalogue(input: {
         product_id: bySku.get(norm(r.sku))!,
         tier_id: tier.id,
         price: r.prices[tier.id],
+        // Null rather than left out, so a re-issued list that drops the loose
+        // column clears the old one instead of leaving a price from a sheet
+        // nobody can find. Undefined here would keep it.
+        break_price: r.breakPrices[tier.id] ?? null,
         effective_from: input.effectiveFrom,
       }));
     if (!batch.length) continue;
@@ -686,6 +694,7 @@ export async function applyCatalogue(input: {
     .map((r) => ({
       product_id: bySku.get(norm(r.sku))!,
       cost: r.cost!,
+      break_cost: r.breakCost ?? null,
       effective_from: input.effectiveFrom,
     }));
 

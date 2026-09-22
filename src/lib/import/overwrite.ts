@@ -31,6 +31,8 @@ import type { CatalogueRow } from './types';
 export interface ProductNow {
   name: string;
   brand: string | null;
+  /** The carton quantity, one where the part is sold in ones. */
+  moq: number;
   series: string | null;
   image_url: string | null;
   price_note: string | null;
@@ -41,7 +43,8 @@ export interface ProductNow {
 
 export interface Restatement {
   /** The column, named as the screen names it. */
-  field: 'name' | 'brand' | 'series' | 'image' | 'price note' | 'collection' | 'size';
+  field: 'name' | 'brand' | 'series' | 'image' | 'price note' | 'collection' | 'size'
+       | 'outer';
   /** The database column, or columns where one change moves several. */
   patch: Record<string, unknown>;
   from: string | null;
@@ -96,6 +99,19 @@ export function restatements(
            (next) => ({ name: next }), { clearable: false });
 
   consider('brand', stated(row.brand), before.brand, (next) => ({ brand: next }));
+
+  /*
+   * The outer, which is a number pretending to be one of these.
+   *
+   * Cleared means one, not null: the column is the minimum quantity that buys
+   * the advertised price, and every part has one even when it is a single.
+   * Comparing as text keeps it on the same footing as the rest — a sheet
+   * saying "10" against a product already at 10 is not a change.
+   */
+  const outer = row.moq === undefined ? undefined
+    : (Number.isFinite(row.moq) && row.moq >= 1 ? String(Math.round(row.moq)) : '');
+  consider('outer', outer, String(before.moq ?? 1),
+           (next) => ({ moq: next === null ? 1 : Number(next) }));
   consider('series', stated(row.series), before.series, (next) => ({ series: next }));
   consider('price note', stated(row.price_note), before.price_note,
            (next) => ({ price_note: next }));
@@ -168,6 +184,7 @@ const PLURAL: Record<Restatement['field'], string> = {
   'price note': 'price notes',
   collection: 'collections',
   size: 'sizes',
+  outer: 'outers',
 };
 
 export function restatementLabel(field: Restatement['field'], rows: number): string {

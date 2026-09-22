@@ -5,6 +5,8 @@ import { Card, Money, Tag } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
 import QtyStepper from '@/components/QtyStepper';
 import { useCart } from './CartContext';
+import OuterPrice, { OuterNote } from '@/components/OuterPrice';
+import { hasOuter } from '@/lib/catalogue/outer';
 import { groupName, skuPrefix, type VariantGroup } from '@/lib/catalogue/variants';
 import type { CatalogueItem } from '@/lib/types';
 
@@ -76,11 +78,24 @@ export default function ProductRow({ group }: { group: VariantGroup }) {
           )}
         </div>
 
-        <div className="num text-[15px] font-semibold w-[110px] text-right">
+        <div className="text-[15px] w-[150px] text-right">
           {/* A range only where there is one. Five sizes at one price is one
               price, and "from" in front of it would read as a catch. */}
           {group.low !== group.high && <span className="text-[11px] text-mute">from </span>}
-          <Money value={group.low} currency={lead.currency} />
+          {/* A collapsed range quotes its lead's two prices rather than the
+              range's low, because the low is one number and the thing being
+              explained is that there are two. A single product does the same
+              with its own. */}
+          {sized && group.low !== group.high
+            ? <span className="num font-semibold">
+                <Money value={group.low} currency={lead.currency} />
+              </span>
+            : <OuterPrice item={lead} qty={inBasket} currency={lead.currency} />}
+          {hasOuter(lead) && (
+            <div className="mt-0.5">
+              <OuterNote item={lead} qty={inBasket} currency={lead.currency} />
+            </div>
+          )}
         </div>
 
         {sized ? (
@@ -123,10 +138,17 @@ function SizeRow({ size }: { size: CatalogueItem }) {
       {size.in_stock
         ? <Tag tone="green">in stock</Tag>
         : <Tag tone="line">to order</Tag>}
-      <span className="num text-[14px] font-semibold w-[90px] text-right">
-        <Money value={Number(size.price)} currency={size.currency} />
+      <span className="text-[14px] w-[140px] text-right">
+        <OuterPrice item={size} qty={qty} currency={size.currency} />
       </span>
       <Stepper product={size} />
+      {/* Its own line, full width, so the offer is not squeezed between a
+          price and a pair of buttons at 430px. */}
+      {hasOuter(size) && (
+        <div className="basis-full text-right">
+          <OuterNote item={size} qty={qty} currency={size.currency} />
+        </div>
+      )}
     </div>
   );
 }

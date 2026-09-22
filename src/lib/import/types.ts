@@ -36,17 +36,35 @@ export interface CatalogueRow {
   /** What this price does not include — import duty, VAT. */
   price_note?: string;
   /**
+   * The outer — the carton the part ships in, and so the smallest quantity
+   * that buys the advertised price.
+   *
+   * Absent where the sheet says nothing, which leaves whatever the product
+   * already had. One, or blank, means sold in ones.
+   */
+  moq?: number;
+  /**
    * What this costs us. Absent where the sheet has no cost for this row; NaN
    * where it has something there that is not a number, which is an error and
    * is reported as one.
    */
   cost?: number;
+  /** What one unit costs us below the outer, where the sheet prices one. */
+  breakCost?: number;
   /**
    * Tier id → the price that tier pays, for the tiers this row actually
    * prices. A blank cell is left out rather than entered as NaN, so an empty
    * column is silence and a cell reading "POA" is a problem.
    */
   prices: Record<string, number>;
+  /**
+   * Tier id → what that tier pays per unit below the outer.
+   *
+   * Separate from `prices` rather than a second field inside it, because the
+   * two are independent: a sheet can price a tier by the outer and say nothing
+   * about loose units, and most of the catalogue does.
+   */
+  breakPrices: Record<string, number>;
 }
 
 export interface ClientRow {
@@ -152,8 +170,12 @@ export interface ColumnMapping {
   variant_label?: string;
   /** What the price excludes, in the supplier's own words. */
   price_note?: string;
+  /** The outer, or carton, quantity. */
+  moq?: string;
   /** What we pay our supplier. */
   cost?: string;
+  /** What we pay for one, below the outer. */
+  break_cost?: string;
   email?: string; tier?: string; vat_no?: string; address?: string; phone?: string;
   location?: string; qty?: string;
   client?: string; date?: string; reference?: string; unit_price?: string;
@@ -162,6 +184,17 @@ export interface ColumnMapping {
 
 /** The `price:<tier id>` key a tier's column is stored under. */
 export const tierKey = (tierId: string) => `price:${tierId}`;
+
+/**
+ * And the one beside it: what that tier pays below the outer.
+ *
+ * A separate namespace rather than a suffix on the first, so no amount of
+ * string handling elsewhere can turn one into the other.
+ */
+export const breakKey = (tierId: string) => `break:${tierId}`;
+
+/** The cost column's counterpart, named the same way for the same reason. */
+export const BREAK_COST = 'break_cost';
 
 /** A sheet the user has chosen to import, with how to read it. */
 export interface SheetPlan {

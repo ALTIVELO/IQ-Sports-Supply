@@ -1,7 +1,7 @@
 'use client';
 
 import * as XLSX from 'xlsx';
-import { tierKey, type ColumnMapping } from './types';
+import { BREAK_COST, breakKey, tierKey, type ColumnMapping } from './types';
 
 export interface ParsedSheet {
   name: string;
@@ -92,6 +92,10 @@ export function guessMapping(header: string[], fields: string[]): ColumnMapping 
     variant_group: /\b(variant\s*group|model\s*(code|group|key)?|style|parent(\s*sku)?)\b/i,
     variant_label: /\b(size|frame\s*size|variant)\b/i,
     price_note: /\b(price\s*note|note|excludes|exclusions)\b/i,
+    // The carton a part ships in. Only ever asked for on a price sheet, so it
+    // never competes with the stock scope's "qty" for a column headed
+    // "Outer qty" — the two are never in the same field list.
+    moq: /\b(moq|outer|outers|carton|case\s*(qty|size)|pack\s*(qty|size)|box\s*qty|min(imum)?\s*order\s*(qty|quantity)?)\b/i,
     client: /\b(client|customer|account|company|buyer)\b/i,
     date: /\b(date|ordered|placed|when)\b/i,
     reference: /\b(ref(erence)?|order\s*(no|number|ref)?|our\s*ref|invoice\s*(no|number)?)\b/i,
@@ -105,7 +109,13 @@ export function guessMapping(header: string[], fields: string[]): ColumnMapping 
     const pattern = patterns[field];
     if (!pattern) continue;
     const index = header.findIndex(
-      (h, i) => !taken.has(i) && isHeaderish(h) && pattern.test(h.trim()),
+      (h, i) => !taken.has(i) && isHeaderish(h) && pattern.test(h.trim())
+        // The outer is a quantity, and three of the price columns on a
+        // Shimano sheet have the word "outer" in them. "Distributor under
+        // outer" read as the carton size would leave every product at an MOQ
+        // of one and the advertised prices unmapped, which is the failure this
+        // whole column exists to prevent.
+        && !(field === 'moq' && (isBreakColumn(h) || MONEYISH.test(h))),
     );
     if (index >= 0) {
       taken.add(index);
@@ -141,6 +151,26 @@ const COST_ALIASES = [
   'purchase', 'purchase price', 'supplier price', 'landed', 'landed cost',
   'ex works', 'exw', 'we pay',
 ];
+
+/**
+ * What a sheet calls the second price: the one for buying fewer than an outer.
+ *
+ * A Shimano list carries two columns per tier, headed "Distributor under
+ * outer" and "Distributor", and both of them say "distributor". Matched on
+ * alias length alone the first would take the tier and the second would find
+ * itself homeless — and the homeless one is the advertised price, which is
+ * the one on every screen. So the qualifier is looked for first, the column
+ * it marks is set aside, and what remains of the heading decides which tier
+ * or cost it belongs to.
+ */
+const BREAK_QUALIFIER =
+  /\b(?:under|below|less\s+than|outside|broken|part)\s*(?:the\s*)?(?:outer|carton|box|moq|pack|case)\b|\b(?:loose|singles?|broken\s*outer|break\s*price|sub[\s-]?outer|under\s*moq)\b/i;
+
+/** The heading with the qualifier taken out, which is the tier's own name. */
+export const withoutBreakQualifier = (cell: string) =>
+  cell.replace(BREAK_QUALIFIER, ' ').replace(/[()\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+
+export const isBreakColumn = (cell: string) => BREAK_QUALIFIER.test(cell);
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -208,25 +238,53 @@ export function guessCatalogueColumns(
     Object.values(base).filter(Boolean).map((letter) => colIndex(letter!)),
   );
 
-  const pairs: { col: number; key: string; score: number }[] = [];
-  header.forEach((cell, col) => {
-    if (spokenFor.has(col) || !isHeaderish(cell)) return;
-    for (const target of targets) {
-      const score = matchLength(cell, target.aliases);
-      if (score) pairs.push({ col, key: target.key, score });
+  /*
+   * The two passes, and why there are two.
+   *
+   * "Distributor under outer" and "Distributor" are the same word to an alias
+   * match, and the qualified one is further left, so a single pass hands the
+   * tier to the loose price and leaves the advertised price unclaimed. Setting
+   * the qualified columns aside first means each pass has one candidate per
+   * tier and the tie never arises.
+   */
+  const qualified = header.map((cell) => isHeaderish(cell) && isBreakColumn(cell));
+
+  const claim = (
+    into: ColumnMapping, wanted: (col: number) => boolean,
+    label: (col: number) => string, rename: (key: string) => string,
+  ) => {
+    const pairs: { col: number; key: string; score: number }[] = [];
+    header.forEach((cell, col) => {
+      if (spokenFor.has(col) || !isHeaderish(cell) || !wanted(col)) return;
+      for (const target of targets) {
+        const score = matchLength(label(col), target.aliases);
+        if (score) pairs.push({ col, key: rename(target.key), score });
+      }
+    });
+    pairs.sort((a, b) => b.score - a.score || a.col - b.col);
+
+    const usedCols = new Set<number>();
+    const usedKeys = new Set<string>();
+    for (const pair of pairs) {
+      if (usedCols.has(pair.col) || usedKeys.has(pair.key)) continue;
+      usedCols.add(pair.col);
+      usedKeys.add(pair.key);
+      into[pair.key] = XLSX.utils.encode_col(pair.col);
     }
-  });
-  pairs.sort((a, b) => b.score - a.score || a.col - b.col);
+    return usedCols;
+  };
 
   const mapping: ColumnMapping = {};
-  const usedCols = new Set<number>();
-  const usedKeys = new Set<string>();
-  for (const pair of pairs) {
-    if (usedCols.has(pair.col) || usedKeys.has(pair.key)) continue;
-    usedCols.add(pair.col);
-    usedKeys.add(pair.key);
-    mapping[pair.key] = XLSX.utils.encode_col(pair.col);
-  }
+  const usedCols = claim(mapping, (col) => !qualified[col], (col) => header[col], (key) => key);
+
+  // The same names again, on the columns the first pass stepped over, filed
+  // under the keys that say "below the outer".
+  claim(
+    mapping,
+    (col) => qualified[col],
+    (col) => withoutBreakQualifier(header[col]),
+    (key) => (key === 'cost' ? BREAK_COST : breakKey(key.slice('price:'.length))),
+  );
 
   // The older shape: a workbook with a tab per tier, each holding one unlabelled
   // price column. Nothing matched by name, but the tab itself says which tier
@@ -237,7 +295,8 @@ export function guessCatalogueColumns(
     const spare = header
       .map((cell, col) => ({ cell, col }))
       .filter(({ cell, col }) =>
-        !spokenFor.has(col) && !usedCols.has(col) && isHeaderish(cell) && MONEYISH.test(cell));
+        !spokenFor.has(col) && !usedCols.has(col) && !qualified[col]
+        && isHeaderish(cell) && MONEYISH.test(cell));
     if (tier && spare.length === 1) {
       mapping[tierKey(tier.id)] = XLSX.utils.encode_col(spare[0].col);
     }

@@ -24,6 +24,8 @@ interface Product {
   /** Shared by every size of one model. */
   variant_group: string | null;
   variant_sort: number | null;
+  /** The outer — the least that buys the advertised price. One for most parts. */
+  moq: number | null;
 }
 interface Named { id: string; name: string }
 interface CategoryOption {
@@ -38,11 +40,13 @@ interface Transfer {
 type Msg = { tone: 'error' | 'success' | 'info'; text: string } | null;
 
 export default function CatalogueScreen({
-  products, tiers, locations, prices, costs, stock, transfers, categories,
+  products, tiers, locations, prices, breaks, costs, stock, transfers, categories,
   collections, uncategorisedTotal, collection, canDelete, query, tab,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
+  /** Product id → tier id → what that tier pays below the outer, where it does. */
+  breaks: Record<string, Record<string, number>>;
   /** Product id → what it costs us today. Staff-only, and never sent client-side. */
   costs: Record<string, number>;
   stock: Record<string, Record<string, number>>;
@@ -124,7 +128,7 @@ export default function CatalogueScreen({
           </form>
           <StockMatrix
             products={products} tiers={tiers} locations={locations}
-            prices={prices} costs={costs} stock={stock} categories={categories}
+            prices={prices} breaks={breaks} costs={costs} stock={stock} categories={categories}
             canDelete={canDelete} onMessage={setMessage}
           />
         </>
@@ -211,10 +215,12 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
 }
 
 function StockMatrix({
-  products, tiers, locations, prices, costs, stock, categories, canDelete, onMessage,
+  products, tiers, locations, prices, breaks, costs, stock, categories, canDelete, onMessage,
 }: {
   products: Product[]; tiers: Named[]; locations: Named[];
   prices: Record<string, Record<string, number>>;
+  /** Product id → tier id → what that tier pays below the outer. */
+  breaks: Record<string, Record<string, number>>;
   costs: Record<string, number>;
   stock: Record<string, Record<string, number>>;
   categories: CategoryOption[];
@@ -436,6 +442,10 @@ function StockMatrix({
               <th>SKU</th><th>Product</th><th>Brand</th><th>Series</th><th>Category</th>
               {locations.map((l) => <th key={l.id} className="text-right">{l.name}</th>)}
               <th className="text-right">Total</th>
+              {/* Narrow, and blank on most rows: the catalogue is mostly
+                  parts sold in ones, and a 1 written against every one of
+                  them is noise in a table that is already wide. */}
+              <th className="text-right">Outer</th>
               <th className="text-right">Cost</th>
               {tiers.map((t) => <th key={t.id} className="text-right">{t.name}</th>)}
               <th />
@@ -545,11 +555,15 @@ function StockMatrix({
                   })}
                   <td className="num text-right font-semibold">{total}</td>
                   <td className="num text-right text-mute">
+                    {(p.moq ?? 1) > 1 ? p.moq : '—'}
+                  </td>
+                  <td className="num text-right text-mute">
                     {costs[p.id] != null
                       ? <Money value={costs[p.id]} currency={p.currency} /> : '—'}
                   </td>
                   {tiers.map((t) => {
                     const price = prices[p.id]?.[t.id];
+                    const loose = breaks[p.id]?.[t.id];
                     const cost = costs[p.id];
                     // A tier priced at or under what we pay sells at a loss.
                     // Worth seeing at a glance, not only on the import preview.
@@ -562,6 +576,16 @@ function StockMatrix({
                           ? `At or below the ${money(cost, p.currency)} we pay` : undefined}
                       >
                         {price != null ? <Money value={price} currency={p.currency} /> : '—'}
+                        {/* What the same tier pays outside a full outer, under
+                            the advertised price rather than beside it: a
+                            second column per tier would double the width of a
+                            table that already carries one per site. */}
+                        {loose != null && (
+                          <div className="text-[10px] text-mute font-normal"
+                               title={`Fewer than ${p.moq}`}>
+                            <Money value={loose} currency={p.currency} /> loose
+                          </div>
+                        )}
                       </td>
                     );
                   })}

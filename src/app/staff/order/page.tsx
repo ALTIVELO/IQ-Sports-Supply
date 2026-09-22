@@ -22,6 +22,10 @@ export interface DeskProduct {
   variant_sort: number | null;
   /** Price per tier, so switching client repricing is instant. */
   prices: Record<string, number>;
+  /** And what each tier pays below the outer, where a part is sold in cartons. */
+  breaks: Record<string, number>;
+  /** The carton quantity. One for most of the catalogue. */
+  moq: number;
   /** Stock per location — staff see every site so they can switch or transfer. */
   stock: Record<string, number>;
 }
@@ -76,7 +80,7 @@ export default async function OrderDeskPage() {
     sb.from('locations').select('id, name').eq('active', true).order('name'),
     fetchAll((from, to) => sb.from('products')
       .select(`id, sku, name, brand, currency, category_id, image_url,
-               variant_group, variant_label, variant_sort`)
+               variant_group, variant_label, variant_sort, moq`)
       .eq('active', true).order('sku').range(from, to)),
   ]);
 
@@ -108,7 +112,8 @@ export default async function OrderDeskPage() {
   // filled it and pushed every older price out of the answer.
   const ids = products.map((p) => p.id);
   const [priceRows, stockRows] = await Promise.all([
-    inChunks<{ product_id: string; tier_id: string; price: number }>(
+    inChunks<{ product_id: string; tier_id: string; price: number;
+               break_price: number | null }>(
       ids, Math.max(1, (tiers ?? []).length),
       (batch) => sb.rpc('current_tier_prices', { p_products: batch })),
     inChunks<{ product_id: string; location_id: string; qty: number }>(
@@ -118,10 +123,18 @@ export default async function OrderDeskPage() {
   ]);
 
   const priceMap = new Map<string, Record<string, number>>();
+  const breakMap = new Map<string, Record<string, number>>();
   for (const row of priceRows) {
     const forProduct = priceMap.get(row.product_id) ?? {};
     forProduct[row.tier_id] = Number(row.price);
     priceMap.set(row.product_id, forProduct);
+    // Only where there is one. A tier with no loose price has no entry, which
+    // is how the desk tells "same price at any quantity" from "not priced".
+    if (row.break_price !== null && row.break_price !== undefined) {
+      const loose = breakMap.get(row.product_id) ?? {};
+      loose[row.tier_id] = Number(row.break_price);
+      breakMap.set(row.product_id, loose);
+    }
   }
 
   const stockMap = new Map<string, Record<string, number>>();
@@ -134,6 +147,8 @@ export default async function OrderDeskPage() {
   const deskProducts: DeskProduct[] = products.map((p) => ({
     ...p,
     prices: priceMap.get(p.id) ?? {},
+    breaks: breakMap.get(p.id) ?? {},
+    moq: (p as { moq?: number | null }).moq ?? 1,
     stock: stockMap.get(p.id) ?? {},
   }));
 

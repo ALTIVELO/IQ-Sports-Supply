@@ -36,6 +36,15 @@ export interface CatalogueItem {
   /** The range it belongs to — Dura-Ace, Ultegra — or null for most of a catalogue. */
   series: string | null;
   price: number; currency: string; in_stock: boolean; image_url: string | null;
+  /**
+   * The outer — the carton quantity, and so the least that buys `price`.
+   *
+   * One for most of a catalogue. Where it is more, `break_price` says what one
+   * costs outside a full carton.
+   */
+  moq: number;
+  /** What one costs below the outer, or null for one price at any quantity. */
+  break_price: number | null;
   category_slug: string | null; category_name: string | null;
   /** Its collection is served by builders, so it is not offered on its own. */
   configurator_only: boolean;

@@ -1,0 +1,244 @@
+{
+  "_source": [
+    "Outer quantities and loose-unit prices from the supplier groupset",
+    "workbook, read by scripts/shimano/outers.mjs. Sterling, excluding VAT.",
+    "",
+    "outer  the carton quantity, and so the MOQ for the advertised price.",
+    "below  what one unit costs when fewer than an outer are bought —",
+    "       the higher of the two loose-unit columns on the sheet.",
+    "",
+    "A SKU absent from here is sold in ones: MOQ 1, one price at any",
+    "quantity. Bottom brackets, rotors and bulk pads are all of them."
+  ],
+  "belowOuter": "higher",
+  "skus": {
+    "BTDN300": {
+      "outer": 50,
+      "below": 77.25
+    },
+    "CNM8100126Q": {
+      "outer": 50,
+      "below": 19
+    },
+    "CNM9100126Q": {
+      "outer": 50,
+      "below": 24.5
+    },
+    "CSR810112130": {
+      "outer": 18,
+      "below": 50
+    },
+    "CSR810112134": {
+      "outer": 18,
+      "below": 50
+    },
+    "CSR920012130": {
+      "outer": 18,
+      "below": 148
+    },
+    "CSR920012134": {
+      "outer": 18,
+      "below": 148
+    },
+    "EWEC300": {
+      "outer": 100,
+      "below": 20.25
+    },
+    "EWSD300IL090": {
+      "outer": 100,
+      "below": 12.5
+    },
+    "EWSD300IL100": {
+      "outer": 100,
+      "below": 12.5
+    },
+    "FCR8100A04": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100A26": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100A66": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100C04": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100C26": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100C66": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100D04": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100D26": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100D66": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100E04": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100E26": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100E66": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100M04": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR8100M26": {
+      "outer": 8,
+      "below": 100
+    },
+    "FCR9200A04": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200A26": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200A40": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200B04": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200B26": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200C04": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200C26": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200C40": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200D04": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200D26": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200D40": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200E04": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200E26": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200E40": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200M04": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200M26": {
+      "outer": 8,
+      "below": 220
+    },
+    "FCR9200PC04": {
+      "outer": 8,
+      "below": null
+    },
+    "FCR9200PC26": {
+      "outer": 8,
+      "below": null
+    },
+    "FCR9200PC40": {
+      "outer": 8,
+      "below": null
+    },
+    "FCR9200PD04": {
+      "outer": 8,
+      "below": null
+    },
+    "FCR9200PD26": {
+      "outer": 8,
+      "below": null
+    },
+    "FCR9200PD40": {
+      "outer": 8,
+      "below": null
+    },
+    "FCR9200PE04": {
+      "outer": 8,
+      "below": null
+    },
+    "FCR9200PE26": {
+      "outer": 8,
+      "below": null
+    },
+    "FCR9200PE40": {
+      "outer": 8,
+      "below": null
+    },
+    "FDR8150F": {
+      "outer": 50,
+      "below": 90
+    },
+    "FDR9250F": {
+      "outer": 50,
+      "below": 155
+    },
+    "R8170DLR": {
+      "outer": 10,
+      "below": 165
+    },
+    "R8170DRF": {
+      "outer": 10,
+      "below": 165
+    },
+    "R9270DLR": {
+      "outer": 10,
+      "below": 230
+    },
+    "R9270DRF": {
+      "outer": 10,
+      "below": 230
+    },
+    "RDR8150": {
+      "outer": 30,
+      "below": 138.5
+    },
+    "RDR9250": {
+      "outer": 30,
+      "below": 270
+    }
+  }
+}

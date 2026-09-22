@@ -20,7 +20,7 @@ export default async function BasketPage() {
       // drawn a euro basket with pound signs on it, and missing the size would
       // have left two frames of one bike looking like the same line.
       fetchAll((from, to) => sb.from('client_catalogue')
-        .select(`id, sku, name, brand, series, price, currency, price_note, in_stock, image_url,
+        .select(`id, sku, name, brand, series, price, moq, break_price, currency, price_note, in_stock, image_url,
                variant_group, variant_label, variant_sort,
                category_slug, category_name, configurator_only`)
         .order('sku').range(from, to)),

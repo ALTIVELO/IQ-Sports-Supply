@@ -35,7 +35,7 @@ export default async function CataloguePage({
 
   let productQuery = sb.from('products')
     .select(`id, sku, name, brand, series, active, category_id, image_url, currency,
-             variant_group, variant_label, variant_sort`)
+             variant_group, variant_label, variant_sort, moq`)
     .order('sku').limit(500);
   if (q?.trim()) productQuery = productQuery.or(
     `sku.ilike.%${q.trim()}%,name.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%,` +
@@ -66,7 +66,8 @@ export default async function CataloguePage({
   const shown = (products ?? []).map((p) => p.id);
   const tierCount = Math.max(1, (tiers ?? []).length);
   const [priceRows, costRows, stockRows] = await Promise.all([
-    inChunks<{ product_id: string; tier_id: string; price: number }>(
+    inChunks<{ product_id: string; tier_id: string; price: number;
+               break_price: number | null }>(
       shown, tierCount,
       (batch) => sb.rpc('current_tier_prices', { p_products: batch })),
     inChunks<{ product_id: string; cost: number }>(
@@ -79,9 +80,17 @@ export default async function CataloguePage({
   ]);
 
   const priceMap: Record<string, Record<string, number>> = {};
+  // And the price below the outer, where a part is sold in cartons. Kept in
+  // its own map so a tier with no loose price has no entry, rather than a
+  // null the table would have to keep checking for.
+  const breakMap: Record<string, Record<string, number>> = {};
   for (const r of priceRows) {
     priceMap[r.product_id] ??= {};
     priceMap[r.product_id][r.tier_id] = Number(r.price);
+    if (r.break_price !== null && r.break_price !== undefined) {
+      breakMap[r.product_id] ??= {};
+      breakMap[r.product_id][r.tier_id] = Number(r.break_price);
+    }
   }
 
   const costMap: Record<string, number> = {};
@@ -103,6 +112,7 @@ export default async function CataloguePage({
         tiers={tiers ?? []}
         locations={locations ?? []}
         prices={priceMap}
+        breaks={breakMap}
         costs={costMap}
         stock={stockMap}
         transfers={(transfers ?? []) as never}

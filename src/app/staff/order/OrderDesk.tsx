@@ -6,6 +6,8 @@ import { Button, Card, Money, Notice, Tag } from '@/components/ui';
 import { placeOrder } from '../actions';
 import { totalsByCurrency } from '@/lib/orders/split';
 import { priceRange, tierPrice } from '@/lib/orders/tier-price';
+import OuterPrice, { OuterNote } from '@/components/OuterPrice';
+import { hasOuter, priceAtQty } from '@/lib/catalogue/outer';
 import ProductImage from '@/components/ProductImage';
 import CollectionPicker from '@/components/CollectionPicker';
 import { groupCollections, idsUnderSlug, type CategoryLite } from '@/lib/catalogue/collections';
@@ -26,6 +28,19 @@ interface DraftLine {
   productId: string; sku: string; name: string; qty: number; unitPrice: number;
   /** The tier price, kept so an override is visible as an override. */
   tierPrice: number;
+  /**
+   * The carton, and the two prices either side of it.
+   *
+   * `tierPrice` above is the rate this quantity is on, which moves as the
+   * quantity does — a line keyed at ten and cut to three is charged the loose
+   * price by place_order whatever the screen says, so the screen has to say
+   * it too, or the difference reads as an override of a price nobody is
+   * charging. `outerPrice` is the advertised one and does not move, because
+   * the arithmetic for "three more and the line costs £132 less" needs both.
+   */
+  moq: number;
+  outerPrice: number;
+  breakPrice: number | null;
   currency: string;
   /** The brand key where we introduce this line rather than sell it. */
   agentBrand: string | null;
@@ -77,6 +92,9 @@ export default function OrderDesk({
    */
   const priceFor = (p: DeskProduct): number | undefined =>
     tierPrice(p.prices, client?.tier_id);
+  /** And the one below the outer, where this tier has one for this product. */
+  const breakFor = (p: DeskProduct): number | null =>
+    tierPrice(p.breaks, client?.tier_id) ?? null;
   const stockAt = (p: DeskProduct, loc: string) => p.stock[loc] ?? 0;
 
   // brands.key is the product's brand text normalised the way the database
@@ -177,11 +195,24 @@ export default function OrderDesk({
     setLines((ls) => {
       const existing = ls.find((l) => l.productId === p.id);
       if (existing) {
-        return ls.map((l) => (l.productId === p.id ? { ...l, qty: l.qty + add } : l));
+        return ls.map((l) => {
+          if (l.productId !== p.id) return l;
+          const qty = l.qty + add;
+          // The tenth one added is what takes the line on to the carton price,
+          // so the rate is worked out again rather than kept from the first.
+          const rate = priceAtQty(
+            { price: l.outerPrice, moq: l.moq, break_price: l.breakPrice }, qty);
+          const overridden = l.unitPrice !== l.tierPrice;
+          return { ...l, qty, tierPrice: rate, unitPrice: overridden ? l.unitPrice : rate };
+        });
       }
+      const rate = priceAtQty(
+        { price, moq: p.moq, break_price: breakFor(p) }, add);
       return [...ls, {
         productId: p.id, sku: p.sku, name: p.name, qty: add,
-        unitPrice: price, tierPrice: price, currency: p.currency,
+        unitPrice: rate, tierPrice: rate,
+        moq: p.moq, outerPrice: price, breakPrice: breakFor(p),
+        currency: p.currency,
         agentBrand: agentBrandOf(p),
       }];
     });
@@ -207,8 +238,25 @@ export default function OrderDesk({
   const sellerSplit =
     agencyOnOrder.length + (lines.some((l) => !l.agentBrand) ? 1 : 0);
 
+  /**
+   * One line changed — and, where the quantity moved it across an outer, the
+   * rate with it.
+   *
+   * A line keyed at ten and cut to three is charged the loose price by
+   * place_order whatever this screen says, so the screen has to say it too.
+   * Only an untouched price follows: once somebody has typed over it, it is
+   * theirs and the quantity does not get to change it back.
+   */
   const patch = (i: number, next: Partial<DraftLine>) =>
-    setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...next } : l)));
+    setLines((ls) => ls.map((l, j) => {
+      if (j !== i) return l;
+      const merged = { ...l, ...next };
+      if (next.qty === undefined) return merged;
+      const rate = priceAtQty(
+        { price: l.outerPrice, moq: l.moq, break_price: l.breakPrice }, merged.qty);
+      const overridden = l.unitPrice !== l.tierPrice;
+      return { ...merged, tierPrice: rate, unitPrice: overridden ? merged.unitPrice : rate };
+    }));
 
   const effectiveVat = client?.vat_exempt ? 0 : vatRate;
 
@@ -498,7 +546,13 @@ export default function OrderDesk({
                           <span className="num font-semibold">
                             {price === undefined
                               ? <span className="text-danger font-normal">no price</span>
-                              : <Money value={price} currency={size.currency} />}
+                              /* Both prices before it is added, so the person
+                                 on the phone quotes the right one first time. */
+                              : <OuterPrice
+                                  item={{ price, moq: size.moq, break_price: breakFor(size) }}
+                                  qty={0}
+                                  currency={size.currency}
+                                />}
                           </span>
                         </button>
                       );
@@ -533,6 +587,15 @@ export default function OrderDesk({
                           label={`${l.sku} on this order`}
                           onChange={(qty) => patch(i, { qty })}
                         />
+                        {hasOuter({ price: l.outerPrice, moq: l.moq, break_price: l.breakPrice }) && (
+                          <div className="mt-0.5">
+                            <OuterNote
+                              item={{ price: l.outerPrice, moq: l.moq, break_price: l.breakPrice }}
+                              qty={l.qty}
+                              currency={l.currency}
+                            />
+                          </div>
+                        )}
                       </td>
                       <td>
                         <input

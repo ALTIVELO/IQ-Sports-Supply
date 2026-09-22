@@ -36,7 +36,13 @@
  * answer: it has no price on that tier, which is not the same as a price of
  * zero, and the screens now say so.
  */
-create or replace function public.current_tier_prices(
+-- Dropped first rather than replaced. A later migration widens what these
+-- return, and setup.sql is one file replayed from the top: on the second run
+-- this statement meets a function of that wider shape, and CREATE OR REPLACE
+-- cannot change a return type. Dropping is a no-op on a fresh database and
+-- makes a re-run behave like a first run, which is what the file promises.
+drop function if exists public.current_tier_prices(uuid[], date);
+create function public.current_tier_prices(
   p_products uuid[], p_on date default current_date
 )
 returns table (product_id uuid, tier_id uuid, price numeric)
@@ -50,7 +56,8 @@ language sql stable security invoker set search_path = public as $$
 $$;
 
 /** What these products cost us, as at a date. Staff only, by RLS. */
-create or replace function public.current_costs(
+drop function if exists public.current_costs(uuid[], date);
+create function public.current_costs(
   p_products uuid[], p_on date default current_date
 )
 returns table (product_id uuid, cost numeric)

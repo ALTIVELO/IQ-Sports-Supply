@@ -184,4 +184,65 @@ eq('a grouped row is renamed',
 eq('and every member of a group shares its key',
    new Set(built.filter((r) => r.model).map((r) => r.model)).size, 1);
 
+// ── the carton, and the price outside it ──────────────────────────────────
+// Read from the supplier's own workbook, which states the outer and two
+// loose-unit prices side by side without saying which of the two is ours.
+const { readHeader, readSheet, byTheOuterColumn } =
+  await import('../../scripts/shimano/outers.mjs');
+const { looseTierPrice } = await import('../../scripts/shimano/rebuild.mjs');
+
+// A cut-down Dura-Ace sheet, laid out as the real one is: a label row above
+// the headings, then a bare number heading each of the two loose columns.
+const OUTER_SHEET = [
+  ['', '', '', '', '', '', '', 'Price By the Outer ', 'Outers '],
+  ['CODE', 'DESCRIPTION', 'Outer', 'SRP', 1400, 1200, '', '', 'To Order '],
+  ['R9270DLR', 'STI LVR', 10, 599.99, 230, 197.15, '', 189.20, ''],
+  ['FCR9200PE26', 'Power 52/36', 8, 1199.99, '', '', '', 460, ''],
+  ['', '', '', '', '', '', '', '', 'TOTAL'],
+];
+
+const head = readHeader(OUTER_SHEET);
+eq('the headings are found by name, not by counting columns',
+   [head.code, head.outer, head.row], [0, 2, 1]);
+eq('and the two loose columns by being the only numbers on that row',
+   head.loose, [4, 5]);
+eq('the by-the-outer price is labelled a row above', byTheOuterColumn(OUTER_SHEET), 7);
+
+// Which of the two is ours is a commercial fact the sheet does not state, so
+// it is named rather than guessed — and the default is the one that cannot
+// cost margin if the guess is wrong.
+eq('the dearer loose price by default',
+   readSheet(OUTER_SHEET)[0], { sku: 'R9270DLR', outer: 10, below: 230, byTheOuter: 189.20 });
+eq('and the other one on request',
+   readSheet(OUTER_SHEET, { below: 'lower' })[0].below, 197.15);
+
+// A part the supplier prices by the carton and not at all below it. The outer
+// still applies; there is simply no second price, and inventing one would be
+// inventing a number.
+eq('an outer with no loose price keeps the outer and no price',
+   readSheet(OUTER_SHEET)[1], { sku: 'FCR9200PE26', outer: 8, below: null, byTheOuter: 460 });
+// A totals line has a figure and no code.
+eq('and a totals row is not a part', readSheet(OUTER_SHEET).length, 2);
+
+// A sheet with no Outer column is a range sold in ones, and contributes
+// nothing rather than defaulting everything to some quantity.
+eq('a sheet with no outer column yields nothing',
+   readSheet([['Code', 'Cost (no vat)'], ['BBUN300B07', 5.28]]), []);
+
+// ── what a tier pays for one ──────────────────────────────────────────────
+// Worked out from the row's own margin rather than a markup written down in
+// the script, so the two prices always sit at the same margin as each other.
+// Distributor at 204.34 on a cost of 189.20 is 8% over; one loose unit at a
+// cost of 230 is the same 8% over.
+eq('the loose price keeps the row\'s own margin',
+   Number(looseTierPrice(189.20, 204.34, 230).toFixed(2)), 248.40);
+eq('a row with no cost cannot have one worked out',
+   looseTierPrice(0, 204.34, 230), null);
+eq('nor can one with no tier price', looseTierPrice(189.20, null, 230), null);
+eq('nor one the supplier did not price loose', looseTierPrice(189.20, 204.34, null), null);
+// The loose cost is dearer, so the loose price must come out dearer too —
+// the invariant the database refuses to store a violation of.
+eq('and it comes out above the outer price',
+   looseTierPrice(189.20, 204.34, 230) > 204.34, true);
+
 process.exit(fail ? 1 : 0);

@@ -27,9 +27,41 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** The price columns, in the order a price list puts them. */
 const PRICES = ['Our cost', 'Distributor', 'Shop', 'Club', 'Retail'];
+
+/*
+ * The columns that have a second price for buying fewer than an outer.
+ *
+ * Retail is not one of them. It is the manufacturer's recommended price, the
+ * number on the box, and it does not change with how many boxes there are.
+ */
+const BY_THE_OUTER = ['Our cost', 'Distributor', 'Shop', 'Club'];
+export const underOuter = (column) => `${column} under outer`;
+
+/*
+ * Two prices per tier, the loose one first.
+ *
+ * Left to right is cheapest-last, which is the order somebody reads the sheet
+ * in: this is what one costs, and this is what one costs if you take the
+ * carton. Putting the outer price on the right also leaves the columns that
+ * were there before in the order they were in.
+ */
 const OUT_COLUMNS = [
-  'Name', 'SKU', 'Brand', 'Series', 'Model', 'Size', 'Category', 'Image', ...PRICES,
+  'Name', 'SKU', 'Brand', 'Series', 'Model', 'Size', 'Category', 'Image', 'Outer',
+  ...PRICES.flatMap((c) => (BY_THE_OUTER.includes(c) ? [underOuter(c), c] : [c])),
 ];
+
+/**
+ * What a tier pays for one loose unit.
+ *
+ * Worked out from the row's own outer price rather than from a markup written
+ * down here, so the two prices always sit at the same margin as each other. A
+ * sheet whose Distributor price is 8% over cost keeps being 8% over cost when
+ * the cost is the loose one, whatever that 8% was and whoever changes it next.
+ */
+export function looseTierPrice(outerCost, outerPrice, looseCost) {
+  if (!(outerCost > 0) || !(outerPrice > 0) || !(looseCost > 0)) return null;
+  return looseCost * (outerPrice / outerCost);
+}
 
 /**
  * A CSV reader that handles quotes, because a product name can contain a
@@ -67,9 +99,16 @@ export function toCsv(columns, rows) {
 }
 
 function main() {
-  const [input, output] = process.argv.slice(2);
+  const [input, output, ...rest] = process.argv.slice(2);
+  let outersFile = resolve(HERE, 'outers.json');
+  for (let i = 0; i < rest.length; i += 1) {
+    if (rest[i] === '--outers') outersFile = rest[++i];
+    else if (rest[i] === '--no-outers') outersFile = null;
+    else { console.error(`Unknown argument ${rest[i]}`); process.exit(2); }
+  }
   if (!input) {
-    console.error('usage: node scripts/shimano/rebuild.mjs <in.csv> [out.csv]');
+    console.error('usage: node scripts/shimano/rebuild.mjs <in.csv> [out.csv] '
+      + '[--outers outers.json | --no-outers]');
     process.exit(2);
   }
 
@@ -96,12 +135,48 @@ function main() {
   const imageFor = (r) =>
     images.skus?.[r.sku] ?? (r.model ? images.models?.[r.model] : null) ?? '';
 
-  const out = built.map((r) => ({
-    Name: r.name, SKU: r.sku, Brand: r.brand,
-    Series: r.series ?? '', Model: r.model ?? '', Size: r.size ?? '',
-    Category: r.category, Image: imageFor(r),
-    ...r.prices,
-  }));
+  /*
+   * The carton a part ships in, and what one costs outside it.
+   *
+   * Shimano sell by the outer and the prices on this sheet are outer prices,
+   * which was true before and written down nowhere. A customer ordering three
+   * of a part that comes in tens was being quoted the carton price and
+   * corrected at invoice time. Saying the quantity out loud, and carrying the
+   * loose price beside the outer one, is the whole of the fix.
+   */
+  const outers = outersFile
+    ? JSON.parse(readFileSync(resolve(outersFile), 'utf8'))
+    : { skus: {} };
+  const outerFor = (sku) => outers.skus?.[sku.trim().toUpperCase()] ?? null;
+
+  const money = (v) => {
+    const n = Number(String(v ?? '').replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const out = built.map((r) => {
+    const o = outerFor(r.sku);
+    const row = {
+      Name: r.name, SKU: r.sku, Brand: r.brand,
+      Series: r.series ?? '', Model: r.model ?? '', Size: r.size ?? '',
+      Category: r.category, Image: imageFor(r),
+      // An outer of one is not a minimum, so it is left blank rather than
+      // written on every row of a sheet where most parts are sold in ones.
+      Outer: o && o.outer > 1 ? String(o.outer) : '',
+      ...Object.fromEntries(BY_THE_OUTER.map((c) => [underOuter(c), ''])),
+      ...r.prices,
+    };
+    const outerCost = money(r.prices['Our cost']);
+    if (!o || o.below === null || o.below === undefined) return row;
+
+    row[underOuter('Our cost')] = o.below.toFixed(2);
+    for (const column of BY_THE_OUTER) {
+      if (column === 'Our cost') continue;
+      const loose = looseTierPrice(outerCost, money(r.prices[column]), o.below);
+      if (loose !== null) row[underOuter(column)] = loose.toFixed(2);
+    }
+    return row;
+  });
 
   const csv = toCsv(OUT_COLUMNS, out);
   // A byte-order mark, so a reader with no encoding to go on does not guess
@@ -113,11 +188,28 @@ function main() {
   const groups = new Set(built.filter((r) => r.model).map((r) => r.model));
   const grouped = built.filter((r) => r.model).length;
   const withImage = out.filter((r) => r.Image).length;
+  const withOuter = out.filter((r) => r.Outer).length;
+  const withLoose = out.filter((r) => r[underOuter('Distributor')]).length;
   console.error(
     `${out.length} rows · ${grouped} of them in ${groups.size} models · ` +
     `${out.length - grouped} sold on their own · ` +
     `${new Set(built.map((r) => r.series).filter(Boolean)).size} series · ` +
-    `${withImage} with a photograph`);
+    `${withImage} with a photograph · ` +
+    `${withOuter} with an outer, ${withLoose} of those priced loose`);
+
+  /*
+   * An outer quantity we have no price to go with, and a price we have no
+   * outer for, are both worth saying. The first sells below the carton at the
+   * carton price; the second is a part the workbook did not mention, which is
+   * either sold in ones or was missed.
+   */
+  const dumb = out.filter((r) => r.Outer && !r[underOuter('Distributor')]);
+  if (dumb.length) {
+    console.error(`  ! ${dumb.length} with an outer but no loose price: `
+      + `${dumb.slice(0, 6).map((r) => r.SKU).join(', ')}`
+      + `${dumb.length > 6 ? ', …' : ''}. These sell at the outer price `
+      + 'whatever the quantity, until the supplier prices a single.');
+  }
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) main();

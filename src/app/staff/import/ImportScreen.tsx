@@ -8,7 +8,7 @@ import {
   unclaimedMoneyColumns, extractRows, toNumber, type ParsedSheet,
 } from '@/lib/import/parse';
 import {
-  tierKey,
+  BREAK_COST, breakKey, tierKey,
   type CatalogueRow, type CataloguePreview, type ColumnMapping, type CostPreview,
   type ImportScope, type PricePreview, type SheetPlan,
 } from '@/lib/import/types';
@@ -67,6 +67,8 @@ const FIXED_FIELDS: Record<ImportScope, Field[]> = {
     { key: 'variant_group', label: 'Model (groups sizes)', required: false },
     { key: 'variant_label', label: 'Size', required: false },
     { key: 'price_note', label: 'Price note', required: false },
+    { key: 'moq', label: 'Outer (minimum for the advertised price)', required: false },
+    { key: BREAK_COST, label: 'Our cost under the outer', required: false },
     { key: 'cost', label: 'Our cost', required: false },
   ],
   clients: [
@@ -104,7 +106,12 @@ function fieldsFor(scope: ImportScope, tiers: Named[]): Field[] {
   if (scope !== 'prices') return FIXED_FIELDS[scope];
   return [
     ...FIXED_FIELDS.prices,
-    ...tiers.map((t) => ({ key: tierKey(t.id), label: `${t.name} price`, required: false })),
+    // Two per tier, the loose price first, which is the order the sheet puts
+    // them in and the order the screens show them in.
+    ...tiers.flatMap((t) => [
+      { key: breakKey(t.id), label: `${t.name} under the outer`, required: false },
+      { key: tierKey(t.id), label: `${t.name} price`, required: false },
+    ]),
   ];
 }
 
@@ -264,9 +271,15 @@ export default function ImportScreen({
           // Something unreadable in it is a problem, and reaches the server as
           // NaN so it can be reported rather than guessed at.
           const prices: Record<string, number> = {};
+          // And the price beside it, for a quantity below the outer. Read the
+          // same way and kept apart, because a tier priced by the outer with
+          // nothing said about loose units is the ordinary case.
+          const breakPrices: Record<string, number> = {};
           for (const tier of tiers) {
             const cell = r[tierKey(tier.id)];
             if (cell) prices[tier.id] = toNumber(cell);
+            const loose = r[breakKey(tier.id)];
+            if (loose) breakPrices[tier.id] = toNumber(loose);
           }
           return {
             sku: r.sku ?? '',
@@ -278,8 +291,13 @@ export default function ImportScreen({
             variant_group: r.variant_group ?? '',
             variant_label: r.variant_label ?? '',
             price_note: r.price_note ?? '',
+            // A blank outer is a part sold in ones, which is what an absent
+            // column already means, so both arrive as silence.
+            moq: r.moq ? toNumber(r.moq) : undefined,
             cost: r.cost ? toNumber(r.cost) : undefined,
+            breakCost: r[BREAK_COST] ? toNumber(r[BREAK_COST]) : undefined,
             prices,
+            breakPrices,
           };
         }),
       };

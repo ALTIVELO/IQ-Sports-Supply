@@ -22,6 +22,9 @@ const NOW = {
   image_url: 'https://cdn.example/old.jpg',
   price_note: null, category_id: 'cat-chainsets',
   variant_group: null, variant_label: null,
+  // Sold in ones, which is what most of a catalogue is and what every
+  // product was before outers existed.
+  moq: 1,
 };
 const keep = { clearBlanks: false };
 const wipe = { clearBlanks: true };
@@ -142,5 +145,33 @@ eq('a two-word column pluralises its last word',
    restatementLabel('price note', 3), 'price notes');
 eq('and one row is singular', restatementLabel('collection', 1), 'collection');
 eq('however awkward the word', restatementLabel('series', 1), 'series');
+
+// ── the outer ─────────────────────────────────────────────────────────────
+// A number, but the same three states as everything else: a sheet with no
+// Outer column says nothing about how a part is boxed.
+eq('a sheet with no outer column leaves the outer alone',
+   restatements({ sku: 'X', prices: {} }, NOW, keep), []);
+eq('an outer of ten against a part sold in ones is a change',
+   restatements({ sku: 'X', moq: 10, prices: {} }, NOW, keep)
+     .map((c) => [c.field, c.patch, c.from, c.to]),
+   [['outer', { moq: 10 }, '1', '10']]);
+eq('and the same outer again is not',
+   restatements({ sku: 'X', moq: 10, prices: {} }, { ...NOW, moq: 10 }, keep), []);
+eq('one against a part already sold in ones is not either',
+   restatements({ sku: 'X', moq: 1, prices: {} }, NOW, keep), []);
+
+// Blank is silence unless the import was told otherwise — the same rule the
+// image column follows, and for the same reason: a price list routinely
+// leaves a column empty on rows it has nothing to say about.
+eq('a blank outer is silence by default',
+   restatements({ sku: 'X', moq: NaN, prices: {} }, { ...NOW, moq: 10 }, keep), []);
+// Cleared means one, not nothing: every part has a minimum, and for most of
+// them it is one.
+eq('and clearing it puts the part back to ones',
+   restatements({ sku: 'X', moq: NaN, prices: {} }, { ...NOW, moq: 10 }, wipe)
+     .map((c) => [c.field, c.patch, c.to]),
+   [['outer', { moq: 1 }, null]]);
+eq('an outer of ten is ten outers',
+   restatementLabel('outer', 10), 'outers');
 
 process.exit(fail ? 1 : 0);
