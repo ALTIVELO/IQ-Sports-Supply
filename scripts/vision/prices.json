@@ -1,16 +1,19 @@
 {
   "_source": [
     "Vision's own quote to IQ, by email, 22 September 2026. Euros, excluding VAT.",
+    "Vision invoice from Italy, so euros is what they will actually bill.",
     "",
     "One price per model: a freehub does not change what a wheelset costs, so",
     "all three of them take their model's figure.",
     "",
     "These are here rather than read out of the Shopify export because the",
-    "export does not agree with them: every price in it is exactly 0.855 of the",
-    "quote — a 14.5% discount somebody applied on the way. Which of the two is",
-    "right is a question for Vision, and until it is answered the supplier's own",
-    "written quote is the one to buy against. rebuild.mjs reports the gap on",
-    "every run rather than quietly preferring one."
+    "export is in sterling, at an old rate. Every price in it is 0.8550 of the",
+    "quote to four places — one conversion applied to the whole file on one",
+    "day, not a discount, which would have landed on some lines and not",
+    "others. The euro figures are what Vision charges; the sterling ones are",
+    "worked out from them at a rate we choose, by rebuild.mjs --fx.",
+    "rebuild.mjs reports the gap on every run rather than quietly preferring",
+    "one."
   ],
   "currency": "EUR",
   "handles": {

@@ -7,7 +7,8 @@
 // this is about what the bare rows inherit and what they do not.
 const { flattenShopify, optionLabel, seriesOf, brandOf } =
   await import('../../scripts/vision/classify.mjs');
-const { parseCsv, toCsv } = await import('../../scripts/vision/rebuild.mjs');
+const { parseCsv, toCsv, landedCost, priceAtMargin, marginAsMarkup, tierNamed } =
+  await import('../../scripts/vision/rebuild.mjs');
 
 let fail = 0;
 const eq = (label, got, want) => {
@@ -119,5 +120,49 @@ eq('writing quotes only what needs it',
 eq('an em dash survives the round trip',
    parseCsv(toCsv(['Name'], [{ Name: 'Wheelset — Shimano freehub' }]))[0].Name,
    'Wheelset — Shimano freehub');
+
+// ── what the goods cost us, landed ────────────────────────────────────────
+// Vision quote in euros and invoice from Italy, so a sterling cost is the
+// quote converted and then cleared — in that order, because duty is charged
+// on the sterling value at the border, not on the euro one.
+eq('a quote is converted before it is dutied',
+   Number(landedCost(560, { fx: 0.89, duty: 0.04 }).toFixed(2)), 518.34);
+eq('and duty on the euro figure would be a different number',
+   Number((560 * 1.04 * 0.89).toFixed(2)), 518.34);
+// Which is to say the two orders happen to agree — multiplication commutes.
+// The order still matters for anyone reading it, and for a duty charged as
+// an amount rather than a rate, so it is written down the way customs does it.
+eq('no rate and no duty leaves the quote alone', landedCost(900), 900);
+eq('a rate on its own just converts', landedCost(1000, { fx: 0.89 }), 890);
+
+// ── margin, which is not markup ───────────────────────────────────────────
+// Twenty pence in every pound we take, so the cost is 80% of the price.
+eq('a 20% margin is the cost over 0.8', priceAtMargin(800, 0.2), 1000);
+eq('and leaves exactly that margin', (1000 - 800) / 1000, 0.2);
+// The trap: cost plus 20% leaves 16.7%, a fifth of the margin short.
+eq('cost plus 20% is not a 20% margin',
+   Number(((960 - 800) / 960).toFixed(4)), 0.1667);
+eq('a 20% margin is a 25% markup', marginAsMarkup(0.2), 0.25);
+eq('and a 15% margin is a 17.6% one',
+   Number((marginAsMarkup(0.15) * 100).toFixed(1)), 17.6);
+eq('nothing taken is the cost itself', priceAtMargin(500, 0), 500);
+// 100% margin is a price of infinity, and 120% is a negative one. Both are
+// somebody typing a markup into the margin flag.
+eq('a margin of 100% has no price', (() => {
+  try { priceAtMargin(500, 1); return 'no error'; } catch { return 'refused'; }
+})(), 'refused');
+eq('and neither does one over it', (() => {
+  try { priceAtMargin(500, 1.2); return 'no error'; } catch { return 'refused'; }
+})(), 'refused');
+
+// ── what the trade says, and what the column is called ────────────────────
+// "Teams" is the word out loud; Club is the column, because a cycling club
+// and a race team buy on the same terms.
+eq('teams are club', tierNamed('Teams'), 'Club');
+eq('however it is typed', tierNamed(' team '), 'Club');
+eq('a tier is its own name', tierNamed('distributor'), 'Distributor');
+eq('and a word for no tier we have is refused', (() => {
+  try { tierNamed('Wholesale'); return 'no error'; } catch { return 'refused'; }
+})(), 'refused');
 
 process.exit(fail ? 1 : 0);
