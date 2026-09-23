@@ -14,6 +14,9 @@ import { currencyOf } from '@/lib/format';
 import { totalsByCurrency } from '@/lib/orders/split';
 import { OuterNote } from '@/components/OuterPrice';
 import { hasOuter, priceAtQty } from '@/lib/catalogue/outer';
+import DropshipFields from '@/components/DropshipFields';
+import { emptyDropship, dropshipReady, dropshipPayload,
+         type DropshipState } from '@/lib/orders/dropship';
 
 /**
  * The basket, line by line, before committing to it.
@@ -26,10 +29,12 @@ import { hasOuter, priceAtQty } from '@/lib/catalogue/outer';
  * than as how the business works.
  */
 export default function BasketReview({
-  products, vatRate, paymentDays, addresses, company, agencyBrands,
+  products, vatRate, paymentDays, addresses, company, agencyBrands, dropshipTerms,
 }: {
   products: CatalogueItem[]; vatRate: number; paymentDays: number; addresses: Address[];
   company: string; agencyBrands: AgencyBrand[];
+  /** What a client accepts before we ship direct to their customer. */
+  dropshipTerms: string;
 }) {
   const { quantities, setQty, clear, ready } = useCart();
   const [placed, setPlaced] = useState<{
@@ -44,6 +49,7 @@ export default function BasketReview({
   const [addressId, setAddressId] = useState(
     () => addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? '',
   );
+  const [dropship, setDropship] = useState<DropshipState>(emptyDropship);
 
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
@@ -116,6 +122,7 @@ export default function BasketReview({
       const r = await placeClientOrder(
         lines.map((l) => ({ product_id: l.product.id, qty: l.qty })),
         addressId,
+        dropshipPayload(dropship),
       );
       if (r.ok) { setPlaced({ orders: r.orders ?? [], warning: r.warning }); clear(); }
       else setError(r.error ?? 'Could not place your order');
@@ -298,12 +305,22 @@ export default function BasketReview({
       <Card className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[15px] font-semibold">Deliver to</h2>
-          <Link href="/portal/account" className="text-[12px] text-flame-text font-semibold">
-            Manage addresses
-          </Link>
+          {!dropship.on && (
+            <Link href="/portal/account" className="text-[12px] text-flame-text font-semibold">
+              Manage addresses
+            </Link>
+          )}
         </div>
 
-        {addresses.length === 0 ? (
+        {/* The account's own addresses are put away while an order is going
+            direct, rather than left on screen greyed out: two addresses on
+            one card is exactly the confusion that sends a parcel to the shop
+            it was meant to bypass. */}
+        {dropship.on ? (
+          <p className="text-[12px] text-mute">
+            Going to your customer at the address below, not to your account.
+          </p>
+        ) : addresses.length === 0 ? (
           <Notice>
             You have no delivery address on your account yet.{' '}
             <Link href="/portal/account" className="font-semibold underline">
@@ -348,6 +365,13 @@ export default function BasketReview({
             ))}
           </div>
         )}
+
+        <DropshipFields
+          value={dropship}
+          onChange={setDropship}
+          terms={dropshipTerms}
+          disabled={pending}
+        />
       </Card>
 
       <Card>
@@ -378,13 +402,25 @@ export default function BasketReview({
             ))}
           </div>
           <Button kind="accent" onClick={checkout}
-                  disabled={pending || addresses.length === 0}>
+                  disabled={pending
+                    // An account with no address of its own can still send an
+                    // order direct: the address it needs is the one typed in.
+                    || (!dropship.on && addresses.length === 0)
+                    || !dropshipReady(dropship)}>
             {pending
               ? 'Placing…'
               : split ? `Place ${totals.length} orders` : 'Place order'}
           </Button>
         </div>
+        {dropship.on && !dropshipReady(dropship) && (
+          <p className="text-[11px] text-flame-text mt-2 text-right font-semibold">
+            {dropship.shipTo.trim()
+              ? 'Accept the delivery terms to place this order.'
+              : 'Add your customer\u2019s address to place this order.'}
+          </p>
+        )}
         <p className="text-[11px] text-mute mt-2 text-right">
+          {dropship.on && 'This order goes direct to your customer. '}
           {split ? 'An invoice per currency is' : 'An invoice is'} raised immediately, due{' '}
           {paymentDays} days from today. Nothing is dispatched until payment is received.
         </p>

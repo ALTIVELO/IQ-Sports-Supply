@@ -95,6 +95,14 @@ export interface DocLine { sku: string; name: string; qty: number; unit_price: n
 
 export interface DocData {
   invoiceNumber: string;
+  /**
+   * Going direct to the client's own customer.
+   *
+   * It changes who the label is addressed to — the customer, not the shop —
+   * and it is worth saying on the document, because the person packing it
+   * must not put anything with a trade price on it in the box.
+   */
+  dropship?: boolean;
   orderNumber: string;
   type: 'full' | 'shipment' | 'backorder' | 'proforma' | 'credit';
   /** Why a credit note was raised, or that a proforma asks for nothing. */
@@ -308,8 +316,18 @@ export function PackingListDocument({ d }: { d: DocData }) {
         <View style={s.parties}>
           <View>
             <Text style={s.label}>Deliver to</Text>
-            <Text style={s.strong}>{d.clientName}</Text>
-            {d.shipTo ? <Text style={s.addr}>{d.shipTo}</Text> : null}
+            {/* On a direct delivery the shop's name has no business on the
+                label: the parcel is addressed to their customer, and the
+                customer's name is the first line of ship_to. Printing both
+                puts a stranger's name above the address. */}
+            {d.dropship ? null : <Text style={s.strong}>{d.clientName}</Text>}
+            {d.shipTo ? <Text style={d.dropship ? s.strong : s.addr}>{d.shipTo}</Text> : null}
+            {d.dropship ? (
+              <Text style={[s.label, { marginTop: 6 }]}>
+                Direct to {d.clientName}&apos;s customer — no paperwork showing
+                trade prices in this box
+              </Text>
+            ) : null}
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={s.label}>Pack at</Text>

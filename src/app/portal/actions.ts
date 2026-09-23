@@ -39,6 +39,15 @@ export interface PortalResult {
 export async function placeClientOrder(
   lines: { product_id: string; qty: number }[],
   addressId?: string | null,
+  /**
+   * Straight to the client's own customer, where they have asked for it.
+   *
+   * Passed through rather than acted on here: place_order refuses a direct
+   * delivery with no address or no acceptance, and snapshots the wording
+   * itself, so a browser that lied about any of the three gets an error
+   * instead of an order.
+   */
+  dropship?: { shipTo: string; accepted: boolean } | null,
 ): Promise<PortalResult> {
   const user = await requireClient();
   const sb = await supabaseServer();
@@ -87,7 +96,12 @@ export async function placeClientOrder(
       p_notes: null,
       // place_order checks this belongs to the ordering client and falls back to
       // their default, so an id from the browser can only ever be their own.
+      // Ignored outright on a direct delivery: a saved address is the shop's,
+      // and using one would send their customer's parcel back to the shop.
       p_address_id: addressId || null,
+      p_dropship: Boolean(dropship),
+      p_ship_to: dropship?.shipTo ?? null,
+      p_accept_terms: Boolean(dropship?.accepted),
     });
 
     if (error) {

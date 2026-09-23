@@ -25,7 +25,7 @@ export default async function BasketPage() {
                category_slug, category_name, configurator_only`)
         .order('sku').range(from, to)),
       sb.from('clients').select('vat_exempt').eq('id', user.clientId).single(),
-      sb.from('settings').select('vat_rate, payment_days, company').eq('id', 1).single(),
+      sb.from('settings').select('vat_rate, payment_days, company, dropship_terms').eq('id', 1).single(),
       sb.from('client_addresses')
         .select('id, label, recipient, address, is_default')
         .eq('client_id', user.clientId).eq('active', true)
@@ -43,6 +43,7 @@ export default async function BasketPage() {
       paymentDays={Number(settings?.payment_days ?? 30)}
       addresses={(addresses ?? []) as Address[]}
       company={settings?.company ?? 'IQ Sports Supply'}
+      dropshipTerms={settings?.dropship_terms ?? ''}
       agencyBrands={(agency ?? []) as AgencyBrand[]}
     />
   );

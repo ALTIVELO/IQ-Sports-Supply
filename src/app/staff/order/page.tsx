@@ -88,7 +88,7 @@ export default async function OrderDeskPage() {
          { data: agency }] =
     await Promise.all([
       sb.from('tiers').select('id, name').order('sort'),
-      sb.from('settings').select('vat_rate, company').eq('id', 1).single(),
+      sb.from('settings').select('vat_rate, company, dropship_terms').eq('id', 1).single(),
       sb.from('categories').select('id, name, slug, sort, parent_id').order('sort'),
       // The build structure only — no prices. What a component costs this
       // client comes from the same tier table the rest of the desk uses, so a
@@ -166,6 +166,7 @@ export default async function OrderDeskPage() {
         builds={toBuilds(groups ?? [])}
         vatRate={Number(settings?.vat_rate ?? 20)}
         company={settings?.company ?? 'IQ Sports Supply'}
+        dropshipTerms={settings?.dropship_terms ?? ''}
         agencyBrands={(agency ?? []) as AgencyBrand[]}
       />
     </>

@@ -252,6 +252,14 @@ ${a.company}`,
 export function dropshipNotice(o: {
   company: string; brandName: string; orderNumber: string; date: string;
   clientName: string; shipTo: string;
+  /**
+   * Going to the shop's own customer rather than to the shop.
+   *
+   * The shop's name is then not part of the address: the parcel is addressed
+   * to their customer, whose name is the first line of shipTo, and printing
+   * both puts a stranger's name above it.
+   */
+  dropship?: boolean;
   lines: { sku: string; name: string; qty: number }[];
   portalUrl: string;
 }) {
@@ -266,8 +274,9 @@ ${o.lines.map((l) =>
   `  ${l.sku.padEnd(16)} ${String(l.qty).padStart(4)}  ${l.name}`).join('\n')}
 
 Deliver to
-  ${o.clientName}
+${o.dropship ? '' : `  ${o.clientName}\n`}\
 ${o.shipTo.split('\n').map((line) => `  ${line}`).join('\n')}
+${o.dropship ? `\n  (direct to ${o.clientName}'s customer)\n` : ''}\
 
 Mark it dispatched here, and add tracking if you have it — we pass that
 straight to the customer:

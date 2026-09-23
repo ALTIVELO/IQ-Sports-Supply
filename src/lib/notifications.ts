@@ -252,7 +252,7 @@ export async function notifyDropshipPartners(orderId: string) {
 
   const { data: order } = await db
     .from('orders')
-    .select(`number, date, ship_to, clients(name, address),
+    .select(`number, date, ship_to, dropship, clients(name, address),
              order_lines(sku, name, qty, product_id)`)
     .eq('id', orderId)
     .single();
@@ -295,6 +295,7 @@ export async function notifyDropshipPartners(orderId: string) {
       date: order.date,
       clientName: client?.name ?? '',
       shipTo: order.ship_to ?? client?.address ?? '',
+      dropship: Boolean(order.dropship),
       lines: mine.map((l) => ({ sku: l.sku, name: l.name, qty: l.qty })),
       portalUrl: `${appUrl()}/brand/dispatch`,
     });

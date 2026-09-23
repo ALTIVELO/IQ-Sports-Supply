@@ -21,7 +21,7 @@ const BASE_SELECT = `*, orders(number),
              locations(name),
              invoice_lines(sku, name, qty, unit_price)`;
 
-const FULL_SELECT = `*, orders(number, ship_to, agency_terms, brands!orders_agent_brand_id_fkey(name)),
+const FULL_SELECT = `*, orders(number, ship_to, dropship, agency_terms, brands!orders_agent_brand_id_fkey(name)),
              clients(name, address, invoicing_address, vat_no),
              locations(name),
              invoice_lines(sku, name, qty, unit_price)`;
@@ -93,7 +93,7 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     invoicing_address?: string | null; vat_no: string | null;
   };
   const order = inv.orders as {
-    number: string; ship_to?: string | null;
+    number: string; ship_to?: string | null; dropship?: boolean | null;
     agency_terms?: string | null; brands?: { name: string } | null;
   };
   const lines = (inv.invoice_lines ?? []) as DocData['lines'];
@@ -121,6 +121,7 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     // never changes where a past order says it went. Orders placed before
     // addresses existed fall back to the one address the client had.
     shipTo: order.ship_to ?? client.address,
+    dropship: Boolean(order.dropship),
     clientVatNo: client.vat_no,
     company: settings.company,
     companyAddress: settings.company_address,

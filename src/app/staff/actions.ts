@@ -65,6 +65,13 @@ export async function placeOrder(input: {
   locationId: string;
   lines: DraftLine[];
   notes?: string;
+  /**
+   * Straight to the client's own customer, where they have asked for it on
+   * the phone. The same three facts the portal sends, and the same function
+   * refuses them: an address, and somebody accepting the terms on the
+   * client's behalf.
+   */
+  dropship?: { shipTo: string; accepted: boolean } | null;
 }): Promise<ActionResult> {
   await requireStaff();
   const sb = await supabaseServer();
@@ -101,6 +108,9 @@ export async function placeOrder(input: {
         unit_price: l.unit_price ?? null,
       })),
       p_notes: input.notes ?? null,
+      p_dropship: Boolean(input.dropship),
+      p_ship_to: input.dropship?.shipTo ?? null,
+      p_accept_terms: Boolean(input.dropship?.accepted),
     });
 
     if (error) {

@@ -8,6 +8,9 @@ import { totalsByCurrency } from '@/lib/orders/split';
 import { priceRange, tierPrice } from '@/lib/orders/tier-price';
 import OuterPrice, { OuterNote } from '@/components/OuterPrice';
 import { hasOuter, priceAtQty } from '@/lib/catalogue/outer';
+import DropshipFields from '@/components/DropshipFields';
+import { emptyDropship, dropshipReady, dropshipPayload,
+         type DropshipState } from '@/lib/orders/dropship';
 import ProductImage from '@/components/ProductImage';
 import CollectionPicker from '@/components/CollectionPicker';
 import { groupCollections, idsUnderSlug, type CategoryLite } from '@/lib/catalogue/collections';
@@ -48,12 +51,14 @@ interface DraftLine {
 
 export default function OrderDesk({
   clients, locations, tiers, products, categories, builds, vatRate,
-  company, agencyBrands,
+  company, agencyBrands, dropshipTerms,
 }: {
   clients: ClientRow[]; locations: Named[]; tiers: Named[];
   products: DeskProduct[]; categories: CategoryLite[];
   builds: Build[]; vatRate: number;
   company: string; agencyBrands: AgencyBrand[];
+  /** What a client accepts before we ship direct to their customer. */
+  dropshipTerms: string;
 }) {
   const [clientId, setClientId] = useState('');
   const [locationId, setLocationId] = useState('');
@@ -63,6 +68,7 @@ export default function OrderDesk({
   const [openBuild, setOpenBuild] = useState<string | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
+  const [dropship, setDropship] = useState<DropshipState>(emptyDropship);
   const [placed, setPlaced] = useState<{ id: string; warning?: string } | null>(null);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
@@ -74,6 +80,7 @@ export default function OrderDesk({
   function chooseClient(id: string) {
     setClientId(id);
     setLines([]);
+    setDropship(emptyDropship);
     setPlaced(null);
     setError('');
     const c = clients.find((x) => x.id === id);
@@ -290,6 +297,7 @@ export default function OrderDesk({
           unit_price: l.unitPrice !== l.tierPrice ? l.unitPrice : null,
         })),
         notes: notes.trim() || undefined,
+        dropship: dropshipPayload(dropship),
       });
       if (result.ok) {
         setPlaced({ id: result.orderId!, warning: result.warning });
@@ -365,6 +373,16 @@ export default function OrderDesk({
                 <div className="text-[12px] font-semibold mb-1.5">Order note</div>
                 <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
+
+              {/* The same control and the same wording the client would see
+                  in the portal — taking the order on the phone must not
+                  produce a different record of what was agreed. */}
+              <DropshipFields
+                value={dropship}
+                onChange={setDropship}
+                terms={dropshipTerms}
+                disabled={pending}
+              />
             </>
           )}
 
@@ -697,11 +715,21 @@ export default function OrderDesk({
                   </div>
                 </div>
               ))}
-              <Button kind="accent" onClick={submit} disabled={pending || !locationId}>
+              <Button kind="accent" onClick={submit}
+                      disabled={pending || !locationId || !dropshipReady(dropship)}>
                 {pending
                   ? 'Placing…'
                   : split ? `Place ${totals.length} orders` : 'Place order'}
               </Button>
+              {/* Said rather than left as a dead button: the person is on the
+                  phone and needs to know what to ask for next. */}
+              {dropship.on && !dropshipReady(dropship) && (
+                <p className="text-[11px] text-flame-text font-semibold">
+                  {dropship.shipTo.trim()
+                    ? 'Read the terms to the client and tick the box to place this.'
+                    : 'Take their customer\u2019s address first.'}
+                </p>
+              )}
             </div>
           )}
         </Card>

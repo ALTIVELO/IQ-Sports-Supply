@@ -19,7 +19,9 @@ export default async function OrderHistory({
 
   const [{ data: orders }, { data: settings }] = await Promise.all([
     sb.from('orders')
-      .select(`id, number, date, status, currency, agency_terms, brands!orders_agent_brand_id_fkey(name),
+      .select(`id, number, date, status, currency, agency_terms,
+               dropship, ship_to, dropship_terms, dropship_accepted_at,
+               brands!orders_agent_brand_id_fkey(name),
                order_lines(id, sku, name, qty, unit_price, bo_qty),
                invoices(id, number, paid, shipped, shipped_at, delivered, superseded)`)
       .eq('client_id', user.clientId)
@@ -121,6 +123,25 @@ export default async function OrderHistory({
                   brand={(o.brands as unknown as { name: string } | null)?.name}
                   company={company}
                 />
+
+                {/* What was agreed, in the wording that was on the screen at
+                    the time. This is the client's own copy of it: the moment
+                    it matters is the moment a parcel is at the wrong door,
+                    and by then nobody remembers what the box said. */}
+                {o.dropship && (
+                  <div className="mt-3 border border-line rounded p-3 bg-parch">
+                    <div className="text-[12px] font-semibold">Sent direct to your customer</div>
+                    <div className="text-[12px] text-mute whitespace-pre-line mt-1 leading-relaxed">
+                      {o.ship_to}
+                    </div>
+                    {o.dropship_terms && (
+                      <div className="text-[11px] text-mute mt-2 leading-relaxed">
+                        Accepted{o.dropship_accepted_at
+                          ? ` on ${fmtDate(o.dropship_accepted_at)}` : ''}: {o.dropship_terms}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="overflow-x-auto mt-3">
                   <table>

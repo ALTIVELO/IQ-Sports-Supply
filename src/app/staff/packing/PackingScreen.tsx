@@ -15,7 +15,7 @@ interface Inv {
   delivered: boolean; delivered_at: string | null;
   carrier: string | null; tracking_number: string | null; tracking_url: string | null;
   clients: { name: string; address: string | null };
-  orders: { number: string };
+  orders: { number: string; dropship: boolean | null; ship_to: string | null };
   invoice_lines: { sku: string; name: string; qty: number }[];
 }
 interface Named { id: string; name: string }
@@ -133,6 +133,9 @@ function PackRow({
         {inv.delivered
           ? <Tag tone="green">Delivered</Tag>
           : inv.shipped && <Tag tone="line">Shipped</Tag>}
+        {/* The packer has to know before opening the packing list: a box going
+            to a consumer must not have anything with a trade price in it. */}
+        {inv.orders.dropship && <Tag tone="amber">Direct to customer</Tag>}
 
         <div className="ml-auto flex flex-wrap gap-1.5">
           <a

@@ -37,7 +37,8 @@ export default async function PackingPage({
 
   const select = `id, number, type, date, paid, paid_date, ready_to_pack, packed, packed_at,
                   shipped, shipped_at, delivered, delivered_at, carrier, tracking_number, tracking_url,
-                  clients(name, address), orders(number), invoice_lines(sku, name, qty)`;
+                  clients(name, address), orders(number, dropship, ship_to),
+                  invoice_lines(sku, name, qty)`;
 
   const [{ data: queue }, { data: waiting }, { data: recent }] = await Promise.all([
     // Ready to pack: paid AND the stock is physically here.
