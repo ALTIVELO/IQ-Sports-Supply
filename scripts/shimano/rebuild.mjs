@@ -90,6 +90,75 @@ export function looseTierPrice(outerPrice, uplift) {
 }
 
 /**
+ * Another way to tell two parts of one model apart, where the size alone
+ * cannot.
+ *
+ * Read from the supplier's own words, and used only where it is needed: a
+ * chainset range whose sizes are already distinct does not want "12-speed"
+ * appended to every one of them.
+ */
+const DISCRIMINATORS = [
+  ['speed', (text) => {
+    const m = String(text ?? '').match(/\b(\d{1,2})\s*-?\s*speed\b/i);
+    return m ? `${m[1]}-speed` : null;
+  }],
+  ['ring count', (text) => (/\bsingle\b/i.test(text) ? '1x'
+    : /\btriple\b/i.test(text) ? '3x'
+    : /\bdouble\b/i.test(text) ? '2x' : null)],
+];
+
+/**
+ * Two sizes of one model that read the same are one product hidden behind
+ * another.
+ *
+ * The catalogue shows a model once with its sizes underneath, so two rows
+ * both labelled "46/30 170mm" in one range are a customer picking whichever
+ * the screen lists first. Madison's list has exactly that: the FC-RX6001 in
+ * ten-speed and in eleven-speed, identical in every other respect.
+ *
+ * Rather than put the speed on every chainset in the catalogue to catch the
+ * one range that needs it, the extra word is added only where a model would
+ * otherwise collide. A model nothing can separate is ungrouped altogether and
+ * reported: separate products is honest, and both are better than a range
+ * that quietly loses a member.
+ */
+export function separateSizes(rows, textFor) {
+  const byModel = new Map();
+  for (const r of rows) {
+    if (!r.model) continue;
+    byModel.set(r.model, [...(byModel.get(r.model) ?? []), r]);
+  }
+
+  const clashes = (list) => new Set(list.map((r) => r.size)).size !== list.length;
+  const separated = [];
+  const ungrouped = [];
+
+  for (const [model, members] of byModel) {
+    if (!clashes(members)) continue;
+
+    let fixed = false;
+    for (const [axis, read] of DISCRIMINATORS) {
+      const values = members.map((r) => read(textFor(r)));
+      // Every member has to carry the axis, or the labels stop being
+      // comparable: "46/30 170mm" beside "46/30 170mm 11-speed" reads as the
+      // same part described twice.
+      if (values.some((v) => v === null)) continue;
+      const tried = members.map((r, i) => ({ ...r, size: `${r.size} ${values[i]}`.trim() }));
+      if (clashes(tried)) continue;
+      members.forEach((r, i) => { r.size = tried[i].size; });
+      separated.push({ model, axis, count: members.length });
+      fixed = true;
+      break;
+    }
+    if (fixed) continue;
+
+    for (const r of members) { r.model = null; r.size = null; }
+    ungrouped.push({ model, count: members.length });
+  }
+  return { separated, ungrouped };
+}
+
+/**
  * A CSV reader that handles quotes, because a product name can contain a
  * comma and a sheet that splits on every comma turns one into two.
  */
@@ -127,14 +196,32 @@ export function toCsv(columns, rows) {
 function main() {
   const [input, output, ...rest] = process.argv.slice(2);
   let outersFile = resolve(HERE, 'outers.json');
+  /*
+   * Three states, and the difference between the last two is the point.
+   *
+   *   a file   the carton quantities in it apply;
+   *   --no-outers  the sheet says nothing about outers, so whatever the
+   *                catalogue already holds is left alone;
+   *   --outers none  the sheet states an outer of one on every row, which
+   *                  clears any minimum we are holding.
+   *
+   * Madison have asked for an MOQ of one while the account is established, so
+   * the sheet has to say so rather than fall silent — silence would leave the
+   * fifty-seven parts already carrying a carton quantity behind a minimum the
+   * supplier has withdrawn.
+   */
+  let statesOnes = false;
   for (let i = 0; i < rest.length; i += 1) {
-    if (rest[i] === '--outers') outersFile = rest[++i];
-    else if (rest[i] === '--no-outers') outersFile = null;
+    if (rest[i] === '--outers') {
+      const next = rest[++i];
+      if (next === 'none') { outersFile = null; statesOnes = true; }
+      else outersFile = next;
+    } else if (rest[i] === '--no-outers') outersFile = null;
     else { console.error(`Unknown argument ${rest[i]}`); process.exit(2); }
   }
   if (!input) {
     console.error('usage: node scripts/shimano/rebuild.mjs <in.csv> [out.csv] '
-      + '[--outers outers.json | --no-outers]');
+      + '[--outers <outers.json|none> | --no-outers]');
     process.exit(2);
   }
 
@@ -156,6 +243,13 @@ function main() {
   })).filter((r) => r.sku);
 
   const built = rebuildSheet(rows);
+
+  // The supplier's own wording per SKU, for telling apart two sizes that come
+  // out the same. rebuildSheet rewrites names into catalogue names, and the
+  // word that separates them — "11-speed" — is one it drops.
+  const sourceName = new Map(rows.map((r) => [r.sku, r.name]));
+  const { separated, ungrouped } =
+    separateSizes(built, (r) => sourceName.get(r.sku) ?? r.name);
 
   const images = JSON.parse(readFileSync(resolve(HERE, 'images.json'), 'utf8'));
   const imageFor = (r) =>
@@ -193,7 +287,7 @@ function main() {
       Category: r.category, Image: imageFor(r),
       // An outer of one is not a minimum, so it is left blank rather than
       // written on every row of a sheet where most parts are sold in ones.
-      Outer: o && o.outer > 1 ? String(o.outer) : '',
+      Outer: o && o.outer > 1 ? String(o.outer) : (statesOnes ? '1' : ''),
       ...Object.fromEntries(BY_THE_OUTER.map((c) => [underOuter(c), ''])),
       ...r.prices,
     };
@@ -220,14 +314,26 @@ function main() {
   const groups = new Set(built.filter((r) => r.model).map((r) => r.model));
   const grouped = built.filter((r) => r.model).length;
   const withImage = out.filter((r) => r.Image).length;
-  const withOuter = out.filter((r) => r.Outer).length;
+  const withOuter = out.filter((r) => Number(r.Outer) > 1).length;
   const withLoose = out.filter((r) => r[underOuter('Distributor')]).length;
   console.error(
     `${out.length} rows · ${grouped} of them in ${groups.size} models · ` +
     `${out.length - grouped} sold on their own · ` +
     `${new Set(built.map((r) => r.series).filter(Boolean)).size} series · ` +
     `${withImage} with a photograph · ` +
-    `${withOuter} with an outer, ${withLoose} of those priced loose`);
+    `${withOuter} with an outer, ${withLoose} of those priced loose`
+    + (statesOnes ? ' · every row states an outer of 1' : ''));
+
+  for (const d of separated) {
+    console.error(`  · ${d.model}: ${d.count} sizes read the same, so each now `
+      + `carries its ${d.axis} as well.`);
+  }
+  for (const u of ungrouped) {
+    console.error(`  ! ${u.model}: ${u.count} parts nothing on this sheet tells `
+      + 'apart, so they import as products in their own right rather than as '
+      + 'sizes of one. A range that loses a member is worse than no range.');
+  }
+
 
   /*
    * An outer quantity we have no price to go with, and a price we have no
@@ -235,7 +341,7 @@ function main() {
    * carton price; the second is a part the workbook did not mention, which is
    * either sold in ones or was missed.
    */
-  const dumb = out.filter((r) => r.Outer && !r[underOuter('Distributor')]);
+  const dumb = out.filter((r) => Number(r.Outer) > 1 && !r[underOuter('Distributor')]);
   if (dumb.length) {
     console.error(`  ! ${dumb.length} with an outer but no loose price: `
       + `${dumb.slice(0, 6).map((r) => r.SKU).join(', ')}`

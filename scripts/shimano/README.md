@@ -1,9 +1,17 @@
 # Rebuilding a Shimano price list
 
 ```bash
-node scripts/shimano/outers.mjs <groupset-workbook.xlsx> scripts/shimano/outers.json
-node scripts/shimano/rebuild.mjs <supplier-sheet.csv> <out.csv>
+# Madison's master list → a priced sheet → the catalogue sheet
+node scripts/shimano/madison.mjs <master.xlsx> priced.csv
+node scripts/shimano/rebuild.mjs priced.csv <out.csv> --outers none
 ```
+
+`--outers none` is the September 2026 position: Madison have asked for an MOQ
+of one while the account is established, so every row states an outer of 1.
+That is a statement, not silence — silence would leave the fifty-seven parts
+already carrying a carton quantity behind a minimum the supplier has
+withdrawn. When outer-box pricing comes back, swap it for `--outers
+outers.json` and the section below applies again.
 
 The supplier's sheet is a picking list: one row per orderable part, named the
 way a warehouse names things — `C/SET D/Ace R9200 52/36 172.5mm`. That is right
@@ -48,6 +56,74 @@ least two rows share a model and differ:
 The series is part of the grouping key, and that is the case it exists for: the
 Dura-Ace and Ultegra power meters are called exactly `Power 52 / 36 - double -
 170 mm` and differ by £105. Without it they would be one product at one price.
+
+## Madison's master list
+
+`madison.mjs` reads the supplier's own workbook — Description, Notes, Madison
+Code, Barcode, SRP, UOM, IQ Sports Price — and writes the priced sheet
+`rebuild.mjs` expects.
+
+It is a printed catalogue rather than a data file, and three things about it
+need saying:
+
+**Headings carry the meaning.** A section heading has no code against it, and
+the rows under it are often variants rather than products: "50 / 34 - double -
+170 mm" is a chainset solely because of the heading four rows above. A
+description that names its own range is kept as the supplier wrote it; one
+that does not is given the heading it sat under.
+
+**Sections say what a part is; model headings do not.** The sheet mixes
+"Cassettes" with "Dura-Ace R9270 Di2 - 12-speed - E-tube fit for SD300 wires",
+and reading the second as a section filed every Dura-Ace shifter under
+electronics because its heading mentions wires. A heading carrying a Shimano
+model code — three or four digits with at most two letters in front — is
+skipped, and the walk continues up to the real section.
+
+**A part listed twice is one part.** 534 rows carry 351 codes: a pedal appears
+under Dura-Ace and again under Pedals. The first wins, and a repeat at a
+different price is reported rather than resolved, because then it is not the
+same part.
+
+### The 5% buffer
+
+Madison quote this list as a quote. Their words: *"this should be treated as a
+quote and not the final price … the final price may have to change by a % here
+and there"*. A trade price list cannot move every time theirs does, so
+`--buffer` (default 5%) is the margin of error we price from.
+
+It goes into the cost, not on to the tiers, because that is where it has to be
+for the tiers to inherit it — buffer first, standard rates on the buffered
+figure. The consequence is that Our cost on this sheet is what we expect to
+pay rather than what the quote says today, which is the point of it and worth
+knowing when reading a margin off it.
+
+It is deliberately **not** written into Price note: that column is shown to
+customers, and what we pay is not their business.
+
+### The standard rates
+
+`--tiers "Distributor=8,Shop=12,Club=18"`, which is what this catalogue has
+always used — read off the prices already published, where a cost of 189.20
+gives 204.34, 211.91 and 223.26. Stated in the script rather than rediscovered
+each time, because a rate nobody can find is a rate nobody can change.
+
+### Two sizes that read the same
+
+The catalogue shows a model once with its sizes underneath, so two rows both
+labelled "46/30 170mm" are a customer picking whichever the screen lists
+first. Madison's list has exactly that — the FC-RX6001 in ten-speed and
+eleven-speed, identical otherwise.
+
+Rather than put the speed on every chainset to catch the one range that needs
+it, the extra word is added only where a model would otherwise collide, and
+every run says which:
+
+```
+· FC-RX6001-CHAINSETS: 9 sizes read the same, so each now carries its speed as well.
+```
+
+A model nothing separates is ungrouped altogether and reported. A range that
+quietly loses a member is worse than no range.
 
 ## Outers, and the price for fewer than one
 

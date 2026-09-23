@@ -189,7 +189,7 @@ eq('and every member of a group shares its key',
 // loose-unit prices side by side without saying which of the two is ours.
 const { readHeader, readSheet, byTheOuterColumn } =
   await import('../../scripts/shimano/outers.mjs');
-const { looseTierPrice } = await import('../../scripts/shimano/rebuild.mjs');
+const { looseTierPrice, separateSizes } = await import('../../scripts/shimano/rebuild.mjs');
 
 // A cut-down Dura-Ace sheet, laid out as the real one is: a label row above
 // the headings, then a bare number heading each of the two loose columns.
@@ -247,5 +247,60 @@ eq('the loose price always comes out above the outer price',
    looseTierPrice(204.34, 0.05) > 204.34, true);
 eq('no uplift would make them equal, which is allowed but not what we do',
    looseTierPrice(204.34, 0), 204.34);
+
+// ── two sizes of one model that read the same ─────────────────────────────
+// The catalogue shows a model once with its sizes underneath, so two rows
+// both labelled "46/30 170mm" are a customer picking whichever the screen
+// lists first. Madison's list has exactly that: the FC-RX6001 in ten-speed
+// and eleven-speed, identical in every other respect.
+const text = new Map([
+  ['A', '46 / 30 - double - 11-speed - 170 mm'],
+  ['B', '46 / 30 - double - 10-speed - 170 mm'],
+]);
+const clashing = [
+  { sku: 'A', model: 'FC-RX6001-CHAINSETS', size: '46/30 170mm' },
+  { sku: 'B', model: 'FC-RX6001-CHAINSETS', size: '46/30 170mm' },
+];
+const outcome = separateSizes(clashing, (r) => text.get(r.sku));
+eq('the speed separates them', clashing.map((r) => r.size),
+   ['46/30 170mm 11-speed', '46/30 170mm 10-speed']);
+eq('and it is reported as what it did',
+   outcome.separated.map((s) => [s.model, s.axis, s.count]),
+   [['FC-RX6001-CHAINSETS', 'speed', 2]]);
+eq('with nothing ungrouped', outcome.ungrouped, []);
+
+// A range whose sizes are already distinct is left exactly alone — the whole
+// catalogue does not want "12-speed" appended to catch the one range that
+// needs it.
+const clean = [
+  { sku: 'A', model: 'M', size: '50/34 170mm' },
+  { sku: 'B', model: 'M', size: '52/36 170mm' },
+];
+separateSizes(clean, () => '12-speed');
+eq('a range that reads fine is untouched', clean.map((r) => r.size),
+   ['50/34 170mm', '52/36 170mm']);
+
+// Every member has to carry the axis, or the labels stop being comparable:
+// "46/30 170mm" beside "46/30 170mm 11-speed" reads as one part described
+// twice rather than as two parts.
+const partial = [
+  { sku: 'A', model: 'M', size: 'X' },
+  { sku: 'B', model: 'M', size: 'X' },
+];
+const half = separateSizes(partial, (r) => (r.sku === 'A' ? '11-speed' : 'no axis here'));
+eq('an axis only some of them have is not used',
+   partial.map((r) => [r.model, r.size]), [[null, null], [null, null]]);
+eq('and the range is ungrouped and said out loud',
+   half.ungrouped.map((u) => [u.model, u.count]), [['M', 2]]);
+
+// A single chainring is a ring specification as much as a pair is: "40T" and
+// "42T" at one crank length are two products, and reading only the length
+// gave both the same size.
+eq('a single ring counts as a size',
+   sizeOf({ name: 'FC-RX8201 40T - single - 12-speed - 170mm', category: 'chainsets' }),
+   '40T 170mm');
+eq('and a pair still does',
+   sizeOf({ name: 'FC-R9200 50 / 34 - double - 170 mm', category: 'chainsets' }),
+   '50/34 170mm');
 
 process.exit(fail ? 1 : 0);

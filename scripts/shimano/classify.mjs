@@ -112,8 +112,18 @@ const cassette = (name) => {
 
 /** "52/36", however the sheet punctuates it. */
 const chainring = (name) => {
-  const m = name.match(/(\d{2})\s*\/\s*(\d{2})\b/);
-  return m ? `${m[1]}/${m[2]}` : null;
+  const pair = name.match(/(\d{2})\s*\/\s*(\d{2})\b/);
+  if (pair) return `${pair[1]}/${pair[2]}`;
+  /*
+   * A single ring is a ring specification as much as a pair is.
+   *
+   * Gravel chainsets are sold one ring at a time — "40T - single" and "42T -
+   * single" are two products at one crank length, and reading only the length
+   * out of them gave both the same size. Two sizes that are the same size are
+   * one product hidden behind another.
+   */
+  const single = name.match(/\b(\d{2})\s*T\b/i);
+  return single ? `${single[1]}T` : null;
 };
 
 /** "172.5mm", "900mm", "1700mm". */
