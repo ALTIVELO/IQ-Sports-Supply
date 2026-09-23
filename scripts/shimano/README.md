@@ -218,3 +218,26 @@ Anything still missing stays blank and draws the placeholder.
 
 Photographs can also be uploaded one at a time on the Catalogue screen, which
 is the quicker path for a handful.
+
+## What a whole groupset comes to
+
+```bash
+node scripts/shimano/groupset-prices.mjs <catalogue.csv> [--itemise]
+```
+
+The builder sells a groupset as its parts — thirteen lines, each at its own
+price, so a customer can change any of them. That is right for ordering and
+useless for answering "what does a Dura-Ace groupset cost", which is the
+question a shop asks first and the one the screen cannot answer until
+everything has been chosen.
+
+Rotors and wires are in: a groupset without brakes or wiring is not one. The
+bottom bracket is out, and there is nothing to leave out — the builder has no
+bottom bracket step, because which cups a frame takes is a property of the
+frame. It is priced separately at the foot of the output so that is not
+mistaken for not needing one.
+
+Every choice moves the total, so the headline is one stated specification and
+the swing between the cheapest and dearest of everything the builder would
+allow is printed under it. A quote built on the cheapest of everything is a
+quote somebody will be held to.
