@@ -543,6 +543,26 @@ export async function applyCatalogue(input: {
     if (stale.length) await sb.from('products').update({ active: false }).in('id', stale);
   }
 
+  /*
+   * The builders re-read the catalogue.
+   *
+   * A build step holds a rule — "every EWSD300 with a length in its name" —
+   * and was filled once, when it was created. Madison's list carried fourteen
+   * wire lengths where the old sheet had two; they imported, they were priced,
+   * and the builder went on offering the two it had been born with. Anything
+   * an import adds, renames or withdraws can change what belongs on a step, so
+   * this runs at the end of every one.
+   *
+   * Never allowed to fail the import: the prices are in and committed by now,
+   * and a build offering last week's options is a worse thing to report as an
+   * import that did not happen.
+   */
+  try {
+    await sb.rpc('refresh_group_options');
+  } catch {
+    // Reported by the build screens looking thin, not by losing the prices.
+  }
+
   await sb.from('price_imports').insert({
     tier_id: priced.length === 1 ? priced[0].id : null,
     filename: input.filename,
