@@ -1,6 +1,7 @@
 import React from 'react';
 import { Document, Page, Text as PdfText, View, StyleSheet } from '@react-pdf/renderer';
 import { fmtDate, money, totals } from '@/lib/format';
+import { legalFooter } from '@/lib/company';
 import { agencyHeading, agencyLines } from '@/lib/orders/agency';
 
 /*
@@ -83,6 +84,10 @@ const s = StyleSheet.create({
   grandText: { fontSize: 14, fontFamily: 'Helvetica-Bold' },
   footer: { position: 'absolute', bottom: 30, left: 40, right: 40, fontSize: 7,
             color: MUTE, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 8 },
+  // Under the footer rule, not above it: the trading line keeps the border
+  // and this sits below as the small print it is. 20pt clears it.
+  legal: { position: 'absolute', bottom: 20, left: 40, right: 40, fontSize: 6,
+           color: MUTE },
   badge: { color: FLAME, fontFamily: 'Helvetica-Bold', fontSize: 8 },
   agency: { borderWidth: 1, borderColor: FLAME, padding: 10, marginBottom: 16 },
   agencyHead: { fontFamily: 'Helvetica-Bold', fontSize: 8, textTransform: 'uppercase',
@@ -290,6 +295,16 @@ export function InvoiceDocument({ d }: { d: DocData }) {
           <Text key={note} style={{ marginTop: 6, color: MUTE }}>{note}</Text>
         ))}
 
+        {/*
+          * Two lines, because they say different things.
+          *
+          * The first is the trading line and what this document is — the
+          * company as a customer knows it, and whether anything is due. The
+          * second is the statutory disclosure: registered name, number and
+          * office, which have to appear whether or not they match the address
+          * at the top, and which nobody reads until they need to.
+          */}
+        <Text style={s.legal} fixed>{legalFooter()}</Text>
         <Text style={s.footer} fixed>
           {d.company} · {d.companyAddress}
           {d.type === 'proforma'

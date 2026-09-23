@@ -11,6 +11,8 @@ rm -rf .test-build
 $TSC src/lib/catalogue/*.ts --outDir .test-build/catalogue >/dev/null 2>&1
 $TSC src/lib/app-url.ts     --outDir .test-build/lib       >/dev/null 2>&1
 $TSC src/lib/format.ts      --outDir .test-build/lib       >/dev/null 2>&1
+# Who we are, legally — the invoice footer reads it.
+$TSC src/lib/company.ts     --outDir .test-build/lib       >/dev/null 2>&1
 $TSC src/lib/login/*.ts     --outDir .test-build/login     >/dev/null 2>&1
 $TSC src/lib/import/*.ts    --outDir .test-build/import    >/dev/null 2>&1
 $TSC src/lib/reporting/*.ts --outDir .test-build/reporting >/dev/null 2>&1

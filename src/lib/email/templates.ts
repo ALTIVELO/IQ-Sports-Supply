@@ -1,5 +1,6 @@
 import { fmtDate, money, totals } from '@/lib/format';
 import { agencyHeading, agencyLines } from '@/lib/orders/agency';
+import { legalFooter } from '@/lib/company';
 
 interface Line { sku: string; name: string; qty: number; unit_price: number }
 
@@ -57,7 +58,8 @@ the order here at any time:
 
   ${o.portalUrl}
 
-${o.company}`,
+${o.company}
+${legalFooter()}`,
     };
   }
 
@@ -86,7 +88,8 @@ been received; you can follow its progress at any time here:
 
   ${o.portalUrl}
 
-${o.company}`,
+${o.company}
+${legalFooter()}`,
   };
 }
 
