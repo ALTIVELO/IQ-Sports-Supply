@@ -2,7 +2,7 @@
 
 ```bash
 # Madison's master list → a priced sheet → the catalogue sheet
-node scripts/shimano/madison.mjs <master.xlsx> priced.csv
+node scripts/shimano/madison.mjs <master.xlsx> priced.csv --buffer 0
 node scripts/shimano/rebuild.mjs priced.csv <out.csv> --outers none
 ```
 
@@ -89,7 +89,9 @@ same part.
 Madison quote this list as a quote. Their words: *"this should be treated as a
 quote and not the final price … the final price may have to change by a % here
 and there"*. A trade price list cannot move every time theirs does, so
-`--buffer` (default 5%) is the margin of error we price from.
+`--buffer` is the margin of error we price from. It is currently run at
+`--buffer 0` — costing at Madison's quote as it stands — so the flag is there
+for the quarter their prices move and nothing is absorbing it yet.
 
 It goes into the cost, not on to the tiers, because that is where it has to be
 for the tiers to inherit it — buffer first, standard rates on the buffered
@@ -202,12 +204,17 @@ model, which is the point of grouping: one photo of an FC-R9200 chainset serves
 all eighteen, so the file needs about thirty entries rather than one hundred
 and ninety.
 
-It ships empty. These are Shimano's photographs and the licence to publish them
-in a trade catalogue is IQ's to hold, not this repository's to assume — and a
-URL invented here would 404 into the same placeholder the app already draws,
-having first made the sheet look finished. Fill it from whatever IQ is entitled
-to use, run `rebuild.mjs` again, and re-import. Anything still missing stays
-blank and draws the placeholder.
+It is filled, from the sheet IQ returned with the images in it: eighteen model
+keys where every size of a range shares one photograph, and two hundred and
+forty SKUs for the products sold on their own and the ranges photographed per
+size. A SKU entry wins over its model's.
+
+Keeping them here rather than only in a spreadsheet is the point of the file —
+attaching them was a piece of work, and it is done once. Every rebuild from
+here reads them back on, so the next quarterly price list arrives with its
+pictures already attached and only the prices to check.
+
+Anything still missing stays blank and draws the placeholder.
 
 Photographs can also be uploaded one at a time on the Catalogue screen, which
 is the quicker path for a handful.
