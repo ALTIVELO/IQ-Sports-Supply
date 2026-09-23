@@ -14,13 +14,26 @@ export interface GroupCard {
  * at the top of the collection they belong to, because that is where someone
  * shopping for a tyre is already looking.
  */
-export default function GroupCards({ groups }: { groups: GroupCard[] }) {
+export default function GroupCards({
+  groups, heading = 'Choose your specification',
+}: {
+  groups: GroupCard[];
+  /**
+   * What to call the row.
+   *
+   * A collection is introducing these for the first time; a builder showing
+   * its siblings at the foot is doing something else and says so. The heading
+   * belongs to the component so the two never drift apart in weight or
+   * spacing.
+   */
+  heading?: string;
+}) {
   if (!groups.length) return null;
 
   return (
     <div className="space-y-2">
       <h2 className="text-[13px] font-semibold text-mute uppercase tracking-wide">
-        Choose your specification
+        {heading}
       </h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {groups.map((g) => (

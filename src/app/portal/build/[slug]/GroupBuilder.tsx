@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import GroupCards, { type GroupCard } from '../../GroupCards';
 import { Button, Card, Empty, Field, Money, Notice, Tag } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
 import { useCart } from '../../CartContext';
@@ -31,10 +32,15 @@ export interface GroupStep {
  */
 export default function GroupBuilder({
   name, brand, description, imageUrl, categoryName, categorySlug, steps, vatRate,
+  others = [], othersHeading = null,
 }: {
   name: string; brand: string | null; description: string | null;
   imageUrl: string | null; categoryName: string | null; categorySlug: string | null;
   steps: GroupStep[]; vatRate: number;
+  /** The other builds, this one's own collection first. */
+  others?: (GroupCard & { sameCollection: boolean })[];
+  /** What this build's collection is called, for the heading. */
+  othersHeading?: string | null;
 }) {
   const { add } = useCart();
   const [chosen, setChosen] = useState<Record<string, string>>(() => {
@@ -296,6 +302,26 @@ export default function GroupBuilder({
           change or remove any of them before ordering.
         </p>
       </Card>
+
+      {/*
+        * The other builds, at the foot.
+        *
+        * A builder is reached from a collection card and has no list on it, so
+        * once you are inside one the only way to its siblings is the back
+        * button. The power-meter variants make that plain: the same groupset
+        * with one part changed, listed separately, and invisible from each
+        * other. Below the total rather than above it, because somebody who
+        * came here to specify this one should finish before being offered
+        * another.
+        */}
+      {others.length > 0 && (
+        <div className="pt-2">
+          <GroupCards
+            groups={others}
+            heading={`Other ${othersHeading ? othersHeading.toLowerCase() : 'builds'} we supply`}
+          />
+        </div>
+      )}
     </div>
   );
 }
