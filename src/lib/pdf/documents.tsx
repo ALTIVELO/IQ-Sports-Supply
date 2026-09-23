@@ -1,7 +1,7 @@
 import React from 'react';
 import { Document, Page, Text as PdfText, View, StyleSheet } from '@react-pdf/renderer';
 import { fmtDate, money, totals } from '@/lib/format';
-import { legalFooter } from '@/lib/company';
+import { COMPANY_NUMBER, REGISTERED_IN, legalFooter } from '@/lib/company';
 import { agencyHeading, agencyLines } from '@/lib/orders/agency';
 
 /*
@@ -184,6 +184,11 @@ function Header({ d, title }: { d: DocData; title: string }) {
       <View style={s.company}>
         <Text style={s.companyName}>{d.company}</Text>
         <Text>{d.companyAddress}</Text>
+        {/* Top right, with the letterhead: the company number is the first thing
+            an accountant or a customer's accounts team looks for. */}
+        <Text style={{ marginTop: 2 }}>
+          Company No. {COMPANY_NUMBER} · Registered in {REGISTERED_IN}
+        </Text>
       </View>
     </View>
   );
