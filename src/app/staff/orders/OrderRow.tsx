@@ -28,6 +28,16 @@ export interface OrderData {
   currency: string;
   /** Set where we introduced this order rather than sold it. */
   agency_terms: string | null;
+  /**
+   * Going to the client's own customer rather than to the client.
+   *
+   * The address is theirs, typed for this order, and is not on our system
+   * anywhere else — so this row is the only place anybody can read it back.
+   */
+  dropship: boolean | null;
+  ship_to: string | null;
+  dropship_terms: string | null;
+  dropship_accepted_at: string | null;
   brands: { name: string } | null;
   cancelled_reason: string | null;
   clients: { id: string; name: string };
@@ -125,6 +135,10 @@ export default function OrderRow({
           : backordered > 0
             ? <Tag tone="red">{backordered} on back order</Tag>
             : <Tag tone="green">Fully allocated</Tag>}
+        {/* On the row itself, not only inside it: whether a parcel is going to
+            the shop or past it changes how the order is handled, and nobody
+            should have to open twelve orders to find the one that is. */}
+        {order.dropship && <Tag tone="amber">Direct to customer</Tag>}
         {order.agency_terms && (
           <Tag tone="ink">
             {order.brands?.name ?? 'the brand'} invoices · we introduced it
@@ -163,6 +177,42 @@ export default function OrderRow({
           brand={order.brands?.name}
           company={company}
         />
+      )}
+
+      {/*
+        * Where it is actually going, and what the client accepted to send it
+        * there.
+        *
+        * Both on the order because this is the only copy: the address belongs
+        * to somebody who is not our customer and is deliberately not filed on
+        * the client's account, and the wording is the one that was on screen
+        * at the time rather than whatever settings says today. The moment
+        * either is wanted is the moment a parcel is at the wrong door.
+        */}
+      {open && order.dropship && (
+        <div className="mt-3 border border-line rounded p-3 bg-parch">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="text-[12px] font-semibold">Deliver to</span>
+            <span className="text-[11px] text-mute">
+              {order.clients?.name}&rsquo;s customer — not to {order.clients?.name}
+            </span>
+          </div>
+          <div className="text-[13px] whitespace-pre-line mt-1 leading-relaxed">
+            {order.ship_to}
+          </div>
+          {order.dropship_terms && (
+            <details className="mt-2">
+              <summary className="text-[11px] text-mute cursor-pointer">
+                Terms accepted
+                {order.dropship_accepted_at
+                  ? ` on ${fmtDate(order.dropship_accepted_at)}` : ''}
+              </summary>
+              <p className="text-[11px] text-mute mt-1 leading-relaxed">
+                {order.dropship_terms}
+              </p>
+            </details>
+          )}
+        </div>
       )}
 
       {open && (
