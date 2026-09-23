@@ -562,12 +562,22 @@ export default function ImportScreen({
                     />
                     Bring back any withdrawn SKU this file prices
                   </label>
-                  <label className="flex items-center gap-1.5 text-[12px]">
+                  <label className="flex items-start gap-1.5 text-[12px]">
                     <input
-                      type="checkbox" checked={deactivateMissing}
+                      type="checkbox" checked={deactivateMissing} className="mt-[3px]"
                       onChange={(e) => setDeactivateMissing(e.target.checked)}
                     />
-                    Mark SKUs missing from the sheet inactive
+                    <span>
+                      Withdraw every SKU missing from this sheet
+                      {/* Named for what it does to the catalogue rather than
+                          for the flag it sets. "Mark inactive" sounds like
+                          bookkeeping; withdrawing a product takes it off the
+                          customer's screen, and on a one-supplier sheet that
+                          is every other supplier's range. */}
+                      <span className="block text-[11px] text-mute">
+                        Only for a sheet that covers the whole catalogue.
+                      </span>
+                    </span>
                   </label>
                   <label className="flex items-start gap-1.5 text-[12px]">
                     <input
@@ -603,12 +613,16 @@ export default function ImportScreen({
         </>
       )}
 
-      {preview && <PreviewCards preview={preview} />}
+      {preview && <PreviewCards preview={preview} deactivateMissing={deactivateMissing} />}
     </div>
   );
 }
 
-function PreviewCards({ preview }: { preview: CataloguePreview }) {
+function PreviewCards({ preview, deactivateMissing }: {
+  preview: CataloguePreview;
+  /** Whether the run about to happen will withdraw the SKUs it does not see. */
+  deactivateMissing: boolean;
+}) {
   return (
     <>
       {preview.invalid.length > 0 && (
@@ -649,9 +663,29 @@ function PreviewCards({ preview }: { preview: CataloguePreview }) {
       {preview.missing.length > 0 && (
         <Card>
           <Bucket title={`In the system but not in this file (${preview.missing.length})`}>
-            <p className="text-[12px] text-mute mb-2">
-              Reported only. Nothing is ever deleted by an import.
-            </p>
+            {/*
+              * What this panel says depends on the checkbox above it.
+              *
+              * It used to say "reported only" either way, which is true of an
+              * ordinary import and a lie when the withdraw box is ticked — and
+              * it is the reassuring half of a contradiction, sitting under a
+              * list of every SKU about to be taken off the catalogue. A
+              * one-supplier sheet is not a statement about any other
+              * supplier's products, and the first sheet big enough to make
+              * that matter is the first time anybody finds out.
+              */}
+            {deactivateMissing ? (
+              <p className="text-[12px] text-danger font-semibold mb-2">
+                These {preview.missing.length} will be withdrawn — taken off the
+                catalogue and out of the portal — because &ldquo;Withdraw every
+                SKU missing from this sheet&rdquo; is ticked. Untick it unless
+                this sheet covers the whole catalogue.
+              </p>
+            ) : (
+              <p className="text-[12px] text-mute mb-2">
+                Reported only. Nothing is withdrawn or deleted by this import.
+              </p>
+            )}
             <p className="text-[12px] num">
               {preview.missing.slice(0, 40).map((m) => m.sku).join(' · ')}
               {preview.missing.length > 40 ? ` … and ${preview.missing.length - 40} more` : ''}
