@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { saveClient, setClientActive, setClientTier, setTemporaryPassword } from './actions';
@@ -152,7 +153,21 @@ export default function ClientsScreen({
               <tbody>
                 {clients.map((c) => (
                   <tr key={c.id} className={c.active ? '' : 'opacity-50'}>
-                    <td className="font-semibold">{c.name}</td>
+                    <td className="font-semibold">
+                      {/* Their name is the way into what they have bought.
+                          The orders screen already knows how to show an order
+                          — every amendment, invoice and packing control on
+                          it — so it is that screen filtered, not a second
+                          weaker one built beside it. */}
+                      <Link
+                        href={`/staff/orders?client=${c.id}`}
+                        className="hover:text-flame-text focus-visible:text-flame-text underline
+                                   decoration-line underline-offset-2"
+                        title={`Everything ${c.name} has ordered`}
+                      >
+                        {c.name}
+                      </Link>
+                    </td>
                     <td>
                       <TierCell
                         client={c} tiers={tiers} mayPrice={mayPrice}
