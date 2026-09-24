@@ -122,12 +122,18 @@ export function tierNamed(word) {
  * What the goods cost us, landed: the quote converted and cleared through
  * customs.
  *
- * Two steps, in this order, because duty is charged on the sterling value of
- * the goods at import — so the rate applies to the converted figure, not the
- * euro one.
+ * Three steps, in this order. Duty is charged on the sterling value of the
+ * goods at import, so the rate applies to the converted figure rather than
+ * the euro one. Freight is added after both, as a flat amount per unit in our
+ * own money: a carrier charges for a box, not a percentage of what is in it,
+ * so a rate would make the dearest wheel carry the most carriage for no
+ * reason.
+ *
+ * All of it lands before any margin is taken. A margin on a figure that
+ * leaves out the carriage is a margin the carriage then eats.
  */
-export function landedCost(quote, { fx = 1, duty = 0 } = {}) {
-  return quote * fx * (1 + duty);
+export function landedCost(quote, { fx = 1, duty = 0, freight = 0 } = {}) {
+  return quote * fx * (1 + duty) + freight;
 }
 
 /**
@@ -170,7 +176,7 @@ const percent = (v, flag) => {
 const USAGE = 'usage: rebuild.mjs <in.csv> <out.csv> '
   + '--price-is <cost|distributor|shop|club|retail> '
   + '[--margin "Distributor=15,Shop=20,Teams=20" | --markup "Shop=25"] '
-  + '[--costs prices.json] [--quoted-in EUR --fx 0.89] [--duty 4] '
+  + '[--costs prices.json] [--quoted-in EUR --fx 0.89] [--duty 4] [--freight 40] '
   + '[--category wheels] [--currency GBP] [--price-note "…"]';
 
 function parseArgs(argv) {
@@ -178,7 +184,7 @@ function parseArgs(argv) {
   const args = {
     input, output, margin: [], markup: [], category: '', currency: 'GBP',
     priceIs: null, costs: null, priceNote: '',
-    quotedIn: null, fx: null, duty: 0,
+    quotedIn: null, fx: null, duty: 0, freight: 0,
   };
   let saidMargin = false, saidMarkup = false;
 
@@ -192,6 +198,14 @@ function parseArgs(argv) {
       if (!(n > 0)) throw new Error('--fx wants a rate, as a multiplier: --fx 0.89');
       args.fx = n;
     } else if (rest[i] === '--duty') args.duty = percent(rest[++i], '--duty');
+    else if (rest[i] === '--freight') {
+      const n = Number(rest[++i]);
+      if (!(Number.isFinite(n) && n >= 0)) {
+        throw new Error('--freight wants an amount per unit, in the currency '
+          + 'of the sheet: --freight 40');
+      }
+      args.freight = n;
+    }
     else if (rest[i] === '--margin') {
       saidMargin = true;
       args.margin = rest[++i].split(',').map((p) => rate(p, '--margin'));
@@ -262,6 +276,10 @@ function parseArgs(argv) {
     throw new Error('--duty is part of what the goods cost us landed, so it '
       + 'only applies to --price-is cost.');
   }
+  if (args.freight && args.priceIs !== 'cost') {
+    throw new Error('--freight is part of what the goods cost us landed, so '
+      + 'it only applies to --price-is cost.');
+  }
   return args;
 }
 
@@ -298,19 +316,20 @@ function main() {
   }
 
   /*
-   * How the sterling figure was arrived at, written on every row.
+   * The Price note stays empty unless somebody puts something in it.
    *
-   * A price list outlives the conversation that produced it. Six months on,
-   * "why is the SC 45 £518?" is answerable from the sheet itself rather than
-   * from somebody's memory of what the euro was doing in September.
+   * It used to carry how the sterling figure was arrived at — the rate, the
+   * duty — which was written for whoever reads the sheet and forgot who reads
+   * the column. price_note is drawn on the portal product row, in the basket
+   * and on the invoice PDF: it is the customer's, and it means "what this
+   * price does not include". Our exchange rate is not that, our duty basis is
+   * not that, and what we pay a carrier is certainly not that.
+   *
+   * How the cost was built is printed on every run and written in the README,
+   * where the people who need it are. --price-note is still there for the
+   * thing the column is actually for — DRAG quote ex-works, and their customer
+   * does need telling.
    */
-  const costNote = args.priceIs === 'cost' && (args.fx || args.duty)
-    ? [
-      args.fx ? `${quoteCurrency}→${args.currency} at ${args.fx}` : null,
-      args.duty ? `${(args.duty * 100).toFixed(args.duty * 100 % 1 ? 1 : 0)}% duty` : null,
-      'net of VAT',
-    ].filter(Boolean).join(', ')
-    : '';
 
   const out = built.map((r) => {
     // The quote is the authority where there is one: an export is a shop's
@@ -321,7 +340,7 @@ function main() {
       Series: r.series ?? '', Model: r.model ?? '', Size: r.size ?? '',
       Category: args.category, Image: r.image,
       Currency: args.currency,
-      'Price note': args.priceNote || costNote,
+      'Price note': args.priceNote,
       'Our cost': '', Distributor: '', Shop: '', Club: '', Retail: '',
     };
     if (price === null) return row;
@@ -331,7 +350,9 @@ function main() {
       // abroad. Both are dealt with here, in that order, before a single
       // margin is taken — a margin on an unconverted, uncleared figure is a
       // margin on a number nobody ever pays.
-      const cost = landedCost(price, { fx: args.fx ?? 1, duty: args.duty });
+      const cost = landedCost(price, {
+        fx: args.fx ?? 1, duty: args.duty, freight: args.freight,
+      });
       row['Our cost'] = cost.toFixed(2);
       for (const { name, rate } of args.margin) {
         row[name] = priceAtMargin(cost, rate).toFixed(2);
@@ -367,6 +388,7 @@ function main() {
     console.error('  cost = quote'
       + (args.fx ? ` × ${args.fx} (${quoteCurrency}→${args.currency})` : '')
       + (args.duty ? ` × ${(1 + args.duty).toFixed(4)} (duty)` : '')
+      + (args.freight ? ` + ${args.freight.toFixed(2)} (freight, per unit)` : '')
       + ' — net of VAT, which the invoice adds.');
     for (const { name, rate } of args.margin) {
       console.error(`  ${name}: ${(rate * 100).toFixed(0)}% margin `

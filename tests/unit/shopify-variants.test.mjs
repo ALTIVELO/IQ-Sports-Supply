@@ -135,6 +135,26 @@ eq('and duty on the euro figure would be a different number',
 eq('no rate and no duty leaves the quote alone', landedCost(900), 900);
 eq('a rate on its own just converts', landedCost(1000, { fx: 0.89 }), 890);
 
+// Freight is a flat amount per unit, not a rate: a carrier charges for a box,
+// not a percentage of what is in it, so a rate would put the most carriage on
+// the dearest wheel for no reason.
+eq('freight is added after the border, per unit',
+   Number(landedCost(560, { fx: 0.89, duty: 0.04, freight: 40 }).toFixed(2)), 558.34);
+eq('and is the same amount whatever the wheel costs',
+   Number((landedCost(1150, { fx: 0.89, duty: 0.04, freight: 40 })
+         - landedCost(1150, { fx: 0.89, duty: 0.04 })).toFixed(2)), 40);
+// It is not dutiable: duty is charged on the goods at import, and the
+// carriage is ours to pay afterwards.
+eq('and is not itself dutied',
+   Number(landedCost(100, { fx: 1, duty: 0.04, freight: 40 }).toFixed(2)), 144);
+eq('freight on its own still lands', landedCost(100, { freight: 40 }), 140);
+
+// The whole of it before a margin is taken. A margin on a figure that leaves
+// out the carriage is a margin the carriage then eats.
+eq('a margin is taken on the landed figure, carriage included',
+   Number(priceAtMargin(landedCost(560, { fx: 0.89, duty: 0.04, freight: 40 }), 0.10)
+     .toFixed(2)), 620.37);
+
 // ── margin, which is not markup ───────────────────────────────────────────
 // Twenty pence in every pound we take, so the cost is 80% of the price.
 eq('a 20% margin is the cost over 0.8', priceAtMargin(800, 0.2), 1000);

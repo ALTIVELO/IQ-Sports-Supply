@@ -3,7 +3,7 @@
 ```bash
 node scripts/vision/rebuild.mjs <export.csv> <out.csv> \
   --price-is cost --costs scripts/vision/prices.json \
-  --quoted-in EUR --currency GBP --fx 0.89 --duty 4 \
+  --quoted-in EUR --currency GBP --fx 0.89 --duty 4 --freight 40 \
   --margin "Distributor=10,Shop=15,Teams=15" \
   --category wheels
 ```
@@ -69,7 +69,7 @@ hangs `metron_45_rs` on the Metron 45 SL as well as the RS, and the RS is the
 one with carbon spokes — so without saying so the SL listing would show a wheel
 it is not.
 
-## Landed cost: `--fx` and `--duty`
+## Landed cost: `--fx`, `--duty` and `--freight`
 
 What a supplier quotes is not what the goods cost us. Vision quote in euros and
 invoice from Italy, so a sterling cost exists only after the money is changed
@@ -77,7 +77,7 @@ and the border is crossed. Both are named steps rather than a number somebody
 worked out in their head:
 
 ```
-our cost = quote × fx × (1 + duty)
+our cost = quote × fx × (1 + duty) + freight
 ```
 
 `--fx 0.89` says one euro costs 0.89 pounds. It is a deliberately unkind rate:
@@ -92,8 +92,23 @@ origin under the Trade and Cooperation Agreement, which a wheel built in the
 Far East and shipped through Italy does not, unless Vision supply a statement
 on origin saying otherwise. Getting one is worth about 4% on every wheel.
 
-The arithmetic is written on to every row, in the `Price note` column, so six
-months on the sheet answers for itself.
+`--freight 40` is a flat amount per unit, in the currency of the sheet, added
+after the border. Not a rate: a carrier charges for a box rather than a
+percentage of what is in it, and a rate would put the most carriage on the
+dearest wheel for no reason. It lands before any margin is taken, because a
+margin on a figure that leaves out the carriage is a margin the carriage then
+eats.
+
+### The arithmetic does not go in `Price note`
+
+It used to. `price_note` is drawn on the portal product row, in the basket and
+on the invoice PDF — it is the customer's column, and it means *what this
+price does not include*. Our exchange rate is not that, our duty basis is not
+that, and what we pay a carrier is certainly not that.
+
+How the cost was built is printed on every run and written here.
+`--price-note` remains for what the column is actually for: DRAG quote
+ex-works, and their customer does need telling.
 
 ## Margin, not markup, and `Teams` means `Club`
 
