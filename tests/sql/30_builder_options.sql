@@ -141,3 +141,72 @@ begin
   select count(*)::int into n from product_group_options where step_id = v_step;
   perform assert_eq(n, 1, 'a step with no rule keeps what it was given');
 end $$;
+
+\echo ''
+\echo '───────── G. A rotor named for its size, not for its part number ─────────'
+-- The regression 0041 fixes. spec_value could only decode a part number found
+-- inside a name — "Shimano Disc Rotor RTCL900SI" — which is how the converter
+-- named rotors before it could read one. 0036 taught it to name them properly,
+-- and every rotor in the catalogue has read "Dura-Ace RT-CL900 Disc Rotor
+-- 160mm (I)" since, which that reader cannot see at all.
+--
+-- Nothing showed it while the options were seeded once and never re-checked.
+-- Re-checking them after every import turned a reader quietly returning null
+-- into two rotor steps with nothing on them.
+do $$
+begin
+  perform assert_eq(spec_value('Dura-Ace RT-CL900 Disc Rotor 160mm (I)', 'Rotor size'),
+    '160mm', 'a rotor named for its size reads as that size');
+  perform assert_eq(spec_value('Ultegra RT-CL800 Disc Rotor 140mm (I)', 'Rotor size'),
+    '140mm', 'whichever range it belongs to');
+  perform assert_eq(spec_value('SM-RT64 Deore - 180 mm rotor', 'Rotor size'),
+    '180mm', 'and however the supplier spaces it');
+  perform assert_eq(spec_value('RT-CL750 Disc Rotor 200mm (E)', 'Rotor size'),
+    '200mm', 'including the sizes that are written out');
+
+  -- The old naming still has to work: a catalogue imported years ago holds
+  -- these, and a reader that stopped recognising them would empty a step
+  -- exactly as this one did.
+  perform assert_eq(spec_value('Shimano Disc Rotor RTCL900SI', 'Rotor size'),
+    '160mm', 'a part number in a name is still decoded');
+  perform assert_eq(spec_value('Shimano Disc Rotor RTCL900SSI', 'Rotor size'),
+    '140mm', 'the small one is not read as the medium');
+  perform assert_eq(spec_value('Shimano Disc Rotor RTCL750200E', 'Rotor size'),
+    '200mm', 'nor a written-out size as its last three digits');
+
+  -- And a part that is not a rotor still answers nothing, or it would join a
+  -- rotor step on the strength of a crank length.
+  perform assert_eq(spec_value('Dura-Ace FC-R9200 Chainset 52/36 172.5mm', 'Rotor size') is null,
+    true, 'a chainset is not read as a rotor');
+end $$;
+
+\echo ''
+\echo '───────── H. Which means the rotor steps fill ─────────'
+insert into products (sku, name, brand, active) values
+  ('RTCL900SI',  'Dura-Ace RT-CL900 Disc Rotor 160mm (I)', 'Shimano', true),
+  ('RTCL900SSI', 'Dura-Ace RT-CL900 Disc Rotor 140mm (I)', 'Shimano', true),
+  -- A 203mm is a real rotor and not one these builds offer: the steps accept
+  -- 140 and 160 only, and a size outside that must not slip in.
+  ('RTCL900LI',  'Dura-Ace RT-CL900 Disc Rotor 203mm (I)', 'Shimano', true);
+
+select refresh_group_options() as n \gset
+
+do $$
+declare front text[]; rear text[];
+begin
+  select array_agg(o.label order by o.sort) into front
+    from product_group_options o
+    join product_group_steps s on s.id = o.step_id
+    join product_groups g on g.id = s.group_id
+   where g.slug = 'dura-ace-r9200' and s.name = 'Front rotor';
+  select array_agg(o.label order by o.sort) into rear
+    from product_group_options o
+    join product_group_steps s on s.id = o.step_id
+    join product_groups g on g.id = s.group_id
+   where g.slug = 'dura-ace-r9200' and s.name = 'Rear rotor';
+
+  perform assert_eq(front, array['140mm','160mm'], 'the front rotor step offers both sizes');
+  perform assert_eq(rear, array['140mm','160mm'], 'and so does the rear');
+  perform assert_eq(front @> array['203mm'], false,
+    'a size these builds do not offer stays off');
+end $$;
