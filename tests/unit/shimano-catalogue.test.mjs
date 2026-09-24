@@ -111,6 +111,16 @@ eq('a bare pair on something that is not a cassette is not a ratio',
 eq('a wire is its length',
    sizeOf({ name: 'CABLE E-tube Di2 SD300 1000mm', sku: 'EWSD300IL100', category: 'electronics' }),
    '1000mm');
+// Four digits as readily as three. Nothing in either Madison sheet has
+// exercised this — September stops at 850mm and July carried only the 900 and
+// the 1000 — so the day a 1200 is quoted is the day it would be found out.
+eq('a wire longer than a metre is still a length',
+   sizeOf({ name: 'E-tube SD300 electric wire - 1200 mm - black', sku: 'EWSD300IL120', category: 'electronics' }),
+   '1200mm');
+eq('and the longest of them',
+   sizeOf({ name: 'E-tube SD300 electric wire - 1400 mm - black', sku: 'EWSD300IL140', category: 'electronics' }),
+   '1400mm');
+
 eq('a shifter is which hand it is',
    sizeOf({ name: 'STI LVR STR9270/BRR9270 Di2 hydra LH RR', sku: 'R9270DLR', category: 'shifters' }),
    'Left (rear)');

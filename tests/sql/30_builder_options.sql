@@ -41,7 +41,14 @@ end $$;
 insert into products (sku, name, brand, active) values
   ('EWSD300IL015', 'Di2 EW-SD300 E-tube Wire 150mm', 'Shimano', true),
   ('EWSD300IL040', 'Di2 EW-SD300 E-tube Wire 400mm', 'Shimano', true),
-  ('EWSD300IL085', 'Di2 EW-SD300 E-tube Wire 850mm', 'Shimano', true);
+  ('EWSD300IL085', 'Di2 EW-SD300 E-tube Wire 850mm', 'Shimano', true),
+  -- The four digit lengths. Madison's September list stops at 850 and their
+  -- July one carried only the 900 and the 1000, so nothing in the catalogue
+  -- has exercised this: a reader that wanted three digits would take "120"
+  -- out of "1200mm" and sort a 1200 wire between the 100 and the 150.
+  ('EWSD300IL100', 'Di2 EW-SD300 E-tube Wire 1000mm', 'Shimano', true),
+  ('EWSD300IL120', 'Di2 EW-SD300 E-tube Wire 1200mm', 'Shimano', true),
+  ('EWSD300IL140', 'Di2 EW-SD300 E-tube Wire 1400mm', 'Shimano', true);
 
 do $$
 declare n integer;
@@ -74,6 +81,11 @@ begin
   -- 150mm and a 400 lands at the bottom because it arrived last.
   perform assert_eq(lengths[1], '150mm', 'shortest first');
   perform assert_eq(lengths[2], '400mm', 'in numeric order, not arrival order');
+
+  perform assert_eq(lengths @> array['1000mm','1200mm','1400mm'], true,
+    'a wire longer than a metre is a length like any other');
+  perform assert_eq(lengths[array_length(lengths,1)], '1400mm',
+    'and the longest is last, not sorted among the hundreds');
 end $$;
 
 \echo ''
