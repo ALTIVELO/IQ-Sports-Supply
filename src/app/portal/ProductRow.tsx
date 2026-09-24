@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, Money, Tag } from '@/components/ui';
+import { useEffect, useRef, useState } from 'react';
+import { Button, Card, Money, Tag } from '@/components/ui';
 import ProductImage from '@/components/ProductImage';
 import QtyStepper from '@/components/QtyStepper';
 import { useCart } from './CartContext';
@@ -111,7 +111,7 @@ export default function ProductRow({ group }: { group: VariantGroup }) {
               : showSizes ? 'Hide sizes' : 'Choose size'}
           </button>
         ) : (
-          <Stepper product={lead} />
+          <AddLine product={lead} />
         )}
       </div>
 
@@ -142,7 +142,7 @@ function SizeRow({ size }: { size: CatalogueItem }) {
       <span className="text-[14px] w-[140px] text-right">
         <OuterPrice item={size} qty={qty} currency={size.currency} />
       </span>
-      <Stepper product={size} />
+      <AddLine product={size} />
       {/* Its own line, full width, so the offer is not squeezed between a
           price and a pair of buttons at 430px. */}
       {hasOuter(size) && (
@@ -155,23 +155,93 @@ function SizeRow({ size }: { size: CatalogueItem }) {
 }
 
 /**
- * One product's quantity, against the cart rather than against a field.
+ * How many, and then a button that puts them in the basket.
  *
- * The control itself is shared with the order desk and the basket, so a
- * customer counting frames and the person on the phone counting them for
- * somebody else are working the same buttons.
+ * The plus used to write straight into the basket: the only sign anything had
+ * happened was a number changing in a bar pinned to the bottom of the screen,
+ * and the only button on the page said "Place order" — an actual order, with
+ * an actual invoice — sitting under the thumb of somebody tapping plus. A
+ * counter you can nudge and a decision you have to make are two different
+ * things, and they were the same tap.
+ *
+ * So the stepper counts, and "Add to cart" appears against the row the counter
+ * belongs to — beside it where there is room, directly under it on a phone.
+ * Until it is pressed, nothing has been added.
+ *
+ * The count returns to nothing afterwards, because it counts what is about to
+ * go in rather than what is already there. What is already there is said
+ * underneath, and changed in the basket.
  */
-function Stepper({ product }: { product: CatalogueItem }) {
-  const { quantities, setQty } = useCart();
+function AddLine({ product }: { product: CatalogueItem }) {
+  const { quantities, add } = useCart();
+  const [staged, setStaged] = useState(0);
+  const [added, setAdded] = useState(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // The confirmation is on a timer, and a timer outliving the row it belongs
+  // to sets state on something that is gone.
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const inCart = quantities[product.id] ?? 0;
   const what = product.variant_label
     ? `${product.sku} size ${product.variant_label}`
     : product.sku;
 
+  function commit() {
+    if (staged < 1) return;
+    add(product.id, staged);
+    setAdded(staged);
+    setStaged(0);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setAdded(0), 4000);
+  }
+
   return (
-    <QtyStepper
-      value={quantities[product.id] ?? 0}
-      onChange={(qty) => setQty(product.id, qty)}
-      label={what}
-    />
+    <>
+      <QtyStepper
+        value={staged}
+        onChange={(qty) => { setStaged(qty); if (qty > 0) setAdded(0); }}
+        label={what}
+      />
+
+      {/*
+        * Full width on a phone, beside the stepper above that.
+        *
+        * basis-full drops it on to its own line directly beneath the row whose
+        * plus was pressed, which at 430px is where it has to be: there is no
+        * room next to a size, a price and three buttons, and a button that
+        * wrapped to somewhere else on the card would be a button for nothing
+        * in particular.
+        */}
+      <div className="basis-full sm:basis-auto flex items-center gap-2 sm:ml-1">
+        {staged > 0 ? (
+          <Button
+            small kind="accent" onClick={commit}
+            /* The words on it are the same on every row, so on a screen
+               reader they would be forty identical buttons without this.
+               It opens with what is written on the button rather than
+               replacing it: somebody driving the page by voice says what
+               they can see, and "add to cart" has to still reach it. */
+            aria-label={`Add to cart: ${staged} × ${what}`}
+          >
+            Add to cart
+          </Button>
+        ) : added > 0 ? (
+          // Announced, because the button that was focused has just been
+          // replaced by this and nothing else says the press worked.
+          <span
+            role="status"
+            className="text-[12px] font-semibold text-success whitespace-nowrap"
+          >
+            {added} added
+          </span>
+        ) : null}
+        {inCart > 0 && (
+          <span className="text-[11px] text-mute whitespace-nowrap">
+            {inCart} in your basket
+          </span>
+        )}
+      </div>
+    </>
   );
 }
