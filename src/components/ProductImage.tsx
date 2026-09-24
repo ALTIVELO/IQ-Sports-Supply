@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { LogoGlyph } from './Logo';
+import ImageZoom from './ImageZoom';
 
 /**
  * A product photo, or a placeholder when there is none.
@@ -17,7 +18,7 @@ import { LogoGlyph } from './Logo';
  * declared in next.config.mjs ahead of time.
  */
 export default function ProductImage({
-  src, alt, className = '', sizePx = 200, placeholderScale = 'half',
+  src, alt, className = '', sizePx = 200, placeholderScale = 'half', zoom = false,
 }: {
   src: string | null | undefined;
   alt: string;
@@ -33,18 +34,50 @@ export default function ProductImage({
    *  failure handling still applies, so a URL that dies leaves a space rather
    *  than a broken-image icon. */
   placeholderScale?: 'half' | 'quiet' | 'none';
+  /**
+   * Whether clicking the picture opens it full size.
+   *
+   * Off by default, and deliberately opt-in rather than everywhere: half the
+   * places this is drawn sit inside something already clickable — a
+   * collection tile is a link, a search result on the order desk is the
+   * button that adds the line, the staff catalogue's thumbnail is the upload
+   * trigger. A button inside a button is invalid, and a picture that swallowed
+   * the click would stop the thing around it working.
+   *
+   * So it is turned on where the click is otherwise unspoken for and where
+   * somebody is actually choosing: the catalogue row, the basket line, the
+   * builder's own photograph.
+   */
+  zoom?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
+  const [open, setOpen] = useState(false);
   const showPlaceholder = !src || failed;
   const bare = placeholderScale === 'none';
 
   if (showPlaceholder && bare) return <div className={className} aria-hidden />;
 
+  // Nothing to enlarge where there is no photograph, so the placeholder is
+  // never a button: an affordance that opens a bigger logo is a small lie.
+  const canZoom = zoom && !showPlaceholder;
+
   return (
     <div
+      onClick={canZoom ? () => setOpen(true) : undefined}
+      onKeyDown={canZoom
+        ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true); } }
+        : undefined}
+      role={canZoom ? 'button' : undefined}
+      tabIndex={canZoom ? 0 : undefined}
+      aria-label={canZoom ? `Enlarge the photograph of ${alt}` : undefined}
       className={`relative overflow-hidden flex items-center justify-center ${className}
-                  ${bare ? '' : 'bg-white border border-line rounded'}`}
+                  ${bare ? '' : 'bg-white border border-line rounded'}
+                  ${canZoom ? 'cursor-zoom-in focus-visible:outline focus-visible:outline-2'
+                            + ' focus-visible:outline-flame' : ''}`}
     >
+      {open && src && (
+        <ImageZoom src={src} alt={alt} onClose={() => setOpen(false)} />
+      )}
       {showPlaceholder ? (
         <LogoGlyph
           className={placeholderScale === 'quiet'

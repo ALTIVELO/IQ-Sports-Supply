@@ -41,6 +41,7 @@ export default function ProductRow({ group }: { group: VariantGroup }) {
           alt={name}
           className="w-14 h-14 flex-shrink-0"
           sizePx={112}
+          zoom
         />
 
         {/* On a phone the name takes the whole width. Squeezed into what is

@@ -98,7 +98,8 @@ export default function GroupBuilder({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start gap-4">
-        <ProductImage src={imageUrl} alt={name} className="w-24 h-24 flex-shrink-0" sizePx={192} />
+        <ProductImage src={imageUrl} alt={name} className="w-24 h-24 flex-shrink-0"
+                      sizePx={192} zoom />
         <div className="min-w-0 flex-1">
           {categorySlug && (
             <Link href={`/portal/c/${categorySlug}`} className="text-[12px] text-flame-text font-semibold">

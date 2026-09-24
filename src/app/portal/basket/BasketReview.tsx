@@ -253,7 +253,7 @@ export default function BasketReview({
           <Card key={product.id} className="!p-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <ProductImage src={product.image_url} alt={product.name}
-                            className="w-14 h-14 flex-shrink-0" sizePx={112} />
+                            className="w-14 h-14 flex-shrink-0" sizePx={112} zoom />
               <div className="min-w-0 flex-1 basis-[calc(100%-4.5rem)] sm:basis-0">
                 <div className="num text-[12px] font-semibold text-mute">{product.sku}</div>
                 <div className="text-[13px] font-medium">{product.name}</div>
