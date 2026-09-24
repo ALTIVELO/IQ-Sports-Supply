@@ -58,16 +58,16 @@ const money = (v) => {
  * in both or in neither.
  */
 const BUILDS = [
-  { name: 'Dura-Ace Di2 R9200', power: false,
+  { name: 'Dura-Ace Di2 R9270', power: false,
     parts: ['R9270DLR', 'R9270DRF', 'RDR9250', 'FDR9250F', 'BTDN300', 'EWEC300'],
     chainset: /^FCR9200(?!P)/, cassette: /^CSR9200/, chain: /^CNM9100/, rotor: /^RTCL900/ },
-  { name: 'Dura-Ace Di2 R9200, power meter', power: true,
+  { name: 'Dura-Ace Di2 R9270, power meter', power: true,
     parts: ['R9270DLR', 'R9270DRF', 'RDR9250', 'FDR9250F', 'BTDN300', 'EWEC300'],
     chainset: /^FCR9200P/, cassette: /^CSR9200/, chain: /^CNM9100/, rotor: /^RTCL900/ },
-  { name: 'Ultegra Di2 R8100', power: false,
+  { name: 'Ultegra Di2 R8170', power: false,
     parts: ['R8170DLR', 'R8170DRF', 'RDR8150', 'FDR8150F', 'BTDN300', 'EWEC300'],
     chainset: /^FCR8100(?!P)/, cassette: /^CSR8101/, chain: /^CNM8100/, rotor: /^RTCL800/ },
-  { name: 'Ultegra Di2 R8100, power meter', power: true,
+  { name: 'Ultegra Di2 R8170, power meter', power: true,
     parts: ['R8170DLR', 'R8170DRF', 'RDR8150', 'FDR8150F', 'BTDN300', 'EWEC300'],
     chainset: /^FCR8100P/, cassette: /^CSR8101/, chain: /^CNM8100/, rotor: /^RTCL800/ },
   /*
@@ -80,7 +80,7 @@ const BUILDS = [
    * and 11-30T. Hence `prefer`, and hence the warning when a preference is
    * not found at all.
    */
-  { name: '105 Di2 R7100', power: false,
+  { name: '105 Di2 R7170', power: false,
     parts: ['R7170DLR', 'R7170DRF', 'RDR7150', 'FDR7150F', 'BTDN300', 'EWEC300'],
     chainset: /^FCR7100(?!P)/, cassette: /^(CSR7101|CSHG710)/,
     chain: /^CNM7100/, rotor: /^RTCL700/,

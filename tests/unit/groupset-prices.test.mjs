@@ -53,7 +53,7 @@ const rows = [
 ];
 
 const build105 = {
-  name: '105 Di2 R7100', power: false,
+  name: '105 Di2 R7170', power: false,
   parts: ['R7170DLR', 'R7170DRF', 'RDR7150', 'FDR7150F', 'BTDN300', 'EWEC300'],
   chainset: /^FCR7100(?!P)/, cassette: /^(CSR7101|CSHG710)/,
   chain: /^CNM7100/, rotor: /^RTCL700/,

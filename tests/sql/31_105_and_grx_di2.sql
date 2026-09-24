@@ -64,6 +64,31 @@ begin
 end $$;
 
 \echo ''
+\echo '───────── B2. Each build is named for the groupset it is ─────────'
+-- The series number covers rim and disc, mechanical and Di2. Every build here
+-- is the hydraulic disc Di2 corner of it, and that corner has its own number:
+-- the shifters, callipers and hoses on these builds are R9270, R8170 and
+-- R7170, so the page above them says so too.
+do $$
+declare v text;
+begin
+  select array_agg(name order by sort)::text into v from product_groups
+   where slug in ('dura-ace-r9200','dura-ace-r9200-power',
+                  'ultegra-r8100','ultegra-r8100-power',
+                  '105-di2-r7100','grx-di2-rx825');
+  perform assert_eq(v,
+    '{"Dura-Ace Di2 R9270 groupset","Dura-Ace Di2 R9270 groupset with power meter",'
+    || '"Ultegra Di2 R8170 groupset","Ultegra Di2 R8170 groupset with power meter",'
+    || '"105 Di2 R7170 groupset","GRX Di2 RX825 groupset"}',
+    'all six read by their own part number, in range order');
+
+  -- The slugs stay as they were: they are in the address of every builder page
+  -- and in whatever anybody has already sent a customer.
+  select count(*)::text into v from product_groups where slug = 'dura-ace-r9200';
+  perform assert_eq(v, '1', 'and the links that were sent out still resolve');
+end $$;
+
+\echo ''
 \echo '───────── C. The catalogue arrives and both builds fill ─────────'
 -- Exactly what an import does: products, active, nothing touching the options.
 insert into products (sku, name, brand, active) values
