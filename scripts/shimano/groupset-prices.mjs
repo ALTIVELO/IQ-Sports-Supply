@@ -70,11 +70,43 @@ const BUILDS = [
   { name: 'Ultegra Di2 R8100, power meter', power: true,
     parts: ['R8170DLR', 'R8170DRF', 'RDR8150', 'FDR8150F', 'BTDN300', 'EWEC300'],
     chainset: /^FCR8100P/, cassette: /^CSR8101/, chain: /^CNM8100/, rotor: /^RTCL800/ },
+  /*
+   * 105 and GRX are quoted on their own specification, not the road one.
+   *
+   * Neither is made in 52/36 and neither cassette is written with a T, so
+   * asking for the shared preference finds nothing on either — and pickSize
+   * answers a miss with the first of the list. That would have quoted a 165mm
+   * crank and whichever cassette sorted first, under a heading saying 52/36
+   * and 11-30T. Hence `prefer`, and hence the warning when a preference is
+   * not found at all.
+   */
+  { name: '105 Di2 R7100', power: false,
+    parts: ['R7170DLR', 'R7170DRF', 'RDR7150', 'FDR7150F', 'BTDN300', 'EWEC300'],
+    chainset: /^FCR7100(?!P)/, cassette: /^(CSR7101|CSHG710)/,
+    chain: /^CNM7100/, rotor: /^RTCL700/,
+    prefer: { chainset: '50/34 172.5mm', cassette: '11-34' } },
+  /*
+   * The gravel build, and the double rather than the single ring: FD-RX825 is
+   * cut for a 48T and RD-RX825 reaches a 36T, which is the FC-RX8202 48/31.
+   * The 1x RX8201 cranks want a different mech and no front derailleur, so
+   * they are a different groupset rather than a cheaper option on this one.
+   */
+  { name: 'GRX Di2 RX825', power: false,
+    parts: ['RX825LR', 'RX825RF', 'RDRX825', 'FDRX825F', 'BTDN300', 'EWEC300'],
+    chainset: /^FCRX8202/, cassette: /^(CSHG710|CSR7101)/,
+    chain: /^CNM8100/, rotor: /^RTCL800/,
+    prefer: { chainset: '48/31 172.5mm', cassette: '11-36' } },
 ];
 
 const WIRE = /^EWSD300/;
 
-/** The specification quoted, where the builder offers a choice. */
+/**
+ * The specification quoted, where the builder offers a choice.
+ *
+ * The road default, which a build overrides with its own `prefer` where its
+ * range is written differently — 105 has no 52/36 and GRX no cassette with a
+ * T on it.
+ */
 const PREFERRED = {
   chainset: '52/36 172.5mm',
   cassette: '11-30T',
@@ -82,9 +114,29 @@ const PREFERRED = {
   rearRotor: '140mm',
 };
 
+/**
+ * What a row's size reads as.
+ *
+ * The Size column where the sheet filled one, and the end of the name where
+ * it did not. A size is written into that column only to tell a model's
+ * siblings apart, so a cassette that is the only one of its model carries
+ * none at all — which is both of the twelve-speed ranges the 105 and GRX
+ * builds are quoted on, CS-R7101 11-34 and CS-HG710 11-36. Matching on the
+ * column alone found neither and fell through to whichever sorted first.
+ */
+export const sizeText = (r) => {
+  const stated = (r.Size ?? '').trim();
+  if (stated) return stated;
+  const m = String(r.Name ?? '').match(/(\d{2}\s*-\s*\d{2}\s*T?)\s*$/i);
+  return m ? m[1].replace(/\s/g, '') : '';
+};
+
 export function priceBuild(rows, build) {
   const bySku = new Map(rows.map((r) => [r.SKU, r]));
   const matching = (re) => rows.filter((r) => re.test(r.SKU));
+  const want = { ...PREFERRED, ...(build.prefer ?? {}) };
+  /** Preferences nothing in the list answered, so a quote can say so. */
+  const missed = [];
 
   /*
    * Matched on the front of the label, not the whole of it.
@@ -94,10 +146,18 @@ export function priceBuild(rows, build) {
    * match on "160mm" finds nothing and falls back to the first rotor in the
    * list, which quietly quoted two fronts and no rear.
    */
-  const pickSize = (list, wanted) =>
-    list.find((r) => (r.Size ?? '').trim() === wanted)
-    ?? list.find((r) => (r.Size ?? '').trim().startsWith(wanted))
-    ?? list[0] ?? null;
+  const pickSize = (list, wanted) => {
+    const hit = list.find((r) => sizeText(r) === wanted)
+      ?? list.find((r) => sizeText(r).startsWith(wanted));
+    /*
+     * Falling back to the first of the list is how this has always ended, and
+     * it is the dangerous bit: a quote comes out under a heading naming a
+     * specification it is not for. So the miss is recorded and printed rather
+     * than swallowed.
+     */
+    if (!hit && list.length) missed.push(wanted);
+    return hit ?? list[0] ?? null;
+  };
 
   const chainsets = matching(build.chainset);
   const cassettes = matching(build.cassette);
@@ -107,11 +167,11 @@ export function priceBuild(rows, build) {
 
   const chosen = [
     ...build.parts.map((s) => bySku.get(s)).filter(Boolean),
-    pickSize(chainsets, PREFERRED.chainset),
-    pickSize(cassettes, PREFERRED.cassette),
+    pickSize(chainsets, want.chainset),
+    pickSize(cassettes, want.cassette),
     chains[0],
-    pickSize(rotors, PREFERRED.frontRotor),
-    pickSize(rotors, PREFERRED.rearRotor),
+    pickSize(rotors, want.frontRotor),
+    pickSize(rotors, want.rearRotor),
     // Two runs: the builder asks for a length each and a frame decides them.
     // The median of what is stocked stands in, and the swing below says what
     // the choice is worth.
@@ -141,7 +201,7 @@ export function priceBuild(rows, build) {
             fixed + pairs.reduce((s, [, hi]) => s + hi, 0)];
   };
 
-  return { chosen, total, swing, counts: {
+  return { chosen, total, swing, want, missed, counts: {
     chainsets: chainsets.length, cassettes: cassettes.length,
     rotors: rotors.length, wires: wires.length } };
 }
@@ -154,14 +214,27 @@ function main() {
   const gbp = (n) => n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const pad = (s, n) => String(s).padStart(n);
 
-  console.log(`Rotors and wires included · no bottom bracket · `
-    + `${PREFERRED.chainset} chainset, ${PREFERRED.cassette} cassette, `
-    + `${PREFERRED.frontRotor}/${PREFERRED.rearRotor} rotors, two Di2 wires\n`);
+  console.log('Rotors and wires included · no bottom bracket · two Di2 wires\n');
   console.log('Build'.padEnd(34) + TIERS.map((t) => pad(t, 11)).join(''));
 
   for (const build of BUILDS) {
     const { total } = priceBuild(rows, build);
     console.log(build.name.padEnd(34) + TIERS.map((t) => pad(gbp(total(t)), 11)).join(''));
+  }
+
+  /*
+   * Which specification each figure is for.
+   *
+   * Printed per build rather than once at the top, because they are no longer
+   * the same: a 105 groupset has no 52/36 and GRX is a 48/31. A total under a
+   * heading naming the wrong chainring is worse than no total.
+   */
+  console.log('\nQuoted specification:');
+  for (const build of BUILDS) {
+    const { want, missed } = priceBuild(rows, build);
+    console.log(`  ${build.name.padEnd(34)} ${want.chainset}, ${want.cassette} cassette, `
+      + `${want.frontRotor}/${want.rearRotor} rotors`
+      + (missed.length ? `   [not found: ${[...new Set(missed)].join(', ')}]` : ''));
   }
 
   console.log('\nWhat the choices are worth, at Distributor:');
@@ -177,7 +250,7 @@ function main() {
       console.log(`\n${build.name}`);
       const { chosen, total } = priceBuild(rows, build);
       for (const r of chosen) {
-        console.log(`  ${r.SKU.padEnd(15)}${(r.Size || '').padEnd(16)}`
+        console.log(`  ${r.SKU.padEnd(15)}${sizeText(r).padEnd(16)}`
           + `${pad(gbp(money(r.Distributor) ?? 0), 10)}  ${r.Name.slice(0, 44)}`);
       }
       console.log(`  ${''.padEnd(31)}${pad(gbp(total('Distributor')), 10)}  ${chosen.length} parts`);

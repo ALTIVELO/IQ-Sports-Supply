@@ -105,9 +105,26 @@ export function rotorParts(sku = '') {
 /** ── sizes written into a name ────────────────────────────────────────── */
 
 /** "11-30T", and asked for first: it is also a pair of two-digit numbers. */
-const cassette = (name) => {
+const cassette = (name, category) => {
   const m = name.match(/(\d{2})\s*-\s*(\d{2})\s*T\b/i);
-  return m ? `${m[1]}-${m[2]}T` : null;
+  if (m) return `${m[1]}-${m[2]}T`;
+  /*
+   * The twelve-speed ranges arrive without the T.
+   *
+   * "105 R7101 - HYPERGLIDE+ - 12-speed - 11-34" is a cassette and 11-34 is
+   * its range, and before this it came through with no size at all — so the
+   * 105 Di2 and GRX Di2 builds could not say which cassette they were quoting
+   * and the ranges of a family could not group.
+   *
+   * Two guards, because a bare pair of two-digit numbers is a weak signal.
+   * Only on a row already filed as a cassette, so a hose length or a bearing
+   * code cannot be read as a sprocket range; and only at the end of the name,
+   * because unanchored "Cassettes - 10-speed CS-HG500 - 11-25" reads as
+   * "00-11" — the tail of the part number and the head of the range.
+   */
+  if (category !== 'cassettes') return null;
+  const bare = name.match(/(\d{2})\s*-\s*(\d{2})\s*$/);
+  return bare ? `${bare[1]}-${bare[2]}` : null;
 };
 
 /** "52/36", however the sheet punctuates it. */
@@ -149,7 +166,7 @@ export function sizeOf({ name = '', sku = '', category = '' }) {
   if (category === 'rotors') return rotorParts(sku)?.label ?? null;
   if (category === 'shifters') return hand(name);
 
-  const cass = cassette(name);
+  const cass = cassette(name, category);
   if (cass) return cass;
 
   const parts = [chainring(name), length(name)].filter(Boolean);

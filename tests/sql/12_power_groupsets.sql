@@ -37,13 +37,15 @@ select p.id, t.id, v.price, current_date
   cross join tiers t
 on conflict do nothing;
 
+-- No series and no two wire arguments: 0042 dropped the three the function
+-- had stopped reading, and the wires became a choice in 0017.
 select seed_shimano_groupset(
-  'test-std', 'Test standard', 'R9200', 'R9270DLR','R9270DRF','RDR9250','FDR9250F',
+  'test-std', 'Test standard', 'R9270DLR','R9270DRF','RDR9250','FDR9250F',
   'FCR9200%','CSR9200%','CNM9100%','RTCL900%');
 select seed_shimano_groupset(
-  'test-power', 'Test power', 'R9200', 'R9270DLR','R9270DRF','RDR9250','FDR9250F',
+  'test-power', 'Test power', 'R9270DLR','R9270DRF','RDR9250','FDR9250F',
   'FCR9200%','CSR9200%','CNM9100%','RTCL900%',
-  'BTDN300','EWEC300','EWSD300IL090','EWSD300IL100', true);
+  'BTDN300','EWEC300', true);
 \set QUIET off
 
 \echo ''

@@ -88,6 +88,26 @@ eq('a power meter is written differently and reads the same',
 eq('a cassette is its ratio and nothing else',
    sizeOf({ name: 'CASS D/Ace R9200 12 spd 11-34T', sku: 'CSR920012134', category: 'cassettes' }),
    '11-34T');
+// Madison write the twelve-speed ranges without the T. Read the same way, or
+// the 105 Di2 and GRX Di2 builds cannot say which cassette they are quoting
+// and a family's ranges will not group.
+eq('a twelve-speed range with no T on it is still a range',
+   sizeOf({ name: '105 R7101 - HYPERGLIDE+ - 12-speed - 11-34', sku: 'CSR710112134', category: 'cassettes' }),
+   '11-34');
+eq('however the supplier names the family',
+   sizeOf({ name: 'Cassettes HG710 - HYPERGLIDE+ - 12-speed - 11-36', sku: 'CSHG71012136', category: 'cassettes' }),
+   '11-36');
+// Why it is anchored to the end. Unanchored, "CS-HG500 - 11-25" reads as
+// "00-11": the tail of the part number and the head of the range.
+eq('a part number before the range is not read as the range',
+   sizeOf({ name: 'Cassettes - 10-speed CS-HG500 - 11-25', sku: 'CSHG50010125', category: 'cassettes' }),
+   '11-25');
+// And why it is allowed only on a row already filed as a cassette: a bare
+// pair of two-digit numbers is otherwise a weak signal on any part.
+eq('a bare pair on something that is not a cassette is not a ratio',
+   sizeOf({ name: 'SM-BH90 hose - straight - 10-25', sku: 'SMBH9010', category: 'brake-pads' }),
+   null);
+
 eq('a wire is its length',
    sizeOf({ name: 'CABLE E-tube Di2 SD300 1000mm', sku: 'EWSD300IL100', category: 'electronics' }),
    '1000mm');
