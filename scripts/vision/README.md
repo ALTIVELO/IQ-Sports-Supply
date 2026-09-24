@@ -4,7 +4,7 @@
 node scripts/vision/rebuild.mjs <export.csv> <out.csv> \
   --price-is cost --costs scripts/vision/prices.json \
   --quoted-in EUR --currency GBP --fx 0.89 --duty 4 --freight 40 \
-  --margin "Distributor=10,Shop=15,Teams=15" \
+  --margin "Distributor=10,Shop=15,Teams=15,Retail=45" \
   --category wheels
 ```
 
@@ -112,7 +112,7 @@ ex-works, and their customer does need telling.
 
 ## Margin, not markup, and `Teams` means `Club`
 
-`--margin "Distributor=10,Shop=15,Teams=15"` is margin on the selling price:
+`--margin "Distributor=10,Shop=15,Teams=15,Retail=45"` is margin on the selling price:
 20% margin is twenty pence in every pound we take, so the price is the cost
 over 0.8. It is *not* cost plus 20%, which leaves 16.7% — the two differ by a
 quarter of the margin on every line, so the flag says which it means. Anyone
@@ -129,6 +129,23 @@ Shop: 15% margin = 17.6% on cost (× 1.1765)
 `Teams` is accepted wherever a tier is named, and files under `Club` — a
 cycling club and a race team buy on the same terms, and nobody should have to
 remember which of the two words the software wanted.
+
+### Retail is a decision, not a figure we hold
+
+Shimano's Retail column is Madison's own SRP, a published number. Vision give
+us nothing of the sort: the emailed quote is trade prices only, the Shopify
+export's `Compare At Price` is empty, and Vision's own web shop sells to
+consumers in euros including Italian IVA, which is not a UK recommended price
+and would be wrong to convert into one.
+
+So Retail is set the same way the other tiers are, by a margin, and the number
+is IQ's to choose. It is run at 45%, which leaves a shop buying at the Shop
+price a 35.3% margin of their own — a normal trade margin on a wheelset — and
+puts the RRPs where comparable wheels sit. 40% would leave the shop 29.4% and
+50% would leave them 41.2%.
+
+Like every other tier price here it is **net**: the invoice adds VAT. A shop
+window shows the VAT-inclusive figure, which is 20% more.
 
 ## `--vat` is refused, with the reason
 
