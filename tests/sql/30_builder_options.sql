@@ -50,6 +50,9 @@ insert into products (sku, name, brand, active) values
   ('EWSD300IL120', 'Di2 EW-SD300 E-tube Wire 1200mm', 'Shimano', true),
   ('EWSD300IL140', 'Di2 EW-SD300 E-tube Wire 1400mm', 'Shimano', true);
 
+-- Nothing above called refresh_group_options, and nothing needs to: 0043 hung
+-- it off the table, because the Catalogue screen writes products too and four
+-- wires added there sat in the catalogue on no build at all.
 do $$
 declare n integer;
 begin
@@ -60,10 +63,20 @@ begin
     join products p on p.id = o.product_id
    where g.slug = 'dura-ace-r9200' and s.name = 'First Di2 wire'
      and p.sku = 'EWSD300IL015';
-  perform assert_eq(n, 0, 'importing a wire does not put it on a build by itself');
+  perform assert_eq(n, 1, 'a wire written to the catalogue is on the build already');
 end $$;
 
-select refresh_group_options() as refreshed \gset
+-- A rule, not a welcome for anything new: a part that answers no step's
+-- pattern is written to the catalogue and joins nothing.
+insert into products (sku, name, brand, active) values
+  ('EWSD50L120', 'Di2 EW-SD50 E-tube Wire 1200mm', 'Shimano', true);
+do $$
+declare n integer;
+begin
+  select count(*)::int into n from product_group_options o
+    join products p on p.id = o.product_id where p.sku = 'EWSD50L120';
+  perform assert_eq(n, 0, 'and the older SD50 wiring is on none of them');
+end $$;
 
 do $$
 declare
@@ -76,7 +89,7 @@ begin
    where g.slug = 'dura-ace-r9200' and s.name = 'First Di2 wire';
 
   perform assert_eq(lengths @> array['150mm','400mm','850mm'], true,
-    'after a refresh the new lengths are offered');
+    'every new length is offered');
   -- And ordered by the number rather than by its text, or 1000mm lists before
   -- 150mm and a 400 lands at the bottom because it arrived last.
   perform assert_eq(lengths[1], '150mm', 'shortest first');
@@ -107,11 +120,11 @@ end $$;
 
 \echo ''
 \echo '───────── D. A part that is withdrawn stops being offered ─────────'
+-- Withdrawn on the Catalogue screen, which is one update and no refresh call.
 do $$
 declare n integer;
 begin
   update products set active = false where sku = 'EWSD300IL040';
-  perform refresh_group_options();
   select count(*)::int into n
     from product_group_options o
     join product_group_steps s on s.id = o.step_id
@@ -120,6 +133,63 @@ begin
    where g.slug = 'dura-ace-r9200' and s.name = 'First Di2 wire'
      and p.sku = 'EWSD300IL040';
   perform assert_eq(n, 0, 'a withdrawn wire cannot be picked on a build');
+end $$;
+
+\echo ''
+\echo '───────── D2. A name corrected by hand moves the option with it ─────────'
+-- The other half of the same case. A wire whose length was typed wrong reads
+-- as the wrong length on every build until somebody fixes the name, and the
+-- fix is an update to products and nothing else.
+do $$
+declare v text[];
+begin
+  update products set name = 'Di2 EW-SD300 E-tube Wire 1600mm' where sku = 'EWSD300IL140';
+  select array_agg(o.label order by o.sort) into v
+    from product_group_options o
+    join product_group_steps s on s.id = o.step_id
+    join product_groups g on g.id = s.group_id
+   where g.slug = 'dura-ace-r9200' and s.name = 'First Di2 wire';
+  perform assert_eq(v[array_length(v,1)], '1600mm', 'the corrected length is the one offered');
+  perform assert_eq(v @> array['1400mm'], false, 'and the wrong one is gone');
+  update products set name = 'Di2 EW-SD300 E-tube Wire 1400mm' where sku = 'EWSD300IL140';
+end $$;
+
+\echo ''
+\echo '───────── D3. A SKU corrected by hand leaves the step it was on ─────────'
+-- The rules re-read are the ones that could name the SKU, so a part
+-- renumbered has to be asked about under both numbers. Under the new one
+-- only, it joins what it now answers and stays on what it used to.
+do $$
+declare v text[];
+begin
+  update products set sku = 'EWJC302', name = 'SD300 2 port junction'
+   where sku = 'EWSD300IL120';
+  select array_agg(o.label order by o.sort) into v
+    from product_group_options o
+    join product_group_steps s on s.id = o.step_id
+    join product_groups g on g.id = s.group_id
+   where g.slug = 'dura-ace-r9200' and s.name = 'First Di2 wire';
+  perform assert_eq(v @> array['1200mm'], false,
+    'the wire it stopped being is off the step');
+  perform assert_eq(v @> array['1000mm','1400mm'], true, 'and the rest are untouched');
+
+  update products set sku = 'EWSD300IL120', name = 'Di2 EW-SD300 E-tube Wire 1200mm'
+   where sku = 'EWJC302';
+end $$;
+
+\echo ''
+\echo '───────── D4. A change a rule cannot read does not re-read it ─────────'
+-- Not an optimisation to be tidy about: the import restates products one row
+-- at a time, so a re-read on every column would be paid three hundred times
+-- over for columns no rule looks at.
+do $$
+declare before_n integer; after_n integer;
+begin
+  select count(*)::int into before_n from product_group_options;
+  update products set image_url = 'https://example.invalid/x.jpg'
+   where sku = 'EWSD300IL140';
+  select count(*)::int into after_n from product_group_options;
+  perform assert_eq(after_n, before_n, 'a new photograph changes no build');
 end $$;
 
 \echo ''
