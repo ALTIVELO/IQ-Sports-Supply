@@ -6,7 +6,11 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireStaff } from '@/lib/auth';
 import { temporaryPassword } from '@/lib/login/password';
+import type { Role } from '@/lib/types';
 import type { ActionResult } from '../actions';
+
+/** Who may decide what a customer pays: the two who may also suspend one. */
+const PRICING_ROLES: Role[] = ['admin', 'accounts'];
 
 const ClientInput = z.object({
   id: z.string().uuid().optional(),
@@ -21,13 +25,35 @@ const ClientInput = z.object({
 });
 
 export async function saveClient(input: unknown): Promise<ActionResult> {
-  await requireStaff();
+  const staff = await requireStaff();
   const parsed = ClientInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
 
   const sb = await supabaseServer();
   const { id, ...fields } = parsed.data;
   const row = { ...fields, email: fields.email || null };
+
+  /*
+   * The tier is the one field on this form that is not this form's to change.
+   *
+   * It is the whole price list that client sees, and it now has its own
+   * control, its own permission and its own line in the audit log. Leaving it
+   * settable here by anybody who can edit a phone number would make all three
+   * of those decoration. Everything else on the form is still theirs to edit —
+   * ops correcting an address must not be turned away over a field they did
+   * not touch.
+   */
+  if (id && !PRICING_ROLES.includes(staff.role)) {
+    const { data: before } = await sb.from('clients')
+      .select('tier_id').eq('id', id).maybeSingle();
+    if (before && before.tier_id !== row.tier_id) {
+      return {
+        ok: false,
+        error: 'Only an admin or accounts can change what a client pays. '
+             + 'Save the rest of your changes with the tier left as it was.',
+      };
+    }
+  }
 
   const { error } = id
     ? await sb.from('clients').update(row).eq('id', id)
@@ -36,6 +62,42 @@ export async function saveClient(input: unknown): Promise<ActionResult> {
   if (error) return { ok: false, error: error.message };
   revalidatePath('/staff/clients');
   return { ok: true, message: id ? 'Client updated' : 'Client added' };
+}
+
+export interface TierChangeResult extends ActionResult { from?: string | null }
+
+/**
+ * Moves a client to another pricing tier.
+ *
+ * Its own action rather than a save of the whole client, because it is its own
+ * decision: every price that customer sees changes with it, and the record of
+ * who changed it matters in a way the record of a corrected postcode does not.
+ * The database writes that record and decides who is allowed — this is a way
+ * in, not the rule.
+ *
+ * Nothing needs doing about a basket they have open. It holds ids and
+ * quantities and is priced when it is read, so it reprices itself.
+ */
+export async function setClientTier(
+  clientId: string, tierId: string,
+): Promise<TierChangeResult> {
+  await requireStaff(PRICING_ROLES);
+  const sb = await supabaseServer();
+
+  const { data, error } = await sb.rpc('set_client_tier', {
+    p_client: clientId, p_tier: tierId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/clients');
+  // Everywhere a price is read for this client is now reading a different one.
+  revalidatePath('/portal', 'layout');
+  return {
+    ok: true,
+    from: data as string | null,
+    // Null means they were already on it, which is not a change to announce.
+    message: data ? `Moved from ${data}` : 'Already on that tier',
+  };
 }
 
 export async function setClientActive(id: string, active: boolean): Promise<ActionResult> {

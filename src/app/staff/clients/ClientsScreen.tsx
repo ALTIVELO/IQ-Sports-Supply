@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
-import { saveClient, setClientActive, setTemporaryPassword } from './actions';
+import { saveClient, setClientActive, setClientTier, setTemporaryPassword } from './actions';
 
 interface ClientRow {
   id: string; name: string; tier_id: string; email: string | null; phone: string | null;
@@ -10,6 +10,10 @@ interface ClientRow {
   default_location_id: string | null; auth_user_id: string | null; active: boolean;
 }
 interface Named { id: string; name: string }
+interface Move {
+  client_id: string; changed_at: string; by_name: string;
+  from_name: string | null; to_name: string | null;
+}
 
 const blank = (tierId: string, locationId: string | null) => ({
   name: '', tier_id: tierId, email: '', phone: '', vat_no: '', address: '',
@@ -17,8 +21,14 @@ const blank = (tierId: string, locationId: string | null) => ({
 });
 
 export default function ClientsScreen({
-  clients, tiers, locations,
-}: { clients: ClientRow[]; tiers: Named[]; locations: Named[] }) {
+  clients, tiers, locations, lastMove = {}, mayPrice = false,
+}: {
+  clients: ClientRow[]; tiers: Named[]; locations: Named[];
+  /** The most recent tier move per client, for the line under the control. */
+  lastMove?: Record<string, Move>;
+  /** Whether this person may decide what a customer pays. */
+  mayPrice?: boolean;
+}) {
   const [draft, setDraft] = useState(() => blank(tiers[0]?.id ?? '', locations[0]?.id ?? null));
   const [editId, setEditId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -73,7 +83,18 @@ export default function ClientsScreen({
         <Card accent className="space-y-3">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <input placeholder="Client name" value={draft.name} onChange={(e) => set('name', e.target.value)} />
-            <select value={draft.tier_id} onChange={(e) => set('tier_id', e.target.value)}>
+            {/* Editable here when adding a client — they have no prices yet
+                and somebody has to choose one. On an existing client it is
+                the row's control that moves them, so that the move is a
+                decision of its own and lands in the log. */}
+            <select
+              value={draft.tier_id}
+              disabled={Boolean(editId) && !mayPrice}
+              title={editId && !mayPrice
+                ? 'Only an admin or accounts can change what a client pays'
+                : undefined}
+              onChange={(e) => set('tier_id', e.target.value)}
+            >
               {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             <input placeholder="Email" type="email" value={draft.email} onChange={(e) => set('email', e.target.value)} />
@@ -132,7 +153,28 @@ export default function ClientsScreen({
                 {clients.map((c) => (
                   <tr key={c.id} className={c.active ? '' : 'opacity-50'}>
                     <td className="font-semibold">{c.name}</td>
-                    <td><Tag tone="accent">{tierName(c.tier_id)}</Tag></td>
+                    <td>
+                      <TierCell
+                        client={c} tiers={tiers} mayPrice={mayPrice}
+                        move={lastMove[c.id]}
+                        busy={pending}
+                        onChange={(tierId) =>
+                          startTransition(async () => {
+                            setMessage(null);
+                            const r = await setClientTier(c.id, tierId);
+                            setMessage(r.ok
+                              ? {
+                                tone: r.from ? 'success' : 'info',
+                                text: r.from
+                                  ? `${c.name} moved from ${r.from} to `
+                                    + `${tierName(tierId)}. Every price they see has changed.`
+                                  : `${c.name} was already on ${tierName(tierId)}.`,
+                              }
+                              : { tone: 'error', text: r.error ?? 'Could not change the tier' });
+                          })
+                        }
+                      />
+                    </td>
                     <td className="text-mute">{locationName(c.default_location_id)}</td>
                     <td className="text-mute">{c.email ?? '—'}</td>
                     <td className="num">{c.vat_exempt ? 'Zero-rated' : c.vat_no || '—'}</td>
@@ -190,6 +232,69 @@ export default function ClientsScreen({
         held here — that link is made automatically.
       </p>
     </div>
+  );
+}
+
+/**
+ * A client's pricing tier, changed where it is read.
+ *
+ * A select rather than a link to the form, because this is one decision and
+ * the form is seven. It confirms first: it is the only control on the screen
+ * whose effect is every price that customer sees, and a mis-click on a
+ * dropdown is the easiest mistake there is to make and the hardest to notice.
+ *
+ * Whoever may not change it sees the tier as it always read, not a control
+ * that refuses them.
+ */
+function TierCell({ client, tiers, move, mayPrice, busy, onChange }: {
+  client: ClientRow; tiers: Named[]; move?: Move;
+  mayPrice: boolean; busy: boolean;
+  onChange: (tierId: string) => void;
+}) {
+  const name = tiers.find((t) => t.id === client.tier_id)?.name ?? '—';
+
+  const since = move && (
+    <div className="text-[11px] text-mute mt-0.5 leading-tight">
+      {move.from_name ? `${move.from_name} → ${move.to_name}` : move.to_name} ·{' '}
+      {new Date(move.changed_at).toLocaleDateString('en-GB',
+        { day: 'numeric', month: 'short', year: 'numeric' })} · {move.by_name}
+    </div>
+  );
+
+  if (!mayPrice) {
+    return <><Tag tone="accent">{name}</Tag>{since}</>;
+  }
+
+  return (
+    <>
+      <select
+        className="text-[12px] min-w-[120px]"
+        value={client.tier_id}
+        disabled={busy}
+        aria-label={`Pricing tier for ${client.name}`}
+        onChange={(e) => {
+          const tierId = e.target.value;
+          if (tierId === client.tier_id) return;
+          const to = tiers.find((t) => t.id === tierId)?.name ?? 'that tier';
+          // eslint-disable-next-line no-alert
+          if (!confirm(
+            `Move ${client.name} from ${name} to ${to}?\n\n`
+            + 'Every price they see changes immediately, including anything '
+            + 'already in their basket. Orders already placed keep the prices '
+            + 'they were placed at.',
+          )) {
+            // The select has already moved to the new value in the DOM; put
+            // it back, or it reads as the tier they are not on.
+            e.target.value = client.tier_id;
+            return;
+          }
+          onChange(tierId);
+        }}
+      >
+        {tiers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+      {since}
+    </>
   );
 }
 
