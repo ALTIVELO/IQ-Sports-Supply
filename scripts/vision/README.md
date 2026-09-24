@@ -4,7 +4,7 @@
 node scripts/vision/rebuild.mjs <export.csv> <out.csv> \
   --price-is cost --costs scripts/vision/prices.json \
   --quoted-in EUR --currency GBP --fx 0.89 --duty 4 \
-  --margin "Distributor=15,Shop=20,Teams=20" \
+  --margin "Distributor=10,Shop=15,Teams=15" \
   --category wheels
 ```
 
@@ -97,7 +97,7 @@ months on the sheet answers for itself.
 
 ## Margin, not markup, and `Teams` means `Club`
 
-`--margin "Distributor=15,Shop=20,Teams=20"` is margin on the selling price:
+`--margin "Distributor=10,Shop=15,Teams=15"` is margin on the selling price:
 20% margin is twenty pence in every pound we take, so the price is the cost
 over 0.8. It is *not* cost plus 20%, which leaves 16.7% — the two differ by a
 quarter of the margin on every line, so the flag says which it means. Anyone
@@ -107,8 +107,8 @@ than a race.
 Every run prints the translation:
 
 ```
-Distributor: 15% margin = 17.6% on cost (× 1.1765)
-Shop: 20% margin = 25.0% on cost (× 1.2500)
+Distributor: 10% margin = 11.1% on cost (× 1.1111)
+Shop: 15% margin = 17.6% on cost (× 1.1765)
 ```
 
 `Teams` is accepted wherever a tier is named, and files under `Club` — a
