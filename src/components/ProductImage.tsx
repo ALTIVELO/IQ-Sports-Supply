@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LogoGlyph } from './Logo';
 import ImageZoom from './ImageZoom';
 
@@ -17,6 +17,15 @@ import ImageZoom from './ImageZoom';
  * image happens to live on, and next/image would need every one of those hosts
  * declared in next.config.mjs ahead of time.
  */
+/**
+ * How many times a picture is asked for again before the placeholder wins.
+ *
+ * Two, at 400ms and 800ms. Enough to ride out a dropped connection or a CDN
+ * hiccup; not so many that a URL which is genuinely dead keeps a spinner and a
+ * connection busy on every tile of a long page.
+ */
+const RETRIES = 2;
+
 export default function ProductImage({
   src, alt, className = '', sizePx = 200, placeholderScale = 'half', zoom = false,
 }: {
@@ -50,8 +59,75 @@ export default function ProductImage({
    */
   zoom?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
+  /*
+   * A load that fails is tried again before it is given up on.
+   *
+   * These URLs are somebody else's CDN, reached over whatever connection the
+   * customer happens to be on, and a request that comes back empty is far more
+   * often a moment than a fact. Before this, one such moment was permanent:
+   * onError set a flag, the flag drew the placeholder, and nothing ever asked
+   * again — so a photograph that would have arrived on the next attempt was
+   * gone until the page was reloaded.
+   *
+   * It shows up unevenly, which is what makes it hard to credit. A desktop
+   * window four tiles wide asks for two or three times as many images at once
+   * as a phone two tiles wide, so the same flaky minute costs a laptop several
+   * pictures and a phone none — and the collections it costs are the ones
+   * where every product has a photograph.
+   *
+   * The retry remounts the <img> rather than touching the URL: a query string
+   * appended to bust a cache would also miss the CDN's, and turn one slow
+   * request into two.
+   */
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A different product in the same slot starts with a clean slate, or a list
+  // that reuses this row hands the next product the last one's failure.
+  useEffect(() => {
+    setAttempt(0);
+    setFailed(false);
+  }, [src]);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  /**
+   * One failure, however it was noticed.
+   *
+   * Shared between the img's own onError and the check on mount below,
+   * because a picture can fail in two places and only one of them is an
+   * event React ever hears about.
+   */
+  const stumbled = () => {
+    if (attempt >= RETRIES) { setFailed(true); return; }
+    // Backing off rather than hammering: if the CDN is having a bad moment,
+    // twenty tiles retrying at once is the wrong answer.
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setAttempt((a) => a + 1), 400 * (attempt + 1));
+  };
+
+  /*
+   * The failure React never hears about.
+   *
+   * These pages are server-rendered, so the browser has the <img> in its
+   * hands and is already fetching before any of this code runs. A request
+   * that fails in that window fires its error against an element React has
+   * not attached a handler to yet, and React does not replay it — so onError
+   * alone catches the failures that happen late and none of the ones that
+   * happen first, which are most of them.
+   *
+   * Asking the element directly is how that gets caught: an <img> that has
+   * finished (complete) with nothing to show for it (naturalWidth 0) has
+   * failed, whether or not anybody was listening at the time. Checked through
+   * a ref so it runs on each attempt's element, and never for one that lazy
+   * loading has not started yet — those are not complete.
+   */
+  const check = (el: HTMLImageElement | null) => {
+    if (el && el.complete && el.naturalWidth === 0) stumbled();
+  };
+
   const showPlaceholder = !src || failed;
   const bare = placeholderScale === 'none';
 
@@ -86,13 +162,17 @@ export default function ProductImage({
         />
       ) : (
         <img
+          // A new element each attempt, which is what makes the browser ask
+          // again: re-setting the same src on the same element does nothing.
+          key={attempt}
+          ref={check}
           src={src}
           alt={alt}
           loading="lazy"
           decoding="async"
           width={sizePx}
           height={sizePx}
-          onError={() => setFailed(true)}
+          onError={stumbled}
           className={bare ? 'max-w-full max-h-full object-contain' : 'w-full h-full object-contain'}
         />
       )}
