@@ -7,7 +7,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const PUBLIC_PATHS = ['/', '/apply', '/login', '/pending'];
-const PUBLIC_PREFIXES = ['/auth/', '/api/xero/'];
+const PUBLIC_PREFIXES = ['/auth/', '/api/xero/', '/brochures/', '/iq-brochure-'];
 
 const isPublic = (path: string) =>
   PUBLIC_PATHS.includes(path) || PUBLIC_PREFIXES.some((p) => path.startsWith(p));
