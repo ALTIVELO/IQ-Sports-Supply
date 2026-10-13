@@ -16,7 +16,7 @@ import { previewCatalogue, applyCatalogue, applyClients, applyStock,
          applyHistoricOrders, saveTemplate } from './actions';
 import Restated from './Restated';
 
-interface Named { id: string; name: string }
+interface Named { id: string; name: string; at_cost?: boolean }
 interface Template {
   scope: string; tier_id: string | null; header_row: number;
   mapping: ColumnMapping;
@@ -101,6 +101,12 @@ const FIXED_FIELDS: Record<ImportScope, Field[]> = {
  * The columns to ask about. A price file gets one selector per tier after the
  * fixed fields, so a single sheet can carry the whole price book — our cost
  * beside what each kind of customer pays for the same thing.
+ *
+ * Except a tier that has no price list. VIP is the cost, read from the cost
+ * when it is read, so a column mapped to it would be typed in, saved, and then
+ * never used by anything — and a box that accepts a number and ignores it is
+ * worse than no box. Our cost is already a column here, which is the one that
+ * moves VIP.
  */
 function fieldsFor(scope: ImportScope, tiers: Named[]): Field[] {
   if (scope !== 'prices') return FIXED_FIELDS[scope];
@@ -108,7 +114,7 @@ function fieldsFor(scope: ImportScope, tiers: Named[]): Field[] {
     ...FIXED_FIELDS.prices,
     // Two per tier, the loose price first, which is the order the sheet puts
     // them in and the order the screens show them in.
-    ...tiers.flatMap((t) => [
+    ...tiers.filter((t) => !t.at_cost).flatMap((t) => [
       { key: breakKey(t.id), label: `${t.name} under the outer`, required: false },
       { key: tierKey(t.id), label: `${t.name} price`, required: false },
     ]),

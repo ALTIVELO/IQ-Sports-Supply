@@ -12,7 +12,7 @@ export default async function ImportPage() {
 
   const [{ data: tiers }, { data: locations }, { data: templates }, { data: history }] =
     await Promise.all([
-      sb.from('tiers').select('id, name').order('sort'),
+      sb.from('tiers').select('id, name, at_cost').order('sort'),
       sb.from('locations').select('id, name').eq('active', true).order('name'),
       sb.from('import_templates').select('scope, tier_id, header_row, mapping'),
       sb.from('price_imports')

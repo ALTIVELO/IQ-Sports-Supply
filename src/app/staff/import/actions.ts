@@ -63,9 +63,14 @@ export async function saveTemplate(input: {
 // ── catalogue import: SKUs, tier prices and what they cost us ───────────────
 
 /** Every tier this file prices, in the order the tiers themselves are kept. */
-function tiersPriced(rows: CatalogueRow[], tiers: { id: string; name: string }[]) {
+function tiersPriced(
+  rows: CatalogueRow[], tiers: { id: string; name: string; at_cost?: boolean }[],
+) {
   const seen = new Set(rows.flatMap((r) => Object.keys(r.prices)));
-  return tiers.filter((t) => seen.has(t.id));
+  // A tier with no price list is never written to, even if a column is somehow
+  // mapped to it — a saved layout from before it existed, say. Its price is the
+  // cost, and writing a row that nothing reads would only look like it worked.
+  return tiers.filter((t) => !t.at_cost && seen.has(t.id));
 }
 
 
@@ -130,7 +135,7 @@ export async function previewCatalogue(
   const sb = await supabaseServer();
 
   const [{ data: tiers }, products, { data: categories }] = await Promise.all([
-    sb.from('tiers').select('id, name').order('sort'),
+    sb.from('tiers').select('id, name, at_cost').order('sort'),
     // Withdrawn products included. They still hold the SKU, so a preview that
     // cannot see them calls a SKU new that the import will not create, and
     // says nothing about the one place the prices are actually going.
@@ -339,7 +344,7 @@ export async function applyCatalogue(input: {
   const valid = rows.filter((r) => r.sku.trim());
   if (!valid.length) return { ok: false, error: 'There was nothing to import' };
 
-  const { data: tiers } = await sb.from('tiers').select('id, name').order('sort');
+  const { data: tiers } = await sb.from('tiers').select('id, name, at_cost').order('sort');
   const priced = tiersPriced(valid, tiers ?? []);
 
   // Paged, not limited. A prefix of the catalogue here is not a display

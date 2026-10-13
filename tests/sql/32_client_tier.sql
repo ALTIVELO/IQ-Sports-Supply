@@ -55,12 +55,15 @@ end $$;
 
 \echo ''
 \echo '───────── A. An admin moves a client, and the prices move ─────────'
+-- Moved between tiers that carry a price list. VIP is a tier too, and it is
+-- the cost rather than a list, so it prices only what has been costed — which
+-- is a claim of its own and is made in suite 33, not smuggled in here.
 set session "test.user_id" = '11111111-1111-1111-1111-111111111111';
 do $$
 declare v_client uuid; v_from uuid; v_to uuid; v_was text; v_now uuid;
 begin
   select id, tier_id into v_client, v_from from clients where name = 'MDI Ltd';
-  select id into v_to from tiers where id <> v_from order by sort limit 1;
+  select id into v_to from tiers where id <> v_from and not at_cost order by sort limit 1;
 
   v_was := set_client_tier(v_client, v_to);
   select tier_id into v_now from clients where id = v_client;
@@ -153,7 +156,7 @@ do $$
 declare v_client uuid; v_to uuid;
 begin
   select id into v_client from clients where name = 'MDI Ltd';
-  select id into v_to from tiers order by sort limit 1;
+  select id into v_to from tiers where not at_cost order by sort limit 1;
   perform set_client_tier(v_client, v_to);
   perform assert_eq((select t.name from tiers t join clients c on c.tier_id = t.id
                       where c.id = v_client),
@@ -170,7 +173,7 @@ do $$
 declare v_client uuid; v_to uuid; v_before uuid;
 begin
   select id, tier_id into v_client, v_before from clients where name = 'MDI Ltd';
-  select id into v_to from tiers where id <> v_before order by sort limit 1;
+  select id into v_to from tiers where id <> v_before and not at_cost order by sort limit 1;
 
   perform assert_fails(
     format('select set_client_tier(%L, %L)', v_client, v_to),

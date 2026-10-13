@@ -27,7 +27,7 @@ interface Product {
   /** The outer — the least that buys the advertised price. One for most parts. */
   moq: number | null;
 }
-interface Named { id: string; name: string }
+interface Named { id: string; name: string; at_cost?: boolean }
 interface CategoryOption {
   id: string; name: string; slug: string; sort: number; parent_id: string | null;
 }
@@ -143,6 +143,9 @@ export default function CatalogueScreen({
 }
 
 function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Msg) => void }) {
+  // The tiers that carry a price list, and the ones that are the cost.
+  const priced = tiers.filter((t) => !t.at_cost);
+  const atCost = tiers.filter((t) => t.at_cost);
   const [open, setOpen] = useState(false);
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
@@ -190,14 +193,17 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
           <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
         </label>
       </div>
+      {/* A tier priced at cost has no box: it is the figure in the first one,
+          and a second box that took a number and ignored it would be worse
+          than no box at all. */}
       <div className="grid gap-2"
-           style={{ gridTemplateColumns: `repeat(${tiers.length + 1}, minmax(0,1fr))` }}>
+           style={{ gridTemplateColumns: `repeat(${priced.length + 1}, minmax(0,1fr))` }}>
         <input
           type="number" step="0.01" min={0} className="num"
           placeholder={`Our cost ${CURRENCY_SYMBOL[currencyOf(currency)]}`} value={cost}
           onChange={(e) => setCost(e.target.value)}
         />
-        {tiers.map((t) => (
+        {priced.map((t) => (
           <input
             key={t.id} type="number" step="0.01" min={0} className="num"
             placeholder={`${t.name} ${CURRENCY_SYMBOL[currencyOf(currency)]}`}
@@ -206,6 +212,14 @@ function ProductEditor({ tiers, onMessage }: { tiers: Named[]; onMessage: (m: Ms
           />
         ))}
       </div>
+      {atCost.length > 0 && (
+        <p className="text-[11px] text-mute">
+          {atCost.map((t) => t.name).join(' and ')}{' '}
+          {atCost.length === 1 ? 'is' : 'are'} priced at our cost, so {atCost.length === 1
+            ? 'it follows' : 'they follow'} the figure on the left and {atCost.length === 1
+            ? 'needs' : 'need'} nothing typed here.
+        </p>
+      )}
       <div className="flex gap-2">
         <Button small onClick={submit} disabled={pending}>{pending ? 'Saving…' : 'Add product'}</Button>
         <Button small kind="ghost" onClick={() => setOpen(false)}>Cancel</Button>

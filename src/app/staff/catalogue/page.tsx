@@ -15,7 +15,7 @@ export default async function CataloguePage({
   const sb = await supabaseServer();
 
   const [{ data: tiers }, { data: locations }, { data: categories }] = await Promise.all([
-    sb.from('tiers').select('id, name').order('sort'),
+    sb.from('tiers').select('id, name, at_cost').order('sort'),
     sb.from('locations').select('id, name').eq('active', true).order('name'),
     sb.from('categories').select('id, name, slug, sort, parent_id').order('sort'),
   ]);

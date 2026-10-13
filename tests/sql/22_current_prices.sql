@@ -64,17 +64,27 @@ set session "test.user_id" = '11111111-1111-1111-1111-111111111111';
 do $$
 declare v_all uuid[] := (select array_agg(id) from products where sku like 'CP-%');
         v_tiers integer := (select count(*)::integer from tiers);
+        v_listed integer := (select count(*)::integer from tiers where not at_cost);
         v_history integer;
 begin
   select count(*)::integer into v_history from tier_prices tp
     join products p on p.id = tp.product_id where p.sku = 'CP-1';
   perform assert_eq(v_history, v_tiers * 13, 'CP-1 really does have that much history');
 
-  -- Two priced on every tier, one priced on a single tier.
+  /*
+   * Two priced on every tier with a price list, one priced on a single tier,
+   * and then the tier that has no price list.
+   *
+   * VIP is the cost, so it prices CP-1, which has one, and declines CP-2,
+   * which does not — a product we have never costed has no VIP price, in the
+   * same way a product nobody has priced on Shop has no Shop price. That is
+   * one row, not two, and it is the reason this is counted rather than
+   * multiplied out.
+   */
   perform assert_eq(
     (select count(*)::integer from current_tier_prices(v_all)),
-    v_tiers * 2 + 1,
-    'and the answer is one row per product per tier, not one per price ever set');
+    v_listed * 2 + 1 + 1,
+    'and the answer is one row per product per tier that prices it');
 end $$;
 
 \echo ''
