@@ -9,16 +9,20 @@ export default async function ClientsPage() {
   const staff = await requireStaff();
   const sb = await supabaseServer();
 
-  const [{ data: clients }, { data: tiers }, { data: locations }, { data: moves }] =
+  const [{ data: clients }, { data: tiers }, { data: locations }, { data: moves },
+         { data: balances }] =
     await Promise.all([
       sb.from('clients')
-        .select('id, name, tier_id, email, phone, vat_no, address, vat_exempt, default_location_id, auth_user_id, active')
+        .select('id, name, tier_id, email, phone, vat_no, address, vat_exempt, default_location_id, auth_user_id, active, credit_account')
         .order('name'),
       sb.from('tiers').select('id, name').order('sort'),
       sb.from('locations').select('id, name').eq('active', true).order('name'),
       // Who last moved each client, and when. The first question when a price
       // looks wrong, and until now nothing on this screen answered it.
       sb.rpc('last_tier_changes'),
+      // What each of them owes us, so the terms decision is made next to the
+      // number it is about.
+      sb.rpc('client_balances'),
     ]);
 
   type Move = {
@@ -29,6 +33,10 @@ export default async function ClientsPage() {
     ((moves ?? []) as Move[]).map((m) => [m.client_id, m]),
   );
 
+  type Balance = { client_id: string; currency: string; due: number; overdue: number };
+  const owed: Record<string, Balance[]> = {};
+  for (const b of ((balances ?? []) as Balance[])) (owed[b.client_id] ??= []).push(b);
+
   return (
     <>
       <PageHeading sub="Each client sits on one pricing tier and one default fulfilment site. The tier drives every price they see — nothing to remember at order time.">
@@ -37,6 +45,7 @@ export default async function ClientsPage() {
       <ClientsScreen
         clients={clients ?? []} tiers={tiers ?? []} locations={locations ?? []}
         lastMove={lastMove}
+        owed={owed}
         // Ops pick and pack. They read this screen and edit what is on it;
         // what a customer pays is not theirs, here or on the form.
         mayPrice={staff.role === 'admin' || staff.role === 'accounts'}

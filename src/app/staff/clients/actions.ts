@@ -100,6 +100,30 @@ export async function setClientTier(
   };
 }
 
+/**
+ * Puts a client on terms, or takes them off.
+ *
+ * Its own action for the same reason the tier is: it decides whether goods
+ * leave the building before the money does, which is not a detail on a form.
+ * The database decides who may and writes the record.
+ */
+export async function setClientCredit(
+  clientId: string, on: boolean,
+): Promise<ActionResult> {
+  await requireStaff(PRICING_ROLES);
+  const sb = await supabaseServer();
+  const { error } = await sb.rpc('set_client_credit', { p_client: clientId, p_on: on });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/staff/clients');
+  revalidatePath('/staff/packing');
+  return {
+    ok: true,
+    message: on
+      ? 'On terms — their orders now pack as soon as the stock is ready'
+      : 'Off terms — their orders wait for payment again',
+  };
+}
+
 export async function setClientActive(id: string, active: boolean): Promise<ActionResult> {
   await requireStaff(['admin', 'accounts']);
   const sb = await supabaseServer();

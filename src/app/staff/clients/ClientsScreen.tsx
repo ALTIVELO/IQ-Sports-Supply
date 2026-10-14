@@ -3,13 +3,18 @@
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
-import { saveClient, setClientActive, setClientTier, setTemporaryPassword } from './actions';
+import { saveClient, setClientActive, setClientCredit, setClientTier,
+         setTemporaryPassword } from './actions';
+import { money } from '@/lib/format';
 
 interface ClientRow {
   id: string; name: string; tier_id: string; email: string | null; phone: string | null;
   vat_no: string | null; address: string | null; vat_exempt: boolean;
   default_location_id: string | null; auth_user_id: string | null; active: boolean;
+  /** On terms: their goods pack when the stock is ready, not when it is paid. */
+  credit_account: boolean;
 }
+interface Balance { client_id: string; currency: string; due: number; overdue: number }
 interface Named { id: string; name: string }
 interface Move {
   client_id: string; changed_at: string; by_name: string;
@@ -22,9 +27,11 @@ const blank = (tierId: string, locationId: string | null) => ({
 });
 
 export default function ClientsScreen({
-  clients, tiers, locations, lastMove = {}, mayPrice = false,
+  clients, tiers, locations, lastMove = {}, owed = {}, mayPrice = false,
 }: {
   clients: ClientRow[]; tiers: Named[]; locations: Named[];
+  /** What each client has been invoiced and not paid. */
+  owed?: Record<string, Balance[]>;
   /** The most recent tier move per client, for the line under the control. */
   lastMove?: Record<string, Move>;
   /** Whether this person may decide what a customer pays. */
@@ -146,7 +153,8 @@ export default function ClientsScreen({
             <table>
               <thead>
                 <tr>
-                  <th>Client</th><th>Tier</th><th>Default site</th><th>Email</th>
+                  <th>Client</th><th>Tier</th><th>Terms</th><th>Owed</th>
+                  <th>Default site</th><th>Email</th>
                   <th>VAT</th><th>Portal</th><th />
                 </tr>
               </thead>
@@ -189,6 +197,52 @@ export default function ClientsScreen({
                           })
                         }
                       />
+                    </td>
+                    <td>
+                      {/* The arrangement, not an override typed at the moment
+                          of packing: whoever has the box is not the person who
+                          decides whether this customer is good for it. */}
+                      {mayPrice ? (
+                        <label className="flex items-center gap-1.5 text-[12px] whitespace-nowrap">
+                          <input
+                            type="checkbox" checked={c.credit_account} disabled={pending}
+                            aria-label={`${c.name} is on credit terms`}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              if (on && !confirm(
+                                `Put ${c.name} on terms?\n\n`
+                                + 'Their orders will be packed and shipped as soon as the '
+                                + 'stock is ready, before the invoice is paid. What they '
+                                + 'owe stays on their account until they settle it.',
+                              )) { e.target.checked = false; return; }
+                              startTransition(async () => {
+                                const r = await setClientCredit(c.id, on);
+                                setMessage(r.ok
+                                  ? { tone: 'success', text: `${c.name}: ${r.message}` }
+                                  : { tone: 'error', text: r.error ?? 'Failed' });
+                              });
+                            }}
+                          />
+                          On account
+                        </label>
+                      ) : c.credit_account ? (
+                        <Tag tone="amber">On account</Tag>
+                      ) : <span className="text-mute text-[12px]">—</span>}
+                    </td>
+                    <td className="num text-[12px]">
+                      {(owed[c.id] ?? []).length === 0
+                        ? <span className="text-mute">—</span>
+                        : (owed[c.id] ?? []).map((b) => (
+                          <div key={b.currency}
+                               className={b.overdue > 0 ? 'text-danger font-semibold' : ''}>
+                            {money(b.due, b.currency)}
+                            {b.overdue > 0 && (
+                              <span className="block text-[11px]">
+                                {money(b.overdue, b.currency)} overdue
+                              </span>
+                            )}
+                          </div>
+                        ))}
                     </td>
                     <td className="text-mute">{locationName(c.default_location_id)}</td>
                     <td className="text-mute">{c.email ?? '—'}</td>

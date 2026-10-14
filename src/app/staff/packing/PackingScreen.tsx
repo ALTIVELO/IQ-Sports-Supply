@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
-import { fmtDate } from '@/lib/format';
+import { fmtDate, money } from '@/lib/format';
 import { markPacked, markShipped, markDelivered } from '../actions';
 import type { ActionResult } from '../actions';
 import type { InvoiceType } from '@/lib/types';
@@ -14,17 +14,20 @@ interface Inv {
   packed: boolean; packed_at: string | null; shipped: boolean; shipped_at: string | null;
   delivered: boolean; delivered_at: string | null;
   carrier: string | null; tracking_number: string | null; tracking_url: string | null;
-  clients: { name: string; address: string | null };
+  clients: { id: string; name: string; address: string | null; credit_account: boolean };
   orders: { number: string; dropship: boolean | null; ship_to: string | null };
   invoice_lines: { sku: string; name: string; qty: number }[];
 }
 interface Named { id: string; name: string }
+interface Balance { client_id: string; currency: string; due: number; overdue: number }
 
 export default function PackingScreen({
-  locations, activeLocation, queue, waiting, recent,
+  locations, activeLocation, queue, waiting, recent, owed = {},
 }: {
   locations: Named[]; activeLocation: string;
   queue: Inv[]; waiting: Inv[]; recent: Inv[];
+  /** What each client owes, keyed by client, for the ones going out on terms. */
+  owed?: Record<string, Balance[]>;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
@@ -54,7 +57,7 @@ export default function PackingScreen({
         ) : (
           <div className="space-y-2.5">
             {queue.map((inv) => (
-              <PackRow key={inv.id} inv={inv} onMessage={setMessage} />
+              <PackRow key={inv.id} inv={inv} balance={owed[inv.clients.id]} onMessage={setMessage} />
             ))}
           </div>
         )}
@@ -72,7 +75,8 @@ export default function PackingScreen({
                   <span className="num font-bold">{inv.number}</span>
                   <span className="text-[13px]">{inv.clients.name}</span>
                   <span className="text-[12px] text-mute num">{inv.orders.number}</span>
-                  {!inv.paid && <Tag tone="red">Awaiting payment</Tag>}
+                  {!inv.paid && !inv.clients.credit_account && <Tag tone="red">Awaiting payment</Tag>}
+                  {!inv.paid && inv.clients.credit_account && <Tag tone="amber">On account</Tag>}
                   {inv.paid && !inv.ready_to_pack && <Tag tone="amber">Awaiting stock</Tag>}
                   <a
                     href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer"
@@ -94,7 +98,7 @@ export default function PackingScreen({
           </h2>
           <div className="space-y-2.5">
             {recent.map((inv) => (
-              <PackRow key={inv.id} inv={inv} onMessage={setMessage} />
+              <PackRow key={inv.id} inv={inv} balance={owed[inv.clients.id]} onMessage={setMessage} />
             ))}
           </div>
         </section>
@@ -104,8 +108,13 @@ export default function PackingScreen({
 }
 
 function PackRow({
-  inv, onMessage,
-}: { inv: Inv; onMessage: (m: { tone: 'error' | 'success' | 'info'; text: string }) => void }) {
+  inv, balance, onMessage,
+}: {
+  inv: Inv;
+  /** What this client owes, where it matters — an invoice going out unpaid. */
+  balance?: Balance[];
+  onMessage: (m: { tone: 'error' | 'success' | 'info'; text: string }) => void;
+}) {
   const [shipping, setShipping] = useState(false);
   const [carrier, setCarrier] = useState(inv.carrier ?? '');
   const [tracking, setTracking] = useState(inv.tracking_number ?? '');
@@ -136,6 +145,21 @@ function PackRow({
         {/* The packer has to know before opening the packing list: a box going
             to a consumer must not have anything with a trade price in it. */}
         {inv.orders.dropship && <Tag tone="amber">Direct to customer</Tag>}
+        {/* Going out unpaid, and what is already outstanding beside it. The
+            exposure belongs where the decision is, not on another screen. */}
+        {!inv.paid && (
+          <>
+            <Tag tone="amber">On account</Tag>
+            {(balance ?? []).map((b) => (
+              <span key={b.currency}
+                    className={`num text-[12px] font-semibold
+                                ${b.overdue > 0 ? 'text-danger' : 'text-mute'}`}>
+                {money(b.due, b.currency)} owed
+                {b.overdue > 0 && <> · {money(b.overdue, b.currency)} overdue</>}
+              </span>
+            ))}
+          </>
+        )}
 
         <div className="ml-auto flex flex-wrap gap-1.5">
           <a
