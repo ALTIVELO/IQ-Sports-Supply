@@ -433,19 +433,28 @@ export default function OrderRow({
  */
 function EditLines({ lines, products, pending, onSave, onCancel }: {
   lines: Line[]; products: ProductLite[]; pending: boolean;
-  onSave: (next: { product_id: string; qty: number }[]) => void;
+  onSave: (next: { product_id?: string | null; line_id?: string; qty: number }[]) => void;
   onCancel: () => void;
 }) {
+  /*
+   * Both kinds of line, kept apart because they are re-sent differently.
+   *
+   * A catalogue line is named by its product, which still exists to be looked
+   * up. A line somebody typed exists only on this order, so it is named by its
+   * own id and carried through by it — otherwise the first change of quantity
+   * to anything else would delete the wheel build.
+   */
   const [draft, setDraft] = useState(
     () => lines
       .filter((l) => l.product_id)
       .map((l) => ({ product_id: l.product_id as string, sku: l.sku, name: l.name, qty: l.qty })),
   );
+  const [typed, setTyped] = useState(
+    () => lines
+      .filter((l) => !l.product_id)
+      .map((l) => ({ line_id: l.id, sku: l.sku, name: l.name, qty: l.qty })),
+  );
   const [q, setQ] = useState('');
-
-  // A line whose product has since been deleted cannot be sent back, so say so
-  // rather than dropping it silently on save.
-  const orphans = lines.filter((l) => !l.product_id);
 
   const matches = q.trim().length < 2 ? [] : products
     .filter((p) => !draft.some((d) => d.product_id === p.id))
@@ -456,12 +465,34 @@ function EditLines({ lines, products, pending, onSave, onCancel }: {
     <div className="mt-3 border border-ink rounded p-3 space-y-3">
       <h3 className="text-[13px] font-semibold">Edit the lines</h3>
 
-      {orphans.length > 0 && (
-        <Notice>
-          {orphans.length} line{orphans.length === 1 ? '' : 's'} point at a product that has
-          been deleted from the catalogue and cannot be carried through an edit:{' '}
-          {orphans.map((l) => l.sku).join(', ')}. Cancel and re-place the order instead.
-        </Notice>
+      {typed.length > 0 && (
+        <div className="space-y-1">
+          {typed.map((d, i) => (
+            <div key={d.line_id} className="flex flex-wrap items-center gap-2 text-[12px]">
+              <span className="num font-semibold w-[120px]">{d.sku}</span>
+              <span className="flex-1 min-w-0">
+                {d.name}
+                {/* Said, because the price cannot be edited here and the
+                    reason is that it was agreed rather than looked up. */}
+                <span className="text-[11px] text-mute"> · typed on this order</span>
+              </span>
+              <QtyStepper
+                value={d.qty}
+                min={1}
+                label={`${d.sku} on this order`}
+                onChange={(qty) => setTyped((prev) => prev.map((x, j) =>
+                  j === i ? { ...x, qty } : x))}
+              />
+              <button
+                onClick={() => setTyped((prev) => prev.filter((_, j) => j !== i))}
+                aria-label={`Remove ${d.sku}`}
+                className="text-mute hover:text-danger px-1"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="space-y-1">
@@ -485,7 +516,7 @@ function EditLines({ lines, products, pending, onSave, onCancel }: {
             </button>
           </div>
         ))}
-        {draft.length === 0 && (
+        {draft.length === 0 && typed.length === 0 && (
           <p className="text-[12px] text-danger">
             Nothing left. An order needs a line — cancel it instead.
           </p>
@@ -523,8 +554,11 @@ function EditLines({ lines, products, pending, onSave, onCancel }: {
         is now short from the supplier.
       </p>
       <div className="flex gap-2">
-        <Button small kind="accent" disabled={pending || !draft.length || orphans.length > 0}
-                onClick={() => onSave(draft.map(({ product_id, qty }) => ({ product_id, qty })))}>
+        <Button small kind="accent" disabled={pending || !(draft.length + typed.length)}
+                onClick={() => onSave([
+                  ...draft.map(({ product_id, qty }) => ({ product_id, qty })),
+                  ...typed.map(({ line_id, qty }) => ({ line_id, qty })),
+                ])}>
           {pending ? 'Saving…' : 'Save and reissue the invoice'}
         </Button>
         <Button small kind="ghost" disabled={pending} onClick={onCancel}>Cancel</Button>

@@ -81,7 +81,7 @@ export async function placeClientOrder(
   // Sterling first where there is a choice, and our own goods before an
   // introduced brand's, so the order numbers come back in the order the
   // counter thinks in rather than whichever hashed first.
-  const parts = splitOrders(clean, (id) => keyOf.get(id));
+  const parts = splitOrders(clean, (l) => (l.product_id ? keyOf.get(l.product_id) : undefined));
 
   const placed: NonNullable<PortalResult['orders']> = [];
   const warnings: string[] = [];

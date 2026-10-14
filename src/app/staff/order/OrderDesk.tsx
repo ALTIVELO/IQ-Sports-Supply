@@ -28,7 +28,9 @@ interface ClientRow {
 interface Named { id: string; name: string }
 
 interface DraftLine {
-  productId: string; sku: string; name: string; qty: number; unitPrice: number;
+  /** Null for a line typed here: it is not in the catalogue and never will be. */
+  productId: string | null;
+  sku: string; name: string; qty: number; unitPrice: number;
   /** The tier price, kept so an override is visible as an override. */
   tierPrice: number;
   /**
@@ -47,6 +49,17 @@ interface DraftLine {
   currency: string;
   /** The brand key where we introduce this line rather than sell it. */
   agentBrand: string | null;
+  /**
+   * Typed at the counter rather than picked off a shelf.
+   *
+   * A wheel build, a frame brought in for one customer, a carriage charge. The
+   * price is not an override of anything, there is no stock to be short of and
+   * no carton to fill, so the row is drawn without any of that rather than
+   * with it struck through.
+   */
+  custom?: boolean;
+  /** Which this is, among several typed lines that may share a reference. */
+  key: string;
 }
 
 export default function OrderDesk({
@@ -67,6 +80,7 @@ export default function OrderDesk({
   const [openSizes, setOpenSizes] = useState<string | null>(null);
   const [openBuild, setOpenBuild] = useState<string | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([]);
+  const [typing, setTyping] = useState(false);
   const [notes, setNotes] = useState('');
   const [dropship, setDropship] = useState<DropshipState>(emptyDropship);
   const [placed, setPlaced] = useState<{ id: string; warning?: string } | null>(null);
@@ -216,6 +230,7 @@ export default function OrderDesk({
       const rate = priceAtQty(
         { price, moq: p.moq, break_price: breakFor(p) }, add);
       return [...ls, {
+        key: p.id,
         productId: p.id, sku: p.sku, name: p.name, qty: add,
         unitPrice: rate, tierPrice: rate,
         moq: p.moq, outerPrice: price, breakPrice: breakFor(p),
@@ -224,6 +239,37 @@ export default function OrderDesk({
       }];
     });
     setQuery('');
+  }
+
+  /**
+   * A line that is not in the catalogue.
+   *
+   * Never folded into an existing line the way a SKU is: two wheel builds at
+   * the same price are two jobs, and a counter that quietly turned them into
+   * "2 ×" would lose which was which on the packing list.
+   */
+  function addCustom(entry: {
+    name: string; sku: string; unitPrice: number; qty: number; currency: string;
+  }) {
+    setError('');
+    setLines((ls) => [...ls, {
+      key: `custom-${Date.now()}-${ls.length}`,
+      productId: null,
+      sku: entry.sku.trim().toUpperCase() || 'CUSTOM',
+      name: entry.name.trim(),
+      qty: entry.qty,
+      unitPrice: entry.unitPrice,
+      // There is no tier behind it, so the price is its own tier: this keeps
+      // the row from drawing itself as an override of something.
+      tierPrice: entry.unitPrice,
+      moq: 1,
+      outerPrice: entry.unitPrice,
+      breakPrice: null,
+      currency: entry.currency,
+      agentBrand: null,
+      custom: true,
+    }]);
+    setTyping(false);
   }
 
   /*
@@ -258,7 +304,9 @@ export default function OrderDesk({
     setLines((ls) => ls.map((l, j) => {
       if (j !== i) return l;
       const merged = { ...l, ...next };
-      if (next.qty === undefined) return merged;
+      // A typed line has no tier behind it, so changing how many does not
+      // change what one costs.
+      if (next.qty === undefined || l.custom) return merged;
       const rate = priceAtQty(
         { price: l.outerPrice, moq: l.moq, break_price: l.breakPrice }, merged.qty);
       const overridden = l.unitPrice !== l.tierPrice;
@@ -276,6 +324,8 @@ export default function OrderDesk({
 
   /** What this order will short at the chosen location, before it is placed. */
   const shortfall = lines
+    // A typed line has no shelf to be short of, so it is not asked about.
+    .filter((l) => !l.custom)
     .map((l) => {
       const p = products.find((x) => x.id === l.productId)!;
       const available = stockAt(p, locationId);
@@ -290,12 +340,23 @@ export default function OrderDesk({
       const result = await placeOrder({
         clientId: client.id,
         locationId,
-        lines: lines.map((l) => ({
-          product_id: l.productId,
-          qty: l.qty,
-          // Only send a price when staff actually changed it.
-          unit_price: l.unitPrice !== l.tierPrice ? l.unitPrice : null,
-        })),
+        lines: lines.map((l) => (l.custom
+          ? {
+            // No product, so everything about it travels with it: the price is
+            // not an override, it is the only price there is.
+            product_id: null,
+            qty: l.qty,
+            unit_price: l.unitPrice,
+            name: l.name,
+            sku: l.sku,
+            currency: l.currency,
+          }
+          : {
+            product_id: l.productId as string,
+            qty: l.qty,
+            // Only send a price when staff actually changed it.
+            unit_price: l.unitPrice !== l.tierPrice ? l.unitPrice : null,
+          })),
         notes: notes.trim() || undefined,
         dropship: dropshipPayload(dropship),
       });
@@ -581,6 +642,19 @@ export default function OrderDesk({
             </div>
           )}
 
+          {/* Between the catalogue search and the order itself, because that is
+              where somebody reaches for it: they have looked for the thing,
+              it is not there, and this is the next move. */}
+          <div className="mt-3">
+            {typing ? (
+              <CustomLine onAdd={addCustom} onCancel={() => setTyping(false)} />
+            ) : (
+              <Button small kind="ghost" onClick={() => setTyping(true)}>
+                Add something not in the catalogue
+              </Button>
+            )}
+          </div>
+
           {lines.length > 0 && (
             <div className="overflow-x-auto mt-3.5">
               <table>
@@ -595,7 +669,7 @@ export default function OrderDesk({
                 </thead>
                 <tbody>
                   {lines.map((l, i) => (
-                    <tr key={l.productId}>
+                    <tr key={l.key}>
                       <td className="num">{l.sku}</td>
                       <td>{l.name}</td>
                       <td>
@@ -605,7 +679,8 @@ export default function OrderDesk({
                           label={`${l.sku} on this order`}
                           onChange={(qty) => patch(i, { qty })}
                         />
-                        {hasOuter({ price: l.outerPrice, moq: l.moq, break_price: l.breakPrice }) && (
+                        {!l.custom
+                         && hasOuter({ price: l.outerPrice, moq: l.moq, break_price: l.breakPrice }) && (
                           <div className="mt-0.5">
                             <OuterNote
                               item={{ price: l.outerPrice, moq: l.moq, break_price: l.breakPrice }}
@@ -620,7 +695,9 @@ export default function OrderDesk({
                           className="num" type="number" step="0.01" min={0} value={l.unitPrice}
                           onChange={(e) => patch(i, { unitPrice: Number(e.target.value) || 0 })}
                         />
-                        {l.unitPrice !== l.tierPrice && (
+                        {l.custom ? (
+                          <span className="text-[10px] text-mute font-semibold">typed</span>
+                        ) : l.unitPrice !== l.tierPrice && (
                           <span className="text-[10px] text-flame-text font-semibold">
                             override · tier <Money value={l.tierPrice} currency={l.currency} />
                           </span>
@@ -733,6 +810,107 @@ export default function OrderDesk({
             </div>
           )}
         </Card>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The form for a line that is not a product.
+ *
+ * A description, a price and a quantity, which is the whole of what makes one.
+ * The reference is optional and defaults to CUSTOM: something has to appear in
+ * the SKU column of the invoice and the packing list, and a blank there reads
+ * as a fault rather than a choice.
+ *
+ * It does not create a product. That is the point of it — a wheel build priced
+ * for one customer is not something every other customer should be able to
+ * find a price for, and a catalogue filling up with one-offs is how a price
+ * list stops being readable.
+ */
+function CustomLine({ onAdd, onCancel }: {
+  onAdd: (entry: {
+    name: string; sku: string; unitPrice: number; qty: number; currency: string;
+  }) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [sku, setSku] = useState('');
+  const [price, setPrice] = useState('');
+  const [qty, setQty] = useState(1);
+  const [currency, setCurrency] = useState('GBP');
+
+  const amount = Number(price);
+  // A price of nothing is a decision somebody might mean — a replacement sent
+  // out at no charge still belongs on the order, and on the invoice at zero.
+  // A price left blank is not, so the two are told apart.
+  const priced = price.trim() !== '' && Number.isFinite(amount) && amount >= 0;
+  const ready = name.trim().length > 1 && priced;
+
+  return (
+    <div className="border border-ink rounded p-3 space-y-2.5">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <h3 className="text-[13px] font-semibold">Something not in the catalogue</h3>
+        <span className="text-[11px] text-mute">
+          Priced for this order only. It does not join the catalogue.
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <input
+          autoFocus
+          value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="What it is — this is what the customer reads"
+          aria-label="Description"
+          className="flex-1 min-w-[260px] text-[12px]"
+        />
+        <input
+          value={sku} onChange={(e) => setSku(e.target.value)}
+          placeholder="Reference (optional)"
+          aria-label="Reference"
+          className="num w-[150px] text-[12px]"
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-[12px] font-semibold">Each</label>
+        <input
+          type="number" step="0.01" min={0}
+          value={price} onChange={(e) => setPrice(e.target.value)}
+          placeholder="0.00"
+          aria-label="Price per unit"
+          className="num w-[110px] text-[12px]"
+        />
+        <select
+          value={currency} onChange={(e) => setCurrency(e.target.value)}
+          aria-label="Currency"
+          className="text-[12px] w-[90px]"
+        >
+          <option value="GBP">GBP</option>
+          <option value="EUR">EUR</option>
+        </select>
+
+        <label className="text-[12px] font-semibold ml-2">How many</label>
+        <QtyStepper value={qty} min={1} label="of this line" onChange={setQty} />
+
+        <span className="num text-[14px] font-semibold ml-auto">
+          {priced ? <Money value={qty * amount} currency={currency} /> : '—'}
+        </span>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          small kind="accent" disabled={!ready}
+          onClick={() => onAdd({ name, sku, unitPrice: amount, qty, currency })}
+        >
+          Add to the order
+        </Button>
+        <Button small kind="ghost" onClick={onCancel}>Cancel</Button>
+        {!ready && (
+          <span className="text-[11px] text-mute self-center">
+            A description and a price are what make a line.
+          </span>
+        )}
       </div>
     </div>
   );

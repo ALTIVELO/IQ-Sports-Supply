@@ -31,8 +31,17 @@ const CATALOGUE = {
   // A second agency brand, and one that happens to quote in sterling.
   acme1: { currency: 'GBP', agentBrand: 'acme' },
 };
-const lookup = (id) => CATALOGUE[id];
+/*
+ * Asked about the line rather than a product id, because a line typed at the
+ * counter has no product. For those the catalogue has nothing to say and the
+ * line answers for itself: our own goods, in the currency it was typed in.
+ */
+const lookup = (l) => (l.product_id
+  ? CATALOGUE[l.product_id]
+  : { currency: l.currency || 'GBP', agentBrand: null });
 const line = (product_id, qty = 1) => ({ product_id, qty });
+/** A line somebody typed: a description and a price, and no product at all. */
+const typed = (currency = 'GBP') => ({ product_id: null, qty: 1, currency });
 const shape = (parts) =>
   parts.map((p) => [p.currency, p.lines.map((l) => l.product_id)]);
 const sellers = (parts) => parts.map((p) => [p.currency, p.agentBrand]);
@@ -98,7 +107,7 @@ eq('currency splits before seller does',
 eq('introduced brands are ordered by name among themselves',
   sellers(splitOrders(
     [line('drag1'), line('acme1')],
-    (id) => ({ ...CATALOGUE[id], currency: 'GBP' }))),
+    (l) => ({ ...CATALOGUE[l.product_id], currency: 'GBP' }))),
   [['GBP', 'acme'], ['GBP', 'drag']]);
 
 // A product the catalogue does not know is ours until it says otherwise —
@@ -130,5 +139,30 @@ eq('a zero VAT rate is a rate, not a missing one',
   totalsByCurrency(basket, (l) => l.currency, (l) => l.net, 0).map((t) => t.vat), [0, 0]);
 eq('an empty basket totals nothing',
   totalsByCurrency([], (l) => l.currency, (l) => l.net, 20), []);
+
+// ── lines that are not products ───────────────────────────────────────────
+// A wheel build typed at the counter. It belongs on an order like anything
+// else, and the catalogue has nothing to say about which one.
+eq('a typed line is our own goods in sterling',
+  sellers(splitOrders([typed()], lookup)), [['GBP', null]]);
+
+eq('and sits on the same order as the sterling products',
+  shape(splitOrders([line('gbp1'), typed(), line('gbp2')], lookup)),
+  [['GBP', ['gbp1', null, 'gbp2']]]);
+
+// Typed in euros, because carriage from Italy is billed in euros. It must not
+// land on the sterling order and be invoiced with a pound sign.
+eq('a typed line in euros is a euro order',
+  shape(splitOrders([line('gbp1'), typed('EUR')], lookup)),
+  [['GBP', ['gbp1']], ['EUR', [null]]]);
+
+// Never with an introduced brand's: those are invoiced by somebody else, and
+// a line we typed is ours to invoice.
+eq('and never joins goods we only introduce',
+  sellers(splitOrders([line('drag1'), typed('EUR')], lookup)),
+  [['EUR', null], ['EUR', 'drag']]);
+
+eq('two typed lines stay two lines, not one of two',
+  splitOrders([typed(), typed()], lookup)[0].lines.length, 2);
 
 process.exit(fail ? 1 : 0);

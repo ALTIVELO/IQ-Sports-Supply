@@ -42,23 +42,26 @@ export interface OrderPart<T> {
 /**
  * Groups lines into the orders they will become.
  *
- * `keyOf` reads the catalogue, never the basket: how many orders get raised
- * must not be something a browser can decide. A product the lookup does not
- * know falls to sterling and to our own stock rather than being dropped —
- * losing a line silently is worse than putting it in the commonest case,
- * where the price on the confirmation will show it up.
+ * `keyOf` is asked about the line rather than about a product id, because a
+ * line typed at the counter has no product — it carries its own currency and
+ * is always our own goods. For everything else the answer still comes from the
+ * catalogue and never from the basket: how many orders get raised must not be
+ * something a browser can decide. A product the lookup does not know falls to
+ * sterling and to our own stock rather than being dropped — losing a line
+ * silently is worse than putting it in the commonest case, where the price on
+ * the confirmation will show it up.
  *
  * Sterling first, then our own goods before an introduced brand's, so the
  * order numbers come back in the sequence the counter thinks in.
  */
-export function splitOrders<T extends { product_id: string }>(
-  lines: T[], keyOf: (productId: string) => OrderKey | undefined,
+export function splitOrders<T extends { product_id?: string | null }>(
+  lines: T[], keyOf: (line: T) => OrderKey | undefined,
 ): OrderPart<T>[] {
   const by = new Map<string, T[]>();
   const keys = new Map<string, { currency: string; agentBrand: string | null }>();
 
   for (const line of lines) {
-    const k = keyOf(line.product_id);
+    const k = keyOf(line);
     const currency = k?.currency || 'GBP';
     const agentBrand = k?.agentBrand ?? null;
     // Tab-joined: a brand key is a normalised name and cannot contain one.

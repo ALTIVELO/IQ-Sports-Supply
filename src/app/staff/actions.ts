@@ -44,7 +44,16 @@ const fail = (e: unknown): ActionResult => ({
 
 // ── order placement ─────────────────────────────────────────────────────────
 
-export interface DraftLine { product_id: string; qty: number; unit_price?: number | null }
+export interface DraftLine {
+  /** Null for a line typed at the counter: it is not in the catalogue. */
+  product_id?: string | null;
+  qty: number;
+  unit_price?: number | null;
+  /** A typed line's own description, reference and currency. */
+  name?: string;
+  sku?: string;
+  currency?: string;
+}
 
 /**
  * Places an order. Allocation, the full invoice and the supplier order all
@@ -80,7 +89,7 @@ export async function placeOrder(input: {
   // are raised must not be something a browser can set.
   const [{ data: priced }, { data: agencyBrands }] = await Promise.all([
     sb.from('products').select('id, currency, brand')
-      .in('id', input.lines.map((l) => l.product_id)),
+      .in('id', input.lines.map((l) => l.product_id).filter(Boolean)),
     sb.rpc('agency_brands'),
   ]);
   const agencyKeys = new Set(
@@ -93,7 +102,19 @@ export async function placeOrder(input: {
     }];
   }));
 
-  const parts = splitOrders(input.lines, (id) => keyOf.get(id));
+  /*
+   * A typed line is our own goods, in whatever currency it was typed in.
+   *
+   * Not a catalogue lookup, because there is nothing to look up — but still
+   * not the browser deciding anything that matters: the only thing it sets is
+   * which of our own orders the line lands on, and the price it carries is a
+   * price a member of staff typed, which is the entire point of the line.
+   */
+  const lineKey = (l: DraftLine) => (l.product_id
+    ? keyOf.get(l.product_id)
+    : { currency: l.currency || 'GBP', agentBrand: null });
+
+  const parts = splitOrders(input.lines, (l) => lineKey(l));
 
   const placed: string[] = [];
   const warnings: string[] = [];
@@ -103,9 +124,14 @@ export async function placeOrder(input: {
       p_client_id: input.clientId,
       p_location_id: input.locationId,
       p_lines: forCurrency.map((l) => ({
-        product_id: l.product_id,
+        product_id: l.product_id ?? null,
         qty: l.qty,
         unit_price: l.unit_price ?? null,
+        // Ignored by place_order for a catalogue line, and the whole of a
+        // typed one.
+        name: l.name ?? null,
+        sku: l.sku ?? null,
+        currency: l.currency ?? null,
       })),
       p_notes: input.notes ?? null,
       p_dropship: Boolean(input.dropship),
@@ -391,10 +417,18 @@ export async function receiveTransfer(transferId: string): Promise<ActionResult>
  */
 export async function editOrder(
   orderId: string,
-  lines: { product_id: string; qty: number; unit_price?: number | null }[],
+  lines: {
+    product_id?: string | null;
+    /** A line typed on this order, carried through by the id it already has. */
+    line_id?: string;
+    qty: number;
+    unit_price?: number | null;
+  }[],
 ): Promise<ActionResult> {
   await requireStaff(['admin', 'accounts']);
-  const clean = lines.filter((l) => l.product_id && l.qty > 0);
+  // A line names either a product or itself. One that names neither cannot be
+  // rebuilt from anything, so it is dropped rather than sent to be refused.
+  const clean = lines.filter((l) => (l.product_id || l.line_id) && l.qty > 0);
   if (!clean.length) {
     return { ok: false, error: 'An order needs at least one line. Cancel it instead.' };
   }
