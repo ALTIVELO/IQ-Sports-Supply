@@ -129,22 +129,60 @@ ${o.company}`,
   };
 }
 
+export interface Parcel {
+  carrier: string; tracking: string; trackingUrl: string | null;
+}
+
+/**
+ * One parcel per block, numbered where there is more than one.
+ *
+ * An order of three wheels leaves in three boxes, and a notice quoting one
+ * number has the customer tracking a carton that has arrived while the rest
+ * of their order is still in a van somewhere.
+ */
+const parcelBlock = (parcels: Parcel[]) => parcels.map((p, i) => {
+  const head = parcels.length > 1 ? `Box ${i + 1} of ${parcels.length}` : 'Parcel';
+  return [
+    `${head}`,
+    `  Carrier   ${p.carrier}`,
+    `  Tracking  ${p.tracking}`,
+    // Two spaces, so it lines up under Carrier and Tracking above it.
+    ...(p.trackingUrl ? [`  Track it  ${p.trackingUrl}`] : []),
+  ].join('\n');
+}).join('\n\n');
+
 export function shippedNotice(o: {
   company: string; orderNumber: string; invoiceNumber: string;
-  carrier: string; tracking: string; trackingUrl: string;
+  parcels: Parcel[];
+  /**
+   * Whether this is a second notice about an order already announced.
+   *
+   * A customer who gets "your order has shipped" twice about one order
+   * reasonably wonders whether there are two orders. So a correction, or a
+   * box added after the first notice went, says what it is in the subject and
+   * in the first line.
+   */
+  updated?: boolean;
   lines: { sku: string; name: string; qty: number }[]; portalUrl: string;
 }) {
+  const several = o.parcels.length > 1;
   return {
-    subject: `${o.company} — order ${o.orderNumber} has shipped`,
-    body: `Your order is on its way.
+    subject: o.updated
+      ? `${o.company} — updated tracking for order ${o.orderNumber}`
+      : `${o.company} — order ${o.orderNumber} has shipped`,
+    body: `${o.updated
+      ? (several
+        ? 'The tracking for this order has changed. These are the current numbers '
+          + '— please use them rather than anything we sent earlier.'
+        : 'The tracking for this order has changed. This is the current number '
+          + '— please use it rather than anything we sent earlier.')
+      : 'Your order is on its way.'}
 
 Order     ${o.orderNumber}
-Invoice   ${o.invoiceNumber}
-Carrier   ${o.carrier}
-Tracking  ${o.tracking}
+Invoice   ${o.invoiceNumber}${several ? `
+Parcels   ${o.parcels.length}` : ''}
 
-Track it here:
-  ${o.trackingUrl}
+${parcelBlock(o.parcels)}
 
 ${table(o.lines.map((l) => ({ ...l, unit_price: 0 })), false)}
 

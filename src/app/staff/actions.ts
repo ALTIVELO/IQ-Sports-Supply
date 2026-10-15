@@ -301,6 +301,44 @@ export async function removeShipment(id: string): Promise<ActionResult> {
   return { ok: true, message: 'Parcel removed' };
 }
 
+/**
+ * Sends the shipping email again, with the tracking as it now stands.
+ *
+ * Its own button rather than something that happens on every edit, because a
+ * correction is often made before anybody needs telling — a number fixed
+ * within the minute, or three boxes entered one after another — and an email
+ * for each would be worse than the wrong number was. Whoever is looking at
+ * the parcels decides when the customer should hear.
+ *
+ * It says it is an update, so the second email about one order does not read
+ * as a second order.
+ */
+export async function resendShipped(invoiceId: string): Promise<ActionResult> {
+  await requireStaff();
+  const sb = await supabaseServer();
+
+  const { data: inv } = await sb.from('invoices')
+    .select('shipped, number, clients(email)').eq('id', invoiceId).maybeSingle();
+  if (!inv) return { ok: false, error: 'Unknown invoice' };
+  if (!inv.shipped) {
+    return { ok: false, error: `${inv.number} has not shipped yet, so there is nothing to send` };
+  }
+  const client = inv.clients as unknown as { email: string | null } | null;
+  if (!client?.email) {
+    return {
+      ok: false,
+      error: 'That client has no email address on file. Add one on the Clients screen.',
+    };
+  }
+
+  const warning = await notify(
+    () => notifyShipped(invoiceId, { updated: true }), 'The tracking email');
+  if (warning) return { ok: false, error: warning };
+
+  revalidatePath('/staff/packing');
+  return { ok: true, message: `Updated tracking sent to ${client.email}` };
+}
+
 export async function markShipped(input: {
   invoiceId: string; carrier: string; tracking: string; trackingUrl?: string;
 }): Promise<ActionResult> {

@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate, money } from '@/lib/format';
 import { markPacked, markShipped, markDelivered,
-         addShipment, updateShipment, removeShipment } from '../actions';
+         addShipment, updateShipment, removeShipment, resendShipped } from '../actions';
 import type { ActionResult } from '../actions';
 import type { InvoiceType } from '@/lib/types';
 
@@ -337,10 +337,37 @@ function Parcels({ invoice, mayEdit, pending, run }: {
       )}
 
       {!adding && !editing && (
-        <button onClick={() => start()}
-                className="text-[12px] font-semibold text-flame-text">
-          + Another parcel
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={() => start()}
+                  className="text-[12px] font-semibold text-flame-text">
+            + Another parcel
+          </button>
+          {/*
+            * Sent when somebody decides to, not on every edit.
+            *
+            * A number is often corrected before anyone needs telling, and
+            * three boxes get entered one after another — an email for each
+            * would be worse than the wrong number was. Whoever is looking at
+            * the parcels is the one who knows whether the customer should
+            * hear, so it is their button.
+            */}
+          <button
+            disabled={pending}
+            onClick={() => {
+              // eslint-disable-next-line no-alert
+              if (!confirm(
+                `Email the customer the tracking for ${invoice.number}?\n\n`
+                + `They will get ${parcels.length === 1 ? 'the number' : `all ${parcels.length} numbers`} `
+                + 'as it stands now, marked as an update to what was sent before.',
+              )) return;
+              run(() => resendShipped(invoice.id));
+            }}
+            className="text-[12px] font-semibold text-mute hover:text-ink underline
+                       disabled:opacity-50"
+          >
+            Email the tracking again
+          </button>
+        </div>
       )}
     </div>
   );

@@ -126,14 +126,23 @@ export async function notifySupplierOrder(poId: string) {
   });
 }
 
-/** Shipping notification with the tracking link. CC'd the same as order confirmation. */
-export async function notifyShipped(invoiceId: string) {
+/**
+ * Shipping notification, with every parcel on it. CC'd like the confirmation.
+ *
+ * `updated` is for a second notice about an order already announced — a
+ * corrected number, or a box added after the first went out. It changes what
+ * the email says rather than what it contains, because a customer who gets
+ * "your order has shipped" twice about one order reasonably wonders whether
+ * there are two orders.
+ */
+export async function notifyShipped(invoiceId: string, opts: { updated?: boolean } = {}) {
   const db = supabaseAdmin();
 
   const { data: inv } = await db
     .from('invoices')
     .select(`number, carrier, tracking_number, tracking_url, order_id,
-             clients(name, email), orders(number), invoice_lines(sku, name, qty)`)
+             clients(name, email), orders(number), invoice_lines(sku, name, qty),
+             shipments(carrier, tracking_number, tracking_url, seq)`)
     .eq('id', invoiceId)
     .single();
   if (!inv) return;
@@ -142,13 +151,31 @@ export async function notifyShipped(invoiceId: string) {
     .from('settings').select('company, confirmation_cc').eq('id', 1).single();
   const client = inv.clients as unknown as { name: string; email: string | null };
 
+  type Row = { carrier: string; tracking_number: string; tracking_url: string | null; seq: number };
+  /*
+   * The parcels, in the order they were recorded.
+   *
+   * Falling back to the invoice's own three columns for anything shipped
+   * before parcels were rows: those were backfilled, but an email that said
+   * nothing at all about tracking would be worse than one quoting the single
+   * number we used to hold.
+   */
+  const rows = [...((inv.shipments ?? []) as Row[])].sort((a, b) => a.seq - b.seq);
+  const parcels = rows.length
+    ? rows.map((r) => ({
+      carrier: r.carrier, tracking: r.tracking_number, trackingUrl: r.tracking_url,
+    }))
+    : [{
+      carrier: inv.carrier ?? '', tracking: inv.tracking_number ?? '',
+      trackingUrl: inv.tracking_url ?? null,
+    }];
+
   const msg = shippedNotice({
     company: settings!.company,
     orderNumber: (inv.orders as unknown as { number: string }).number,
     invoiceNumber: inv.number,
-    carrier: inv.carrier ?? '',
-    tracking: inv.tracking_number ?? '',
-    trackingUrl: inv.tracking_url ?? '',
+    parcels,
+    updated: opts.updated,
     lines: inv.invoice_lines as { sku: string; name: string; qty: number }[],
     portalUrl: `${appUrl()}/portal/shipping`,
   });
