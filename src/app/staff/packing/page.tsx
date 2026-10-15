@@ -9,6 +9,8 @@ export default async function PackingPage({
   searchParams,
 }: { searchParams: Promise<{ location?: string }> }) {
   const user = await requireStaff();
+  // Correcting a number a customer already has is an admin's.
+  const mayEditTracking = user.role === 'admin';
   const { location } = await searchParams;
   const sb = await supabaseServer();
 
@@ -38,7 +40,8 @@ export default async function PackingPage({
   const select = `id, number, type, date, paid, paid_date, ready_to_pack, packed, packed_at,
                   shipped, shipped_at, delivered, delivered_at, carrier, tracking_number, tracking_url,
                   clients(id, name, address, credit_account), orders(number, dropship, ship_to),
-                  invoice_lines(sku, name, qty)`;
+                  invoice_lines(sku, name, qty),
+                  shipments(id, carrier, tracking_number, tracking_url, shipped_at, seq)`;
 
   const [{ data: queue }, { data: waiting }, { data: recent }, { data: balances }] =
     await Promise.all([
@@ -101,6 +104,7 @@ export default async function PackingPage({
         waiting={stillWaiting as never}
         recent={(recent ?? []) as never}
         owed={owed}
+        mayEditTracking={mayEditTracking}
       />
     </>
   );

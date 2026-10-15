@@ -230,6 +230,77 @@ export async function markPacked(invoiceId: string): Promise<ActionResult> {
   return { ok: true, message: 'Packed' };
 }
 
+/**
+ * Another parcel on an invoice that is going out, or the first one.
+ *
+ * Shipping, so whoever ships may do it. The customer is told once, when it
+ * first ships — a parcel added afterwards shows on their shipping screen
+ * without a second email, because three emails for one order read as three
+ * orders.
+ */
+export async function addShipment(input: {
+  invoiceId: string; carrier: string; tracking: string; trackingUrl?: string;
+}): Promise<ActionResult> {
+  await requireStaff();
+  const sb = await supabaseServer();
+
+  const carrier = input.carrier.trim();
+  const tracking = input.tracking.trim();
+  if (!carrier || !tracking) {
+    return { ok: false, error: 'Carrier and tracking number are both required' };
+  }
+  const { error } = await sb.rpc('add_shipment', {
+    p_invoice_id: input.invoiceId,
+    p_carrier: carrier,
+    p_tracking: tracking,
+    p_url: input.trackingUrl?.trim() || trackingUrlFor(carrier, tracking),
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/staff/packing');
+  revalidatePath('/portal', 'layout');
+  return { ok: true, message: `Parcel ${tracking} added` };
+}
+
+/**
+ * Corrects a tracking number that has already gone out.
+ *
+ * An admin's, because it is a correction to something a customer is holding in
+ * an email. The database decides that and keeps the old value.
+ */
+export async function updateShipment(input: {
+  id: string; carrier: string; tracking: string; trackingUrl?: string;
+}): Promise<ActionResult> {
+  await requireStaff(['admin']);
+  const sb = await supabaseServer();
+
+  const carrier = input.carrier.trim();
+  const tracking = input.tracking.trim();
+  if (!carrier || !tracking) {
+    return { ok: false, error: 'Carrier and tracking number are both required' };
+  }
+  const { error } = await sb.rpc('update_shipment', {
+    p_id: input.id,
+    p_carrier: carrier,
+    p_tracking: tracking,
+    p_url: input.trackingUrl?.trim() || trackingUrlFor(carrier, tracking),
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/staff/packing');
+  revalidatePath('/portal', 'layout');
+  return { ok: true, message: 'Tracking corrected' };
+}
+
+/** Takes a parcel off, for one added in error. Never the last one. */
+export async function removeShipment(id: string): Promise<ActionResult> {
+  await requireStaff(['admin']);
+  const sb = await supabaseServer();
+  const { error } = await sb.rpc('remove_shipment', { p_id: id });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/staff/packing');
+  revalidatePath('/portal', 'layout');
+  return { ok: true, message: 'Parcel removed' };
+}
+
 export async function markShipped(input: {
   invoiceId: string; carrier: string; tracking: string; trackingUrl?: string;
 }): Promise<ActionResult> {

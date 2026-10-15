@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate, money } from '@/lib/format';
-import { markPacked, markShipped, markDelivered } from '../actions';
+import { markPacked, markShipped, markDelivered,
+         addShipment, updateShipment, removeShipment } from '../actions';
 import type { ActionResult } from '../actions';
 import type { InvoiceType } from '@/lib/types';
 
@@ -17,17 +18,26 @@ interface Inv {
   clients: { id: string; name: string; address: string | null; credit_account: boolean };
   orders: { number: string; dropship: boolean | null; ship_to: string | null };
   invoice_lines: { sku: string; name: string; qty: number }[];
+  /** One row per parcel. The three columns above mirror the first of these. */
+  shipments: Parcel[];
+}
+interface Parcel {
+  id: string; carrier: string; tracking_number: string;
+  tracking_url: string | null; shipped_at: string; seq: number;
 }
 interface Named { id: string; name: string }
 interface Balance { client_id: string; currency: string; due: number; overdue: number }
 
 export default function PackingScreen({
   locations, activeLocation, queue, waiting, recent, owed = {},
+  mayEditTracking = false,
 }: {
   locations: Named[]; activeLocation: string;
   queue: Inv[]; waiting: Inv[]; recent: Inv[];
   /** What each client owes, keyed by client, for the ones going out on terms. */
   owed?: Record<string, Balance[]>;
+  /** Whether this person may correct a number a customer already has. */
+  mayEditTracking?: boolean;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
@@ -57,7 +67,8 @@ export default function PackingScreen({
         ) : (
           <div className="space-y-2.5">
             {queue.map((inv) => (
-              <PackRow key={inv.id} inv={inv} balance={owed[inv.clients.id]} onMessage={setMessage} />
+              <PackRow key={inv.id} inv={inv} balance={owed[inv.clients.id]}
+                       mayEditTracking={mayEditTracking} onMessage={setMessage} />
             ))}
           </div>
         )}
@@ -98,7 +109,8 @@ export default function PackingScreen({
           </h2>
           <div className="space-y-2.5">
             {recent.map((inv) => (
-              <PackRow key={inv.id} inv={inv} balance={owed[inv.clients.id]} onMessage={setMessage} />
+              <PackRow key={inv.id} inv={inv} balance={owed[inv.clients.id]}
+                       mayEditTracking={mayEditTracking} onMessage={setMessage} />
             ))}
           </div>
         </section>
@@ -108,9 +120,11 @@ export default function PackingScreen({
 }
 
 function PackRow({
-  inv, balance, onMessage,
+  inv, balance, mayEditTracking = false, onMessage,
 }: {
   inv: Inv;
+  /** Whether this person may correct a number a customer already has. */
+  mayEditTracking?: boolean;
   /** What this client owes, where it matters — an invoice going out unpaid. */
   balance?: Balance[];
   onMessage: (m: { tone: 'error' | 'success' | 'info'; text: string }) => void;
@@ -186,13 +200,13 @@ function PackRow({
         </div>
       </div>
 
-      {inv.shipped && inv.tracking_url && (
-        <p className="text-[12px] text-mute mt-2 num">
-          {inv.carrier} · {inv.tracking_number} ·{' '}
-          <a href={inv.tracking_url} target="_blank" rel="noreferrer" className="text-flame-text font-semibold">
-            Track
-          </a>
-        </p>
+      {inv.shipped && (
+        <Parcels
+          invoice={inv}
+          mayEdit={mayEditTracking}
+          pending={pending}
+          run={run}
+        />
       )}
 
       {shipping && (
@@ -220,5 +234,114 @@ function PackRow({
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Every parcel on one invoice, and what can be done to them.
+ *
+ * An order does not always leave in one box, and the list is what the customer
+ * is tracking — so it is the list, not the first of them with the rest in
+ * somebody's head. Another box can be added by whoever is shipping. Correcting
+ * or removing one is an admin's, because by then the customer is holding the
+ * number in an email.
+ */
+function Parcels({ invoice, mayEdit, pending, run }: {
+  invoice: Inv;
+  mayEdit: boolean;
+  pending: boolean;
+  run: (fn: () => Promise<ActionResult>) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [carrier, setCarrier] = useState('');
+  const [tracking, setTracking] = useState('');
+
+  // In the order they were recorded, which is the order they were told about.
+  const parcels = [...(invoice.shipments ?? [])].sort((a, b) => a.seq - b.seq);
+
+  const start = (p?: Parcel) => {
+    setCarrier(p?.carrier ?? parcels[parcels.length - 1]?.carrier ?? '');
+    setTracking(p?.tracking_number ?? '');
+    setEditing(p?.id ?? null);
+    setAdding(!p);
+  };
+  const stop = () => { setAdding(false); setEditing(null); };
+
+  return (
+    <div className="mt-2 space-y-1">
+      {parcels.map((p, i) => (
+        <div key={p.id} className="flex flex-wrap items-center gap-2 text-[12px]">
+          {/* Numbered, because "the second box" is how somebody on the phone
+              will describe the one that has not turned up. */}
+          <span className="text-mute w-10">
+            {parcels.length > 1 ? `Box ${i + 1}` : 'Parcel'}
+          </span>
+          <span className="num">{p.carrier}</span>
+          <span className="num font-semibold">{p.tracking_number}</span>
+          {p.tracking_url && (
+            <a href={p.tracking_url} target="_blank" rel="noreferrer"
+               className="text-flame-text font-semibold">Track</a>
+          )}
+          {mayEdit && editing !== p.id && (
+            <>
+              <button onClick={() => start(p)}
+                      className="text-mute hover:text-ink underline">Edit</button>
+              {parcels.length > 1 && (
+                <button
+                  disabled={pending}
+                  onClick={() => {
+                    // eslint-disable-next-line no-alert
+                    if (!confirm(
+                      `Take ${p.tracking_number} off this invoice?\n\n`
+                      + 'The customer may already have been given it.',
+                    )) return;
+                    run(() => removeShipment(p.id));
+                  }}
+                  className="text-mute hover:text-danger underline"
+                >
+                  Remove
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      ))}
+
+      {(adding || editing) && (
+        <div className="flex flex-wrap items-end gap-2 pt-1">
+          <label className="text-[12px]">
+            <span className="block font-semibold mb-1">Carrier</span>
+            <input className="w-[140px]" value={carrier} placeholder="DPD"
+                   onChange={(e) => setCarrier(e.target.value)} />
+          </label>
+          <label className="text-[12px]">
+            <span className="block font-semibold mb-1">Tracking number</span>
+            <input className="w-[190px] num" value={tracking}
+                   onChange={(e) => setTracking(e.target.value)} />
+          </label>
+          <Button
+            small kind="accent"
+            disabled={pending || !carrier.trim() || !tracking.trim()}
+            onClick={() => {
+              const done = (r: ActionResult) => { if (r.ok) stop(); return r; };
+              run(async () => done(editing
+                ? await updateShipment({ id: editing, carrier, tracking })
+                : await addShipment({ invoiceId: invoice.id, carrier, tracking })));
+            }}
+          >
+            {editing ? 'Save' : 'Add parcel'}
+          </Button>
+          <Button small kind="ghost" onClick={stop}>Cancel</Button>
+        </div>
+      )}
+
+      {!adding && !editing && (
+        <button onClick={() => start()}
+                className="text-[12px] font-semibold text-flame-text">
+          + Another parcel
+        </button>
+      )}
+    </div>
   );
 }
