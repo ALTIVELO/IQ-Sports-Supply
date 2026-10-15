@@ -566,16 +566,51 @@ export async function cancelOrder(orderId: string, reason: string): Promise<Acti
   return { ok: true, message: 'Order cancelled, stock released and invoices withdrawn' };
 }
 
-/** Admin only, and only an order that never became anything. */
-export async function deleteOrder(orderId: string): Promise<ActionResult> {
+/**
+ * Removes an order for good. Admin only, whatever state the order is in.
+ *
+ * Cancelling keeps the record and is almost always right. This is for an
+ * order that should never have existed — a rehearsal that was paid, packed
+ * and shipped to prove those worked.
+ */
+export async function deleteOrder(
+  orderId: string, releaseStock = true, reason?: string,
+): Promise<ActionResult> {
   await requireStaff(['admin']);
   const sb = await supabaseServer();
-  const { error } = await sb.rpc('delete_order', { p_order_id: orderId });
+  const { error } = await sb.rpc('delete_order', {
+    p_order_id: orderId,
+    p_release_stock: releaseStock,
+    p_reason: reason?.trim() || null,
+  });
   if (error) return { ok: false, error: error.message };
 
   revalidatePath('/staff/orders');
-  revalidatePath('/portal/orders');
-  return { ok: true, message: 'Order deleted' };
+  revalidatePath('/staff/invoices');
+  revalidatePath('/staff/supplier');
+  revalidatePath('/staff/packing');
+  revalidatePath('/portal', 'layout');
+  return {
+    ok: true,
+    message: releaseStock ? 'Order deleted and its stock put back' : 'Order deleted',
+  };
+}
+
+/** Removes one invoice. Admin only, and never the last one billing an order. */
+export async function deleteInvoice(
+  invoiceId: string, reason?: string,
+): Promise<ActionResult> {
+  await requireStaff(['admin']);
+  const sb = await supabaseServer();
+  const { error } = await sb.rpc('delete_invoice', {
+    p_invoice_id: invoiceId, p_reason: reason?.trim() || null,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/invoices');
+  revalidatePath('/staff/orders');
+  revalidatePath('/portal', 'layout');
+  return { ok: true, message: 'Invoice deleted' };
 }
 
 /** A proforma covering whatever is still on back order. Asks for no payment. */

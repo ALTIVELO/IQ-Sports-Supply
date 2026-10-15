@@ -185,9 +185,32 @@ begin
     'a paid order cannot be edited');
   perform assert_fails(format($q$select cancel_order(%L)$q$, v_order),
     'nor cancelled — it must be credited instead');
-  perform assert_fails(format($q$select delete_order(%L)$q$, v_order),
-    'and certainly not deleted');
 end $$;
+
+\echo ''
+\echo '───────── Erasing one, though, is an admin''s and always available ─────────'
+/*
+ * This used to say a paid order "certainly" could not be deleted, which was
+ * true and was the wrong rule. The orders anybody needs rid of are the ones
+ * that were paid, packed and shipped to prove those worked, and the refusal
+ * fell exactly on them.
+ *
+ * Editing and cancelling are still refused: those rewrite a document the
+ * customer is holding. Deleting says the order should never have existed,
+ * which is a different claim and an admin's to make. What it does once
+ * allowed — the stock, the supplier lines, the record of what went — is suite
+ * 38; here it is only that state is no longer the objection and rank still is.
+ */
+set session "test.user_id" = '33333333-3333-3333-3333-333333333333';
+do $$
+declare v_order uuid := (select id from placed order by n limit 1);
+begin
+  perform assert_fails(format($q$select delete_order(%L)$q$, v_order),
+    'an ops user cannot erase an order, paid or not');
+  perform assert_eq((select count(*)::int from orders where id = v_order), 1,
+    'and it is still there');
+end $$;
+set session "test.user_id" = '11111111-1111-1111-1111-111111111111';
 
 \echo ''
 \echo '───────── Cancelling puts the stock back and withdraws the invoices ─────────'

@@ -321,7 +321,12 @@ export default function OrderRow({
                   Cancel order
                 </Button>
               )}
-              {canDelete && amendable && mode === 'none' && (
+              {/* Not gated on `amendable`.
+                  Amendable means "nothing has happened to this yet", and the
+                  orders anybody wants rid of are the ones that have been paid,
+                  packed and shipped to prove that paying, packing and shipping
+                  worked. The button used to vanish on precisely those. */}
+              {canDelete && mode === 'none' && (
                 <Button small kind="ghost" onClick={() => { setMode('delete'); setError(''); }}>
                   Delete
                 </Button>
@@ -362,12 +367,12 @@ export default function OrderRow({
               />
             )}
             {mode === 'delete' && (
-              <ConfirmWithReason
-                title={`Delete ${order.number} entirely?`}
-                body="This removes the order and its invoice numbers for good. Cancelling is almost always the right choice — it keeps the record and the reason. Delete only an order raised in error."
-                confirmLabel="Delete for good" danger
-                pending={pending} onCancel={() => setMode('none')}
-                onConfirm={() => run(() => deleteOrder(order.id))}
+              <DeleteOrder
+                order={order}
+                pending={pending}
+                onCancel={() => setMode('none')}
+                onConfirm={(releaseStock, reason) =>
+                  run(() => deleteOrder(order.id, releaseStock, reason))}
               />
             )}
             {mode === 'paid' && (
@@ -701,5 +706,93 @@ function LineMargin({ price, cost, qty, currency }: {
       <Money value={profit} currency={currency} />
       <span className="text-mute font-normal"> {pct.toFixed(0)}%</span>
     </span>
+  );
+}
+
+/**
+ * Removing an order for good, whatever state it is in.
+ *
+ * Its own panel rather than the shared confirmation, because there are two
+ * things to say that the shared one cannot. What this order has already been
+ * through — paid, shipped, delivered — because that is what makes it worth a
+ * second look. And the stock, which is a decision rather than a consequence:
+ * an order that was a rehearsal took goods off a shelf that were never
+ * actually picked, so putting them back is usually right, unless the shelves
+ * have been counted since and the figures are already true.
+ */
+function DeleteOrder({ order, pending, onCancel, onConfirm }: {
+  order: OrderData;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (releaseStock: boolean, reason: string) => void;
+}) {
+  const [releaseStock, setReleaseStock] = useState(true);
+  const [reason, setReason] = useState('');
+  const [typed, setTyped] = useState('');
+
+  const paid = order.invoices.some((i) => i.paid);
+  const shipped = order.invoices.some((i) => i.shipped);
+  const units = order.order_lines.reduce((a, l) => a + l.alloc_qty, 0);
+  // Typing the number back is the one guard that does not depend on reading
+  // the paragraph above it.
+  const ready = typed.trim().toUpperCase() === order.number.toUpperCase();
+
+  return (
+    <div className="mt-3 border border-danger rounded p-3 space-y-2.5">
+      <h3 className="text-[13px] font-semibold text-danger">
+        Delete {order.number} for good?
+      </h3>
+      <p className="text-[12px] text-mute max-w-2xl">
+        This removes the order, its lines, its invoices and its history. It cannot be
+        undone. Cancelling keeps the record and the reason, and is almost always the
+        right choice — delete only an order that should never have existed.
+        {(paid || shipped) && (
+          <span className="block mt-1 text-danger font-semibold">
+            This one has been {[paid && 'paid', shipped && 'shipped']
+              .filter(Boolean).join(' and ')}.
+          </span>
+        )}
+      </p>
+
+      {units > 0 && (
+        <label className="flex items-start gap-2 text-[12px] max-w-2xl">
+          <input
+            type="checkbox" checked={releaseStock}
+            onChange={(e) => setReleaseStock(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Put the {units} unit{units === 1 ? '' : 's'} it holds back on the shelf.
+            <span className="block text-mute">
+              Leave this off if the stock has been counted since — the figures are
+              already right and adding to them would make them wrong the other way.
+            </span>
+          </span>
+        </label>
+      )}
+
+      <input
+        value={reason} onChange={(e) => setReason(e.target.value)}
+        placeholder="Why — kept in the log, which is all there will be"
+        className="text-[12px] w-full max-w-md"
+      />
+      <label className="block text-[12px]">
+        <span className="block font-semibold mb-1">
+          Type {order.number} to confirm
+        </span>
+        <input
+          value={typed} onChange={(e) => setTyped(e.target.value)}
+          className="num w-[160px]" aria-label={`Type ${order.number} to confirm`}
+        />
+      </label>
+
+      <div className="flex gap-2">
+        <Button small kind="danger" disabled={pending || !ready}
+                onClick={() => onConfirm(releaseStock, reason)}>
+          {pending ? 'Deleting…' : 'Delete for good'}
+        </Button>
+        <Button small kind="ghost" onClick={onCancel}>Keep it</Button>
+      </div>
+    </div>
   );
 }

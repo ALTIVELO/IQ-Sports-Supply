@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Money, Notice, Tag, VoidTag,
          voidedRow, voidedText } from '@/components/ui';
 import { fmtDate } from '@/lib/format';
-import { markPaid, markUnpaid } from '../actions';
+import { markPaid, markUnpaid, deleteInvoice } from '../actions';
 import type { ActionResult } from '../actions';
 import { pushToXero, pullPaymentStatus } from './actions';
 import type { InvoiceType } from '@/lib/types';
@@ -27,8 +27,12 @@ const FILTERS = [
 ] as const;
 
 export default function InvoicesScreen({
-  invoices, status, xeroConfigured, xeroConnected,
-}: { invoices: Inv[]; status: string; xeroConfigured: boolean; xeroConnected: boolean }) {
+  invoices, status, xeroConfigured, xeroConnected, canDelete = false,
+}: {
+  invoices: Inv[]; status: string; xeroConfigured: boolean; xeroConnected: boolean;
+  /** Whether this person may remove a document for good. */
+  canDelete?: boolean;
+}) {
   const router = useRouter();
   const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -171,6 +175,26 @@ export default function InvoicesScreen({
                             <Button small kind="ghost" disabled={pending}
                               onClick={() => run(() => markUnpaid(inv.id))}>
                               Reverse
+                            </Button>
+                          )}
+                          {/* Whatever state it is in. The only document that
+                              cannot come off on its own is the last one
+                              billing an order, and the database says so. */}
+                          {canDelete && (
+                            <Button
+                              small kind="ghost" disabled={pending}
+                              onClick={() => {
+                                // eslint-disable-next-line no-alert
+                                const reason = prompt(
+                                  `Delete invoice ${inv.number} for good?\n\n`
+                                  + 'This cannot be undone, and any credit note against it '
+                                  + 'goes too. Why are you removing it?',
+                                );
+                                if (reason === null) return;
+                                run(() => deleteInvoice(inv.id, reason));
+                              }}
+                            >
+                              Delete
                             </Button>
                           )}
                         </div>

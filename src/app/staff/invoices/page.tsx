@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function InvoicesPage({
   searchParams,
 }: { searchParams: Promise<{ status?: string }> }) {
-  await requireStaff();
+  const user = await requireStaff();
   const { status } = await searchParams;
   const sb = await supabaseServer();
 
@@ -49,6 +49,8 @@ export default async function InvoicesPage({
         status={status ?? 'all'}
         xeroConfigured={xeroConfigured()}
         xeroConnected={Boolean(connection?.tenant_id)}
+        // Removing a document for good is an admin's.
+        canDelete={user.role === 'admin'}
       />
     </>
   );
