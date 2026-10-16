@@ -1,7 +1,8 @@
 import React from 'react';
-import { Document, Page, Text as PdfText, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text as PdfText, View, Image, StyleSheet } from '@react-pdf/renderer';
 import { fmtDate, money, totals } from '@/lib/format';
 import { COMPANY_NUMBER, REGISTERED_IN, VAT_NUMBER, legalFooter } from '@/lib/company';
+import { LOGO_PNG, LOGO_WIDTH, LOGO_HEIGHT } from './logo';
 import { agencyHeading, agencyLines } from '@/lib/orders/agency';
 
 /*
@@ -65,6 +66,19 @@ const s = StyleSheet.create({
   ref: { fontSize: 9, marginTop: 3, color: MUTE },
   company: { textAlign: 'right', maxWidth: 200, fontSize: 8, color: MUTE },
   companyName: { fontFamily: 'Helvetica-Bold', color: INK, fontSize: 9, marginBottom: 2 },
+  /*
+   * The wordmark, at a width the address underneath can live with.
+   *
+   * 150pt against the block's 200pt, so the longest line of the address still
+   * sets the column width and the logo is not the thing that decides it. The
+   * height is the wordmark's own ratio worked out rather than typed, because
+   * a guessed height is how a logo ends up subtly squashed on every document
+   * a customer keeps.
+   */
+  logo: {
+    width: 150, height: (150 * LOGO_HEIGHT) / LOGO_WIDTH,
+    marginBottom: 6, marginLeft: 'auto',
+  },
   parties: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, marginBottom: 18 },
   label: { fontSize: 7, color: MUTE, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 },
   strong: { fontFamily: 'Helvetica-Bold' },
@@ -182,7 +196,12 @@ function Header({ d, title }: { d: DocData; title: string }) {
         </Text>
       </View>
       <View style={s.company}>
-        <Text style={s.companyName}>{d.company}</Text>
+        {/* The wordmark instead of the name in bold, not as well as it: the
+            logo says "IQ Sports Supply" already, and a letterhead that prints
+            the words again directly underneath reads as a mistake. The
+            registered name is still on every document, in the legal line at
+            the foot of it. */}
+        <Image style={s.logo} src={LOGO_PNG} />
         <Text>{d.companyAddress}</Text>
         {/* Top right, with the letterhead: the company number is the first thing
             an accountant or a customer's accounts team looks for. */}
