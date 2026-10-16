@@ -1,7 +1,7 @@
 import React from 'react';
 import { Document, Page, Text as PdfText, View, StyleSheet } from '@react-pdf/renderer';
 import { fmtDate, money, totals } from '@/lib/format';
-import { COMPANY_NUMBER, REGISTERED_IN, legalFooter } from '@/lib/company';
+import { COMPANY_NUMBER, REGISTERED_IN, VAT_NUMBER, legalFooter } from '@/lib/company';
 import { agencyHeading, agencyLines } from '@/lib/orders/agency';
 
 /*
@@ -189,6 +189,11 @@ function Header({ d, title }: { d: DocData; title: string }) {
         <Text style={{ marginTop: 2 }}>
           Company No. {COMPANY_NUMBER} · Registered in {REGISTERED_IN}
         </Text>
+        {/* And the VAT registration beside it rather than only in the footer.
+            A VAT invoice has to carry the supplier's number, and the person
+            looking for it is reading the letterhead, not the small print at
+            the bottom of page two. */}
+        {VAT_NUMBER ? <Text>VAT No. {VAT_NUMBER}</Text> : null}
       </View>
     </View>
   );

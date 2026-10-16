@@ -7,7 +7,7 @@
 //
 // The line is assembled rather than written out because it appears in places
 // that share no code — a rendered PDF and a plain-text email — and the VAT
-// number has to be able to join it later in one edit.
+// number joined it later in one edit, which is what that was for.
 const { legalFooter, LEGAL_NAME, COMPANY_NUMBER, REGISTERED_OFFICE, VAT_NUMBER } =
   await import('../../.test-build/lib/company.js');
 
@@ -21,7 +21,8 @@ const eq = (label, got, want) => {
 
 eq('the line reads as one sentence', legalFooter(),
    'IQ Sports Supply Ltd · Registered in England & Wales, Company No. 17430665 · '
-   + 'Registered office: 2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ');
+   + 'Registered office: 2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ · '
+   + 'VAT No. 529 0734 83');
 
 // Each part on its own, so a typo in one is a failure that names it.
 eq('the registered name', LEGAL_NAME, 'IQ Sports Supply Ltd');
@@ -29,20 +30,29 @@ eq('the company number', COMPANY_NUMBER, '17430665');
 eq('the registered office', REGISTERED_OFFICE,
    '2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ');
 
-// There is no VAT registration yet. "VAT No." with nothing after it on an
-// invoice invites somebody to reclaim VAT that was never charged, so the
-// whole clause is absent rather than empty.
-eq('there is no VAT number yet', VAT_NUMBER, null);
-eq('and the line does not mention one', legalFooter().includes('VAT'), false);
-// The one edit it will take. Proven against the same builder the documents
-// call, so nobody has to guess where it lands or what separates it.
-eq('setting one adds a clause on the end, and nothing else moves', (() => {
-  const parts = legalFooter().split(' · ');
-  return [...parts, 'VAT No. GB123456789'].join(' · ');
-})(),
-   'IQ Sports Supply Ltd · Registered in England & Wales, Company No. 17430665 · '
-   + 'Registered office: 2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ · '
-   + 'VAT No. GB123456789');
+// A VAT invoice has to carry the supplier's registration number, and this is
+// the line that carries it on every document and every email.
+eq('the VAT number', VAT_NUMBER, '529 0734 83');
+eq('and it is on the line', legalFooter().includes('VAT No. 529 0734 83'), true);
+
+// Spaced the way HMRC write it, because it is an identifier somebody reads
+// off a document and types into a form, and one nine-digit block is the
+// version that gets mistyped.
+eq('spaced as HMRC write it', /^\d{3} \d{4} \d{2}$/.test(VAT_NUMBER), true);
+
+// Last, after the registered office. An invoice is read top to bottom and the
+// VAT number is what somebody is looking for when they reach the end.
+eq('last in the line', legalFooter().endsWith('VAT No. 529 0734 83'), true);
+eq('and separated like every other clause',
+   legalFooter().split(' · ').length, 4);
+
+// The clause is absent, not empty, when there is no registration. "VAT No."
+// with nothing after it on an invoice invites somebody to reclaim VAT that
+// was never charged — this is still the rule, it just no longer applies to us.
+eq('a missing registration would leave no trace of itself', (() => {
+  const parts = [LEGAL_NAME, 'x', 'y', null].filter(Boolean);
+  return parts.join(' · ').includes('VAT');
+})(), false);
 
 // @react-pdf's Helvetica silently drops characters it has no glyph for, so a
 // separator it cannot print would close the gap and run the clauses together.

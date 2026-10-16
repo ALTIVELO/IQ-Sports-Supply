@@ -25,13 +25,19 @@ export const REGISTERED_OFFICE =
   '2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ';
 
 /**
- * The VAT registration, once there is one.
+ * The VAT registration.
  *
- * Null rather than an empty string, and left out of the line entirely rather
- * than printed blank: "VAT No." with nothing after it on an invoice invites
- * somebody to reclaim VAT that was never charged.
+ * Still typed as nullable, and still left out of the line entirely when it is
+ * null rather than printed blank: "VAT No." with nothing after it on an
+ * invoice invites somebody to reclaim VAT that was never charged.
+ *
+ * Written with the spacing HMRC use, because it is an identifier somebody
+ * reads off a document and types into a form, and 529073483 in one block is
+ * the version that gets mistyped. The GB prefix is not here: it is how the
+ * number is written for cross-border trade, and adding it to the domestic
+ * form is a decision about what we print, not a formatting choice.
  */
-export const VAT_NUMBER: string | null = null;
+export const VAT_NUMBER: string | null = '529 0734 83';
 
 /**
  * The one line, assembled.
