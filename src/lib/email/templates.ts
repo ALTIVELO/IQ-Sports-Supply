@@ -132,11 +132,12 @@ ${o.company}`,
 /**
  * The Madison order sheet, to James and to nobody else.
  *
- * It says what is attached and what the attachment is for. Like the sheet, it
- * carries no price and nothing that names the customer — the whole point of
- * the email is that James can forward it without reading it first, and a
- * covering note that leaks what the attachment is careful not to would defeat
- * that entirely. The SO number is the one client reference on either.
+ * It says what is attached and what the attachment is for, and no more. Like
+ * the sheet, it carries no price and nothing that names the customer — the
+ * whole point of the email is that James can forward it without reading it
+ * first, and a covering note that leaks what the attachment is careful not to
+ * would defeat that entirely. The SO number is the one client reference on
+ * either.
  */
 export function supplierSheet(o: {
   company: string; reference: string; filename: string; date: string;
@@ -155,10 +156,6 @@ Date         ${fmtDate(o.date)}
 Deliver to   ${o.site || '(not set)'}
 Client ref   ${refs}
              ${units}
-
-It has not been sent to Madison. Nothing on the sheet says who the goods are
-for or what anything costs — only the SO reference, which Madison are asked to
-quote back so the stock books in against the right order.
 
 ${o.company}
 ${legalFooter()}`,

@@ -139,8 +139,8 @@ ok('the delivery site is on it', whole.includes('Slough'));
 // ── it goes to James, and the address is not configurable ───────────────────
 ok('the sheet is addressed to James', SHEET_RECIPIENT === 'james@iqsportsupply.com',
   SHEET_RECIPIENT);
-ok('the email says it has not been sent to Madison',
-  /not been sent to Madison/i.test(email.body));
+ok('the email is the covering note and nothing more',
+  email.body.split('\n').filter((l) => l.trim()).length <= 8, email.body);
 
 // ── the file itself ─────────────────────────────────────────────────────────
 ok('only the order sheet goes out', Object.keys(entries)
