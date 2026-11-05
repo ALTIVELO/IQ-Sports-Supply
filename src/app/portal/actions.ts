@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { supabaseServer } from '@/lib/supabase/server';
 import { requireClient } from '@/lib/auth';
-import { notifyOrderPlaced, notifyDropshipPartners } from '@/lib/notifications';
+import {
+  notifyOrderPlaced, notifyDropshipPartners, notifySupplierSheetForOrder,
+} from '@/lib/notifications';
 import { splitOrders } from '@/lib/orders/split';
 
 export interface PortalResult {
@@ -131,6 +133,15 @@ export async function placeClientOrder(
       await notifyDropshipPartners(orderId as string);
     } catch {
       // Left unnotified on purpose; the dispatch list still shows it.
+    }
+    // Whatever the order could not fill goes on a purchase order as it is
+    // placed, and James gets Madison's form for it to forward. Nothing about
+    // it concerns the customer, so a failure is silent here too — the
+    // purchase order is on the supplier screen either way.
+    try {
+      await notifySupplierSheetForOrder(orderId as string);
+    } catch {
+      // As above: ours to chase, not theirs to see.
     }
 
     const { data: order } = await sb.from('orders')

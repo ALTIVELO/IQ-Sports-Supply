@@ -7,7 +7,8 @@ import { requireStaff } from '@/lib/auth';
 import { trackingUrlFor } from '@/lib/format';
 import { splitOrders } from '@/lib/orders/split';
 import {
-  notifyOrderPlaced, notifySupplierOrder, notifyShipped, notifyDelivered, notifyDropshipPartners,
+  notifyOrderPlaced, notifySupplierOrder, notifySupplierSheet, notifySupplierSheetForOrder,
+  notifyShipped, notifyDelivered, notifyDropshipPartners,
 } from '@/lib/notifications';
 
 export interface ActionResult {
@@ -160,6 +161,12 @@ export async function placeOrder(input: {
     const d = await notify(
       () => notifyDropshipPartners(orderId as string), 'The brand dispatch notice');
     if (d) warnings.push(d);
+    // Anything the order could not fill from stock has just been put on a
+    // purchase order. James gets Madison's own form for it, filled in, to
+    // forward; it is never sent to Madison from here.
+    const m = await notify(
+      () => notifySupplierSheetForOrder(orderId as string), 'The Madison order sheet');
+    if (m) warnings.push(m);
   }
 
   revalidatePath('/staff/orders');
@@ -410,12 +417,16 @@ export async function createSupplierOrder(input: {
 
   const warning = await notify(
     () => notifySupplierOrder(poId as string), 'The supplier order email');
+  const sheet = await notify(
+    () => notifySupplierSheet(poId as string), 'The Madison order sheet');
 
   revalidatePath('/staff/supplier');
   return {
     ok: true,
-    message: warning ? 'Supplier order created' : 'Supplier order created and sent',
-    warning,
+    message: (warning ?? sheet)
+      ? 'Supplier order created'
+      : 'Supplier order created and sent',
+    warning: warning ?? sheet,
   };
 }
 
@@ -442,9 +453,12 @@ export async function receivePo(input: {
 export async function resendSupplierOrder(poId: string): Promise<ActionResult> {
   await requireStaff();
   const warning = await notify(() => notifySupplierOrder(poId), 'The supplier order email');
+  // Asked for again on purpose, so the resend button resends both halves of it.
+  const sheet = await notify(
+    () => notifySupplierSheet(poId, { force: true }), 'The Madison order sheet');
   revalidatePath('/staff/outbox');
-  return warning
-    ? { ok: false, error: warning }
+  return (warning ?? sheet)
+    ? { ok: false, error: warning ?? sheet }
     : { ok: true, message: 'Supplier order sent' };
 }
 

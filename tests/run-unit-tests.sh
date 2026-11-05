@@ -20,6 +20,11 @@ $TSC src/lib/orders/*.ts    --outDir .test-build/orders    >/dev/null 2>&1
 $TSC src/lib/returns/*.ts   --outDir .test-build/returns   >/dev/null 2>&1
 $TSC src/lib/email/templates.ts --outDir .test-build/email >/dev/null 2>&1
 $TSC src/lib/supabase/chunk.ts --outDir .test-build/supabase >/dev/null 2>&1
+# The supplier order sheet. Server-only for the same reason as chunk.ts, and
+# the marker is dropped the same way; it reads the template off disk, which is
+# exactly what the test wants to exercise.
+$TSC src/lib/xlsx/*.ts      --outDir .test-build/xlsx     >/dev/null 2>&1
+sed -i "/^import 'server-only';$/d" .test-build/xlsx/supplier-sheet.js 2>/dev/null || true
 # chunk.ts is server-only; the marker import means nothing to Node and would
 # just fail to resolve, so it is dropped from the compiled copy the tests read.
 sed -i "/^import 'server-only';$/d" .test-build/supabase/chunk.js 2>/dev/null || true

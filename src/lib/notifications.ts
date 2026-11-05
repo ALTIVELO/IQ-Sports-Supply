@@ -2,9 +2,13 @@ import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sendEmail } from '@/lib/email/send';
 import {
-  orderConfirmation, supplierOrder, shippedNotice, deliveredNotice, welcomeEmail,
-  rejectionEmail, dropshipNotice, returnRaised, returnDecision, returnSettled,
+  orderConfirmation, supplierOrder, supplierSheet, shippedNotice, deliveredNotice,
+  welcomeEmail, rejectionEmail, dropshipNotice, returnRaised, returnDecision,
+  returnSettled,
 } from '@/lib/email/templates';
+import {
+  SHEET_RECIPIENT, buildSupplierSheet, sheetFilename, supplierSheetData,
+} from '@/lib/xlsx/supplier-sheet';
 import { RETURN_REASONS } from '@/lib/types';
 import { invoiceDocData, renderInvoicePdf } from '@/lib/pdf/render';
 import { appUrl } from '@/lib/app-url';
@@ -124,6 +128,95 @@ export async function notifySupplierOrder(poId: string) {
     body: msg.body,
     poId,
   });
+}
+
+/**
+ * The supplier order as Madison's own form, to James, for him to forward.
+ *
+ * A second message about the same purchase order as notifySupplierOrder, not a
+ * replacement for it: that one is a plain list he can read on a phone, this
+ * one is the sheet Madison want to receive. Both go to James; neither goes to
+ * Madison.
+ *
+ * Sent once per purchase order. The email log is what remembers that, so a
+ * retried action or a second route to the same PO does not send it twice —
+ * `force` is for the resend button, where sending it again is the request.
+ */
+export async function notifySupplierSheet(poId: string, opts: { force?: boolean } = {}) {
+  const db = supabaseAdmin();
+
+  const { data: po } = await db
+    .from('purchase_orders')
+    .select('number, date, receive_location_id, po_lines(sku, name, qty, so_reference)')
+    .eq('id', poId)
+    .single();
+  if (!po) return;
+
+  if (!opts.force) {
+    const { data: already } = await db
+      .from('email_log').select('id')
+      .eq('po_id', poId).eq('kind', 'supplier_sheet')
+      .in('status', ['sent', 'suppressed']).limit(1);
+    if (already?.length) return;
+  }
+
+  const [{ data: location }, { data: settings }] = await Promise.all([
+    db.from('locations').select('name, address').eq('id', po.receive_location_id).single(),
+    db.from('settings').select('company').eq('id', 1).single(),
+  ]);
+
+  /*
+   * Everything the supplier may see, and nothing else, is decided in one
+   * place: supplierSheetData() takes what we know and returns what goes on the
+   * form. The rows handed to it carry no price — po_lines has no price column
+   * — but the guarantee does not rest on that staying true.
+   */
+  const data = supplierSheetData({
+    po: { number: po.number, date: po.date },
+    lines: po.po_lines as { sku: string; name: string; qty: number; so_reference: string | null }[],
+    location: location ?? null,
+  });
+
+  const file = await buildSupplierSheet(data);
+  const filename = sheetFilename(po.number);
+
+  const msg = supplierSheet({
+    company: settings!.company,
+    reference: data.reference,
+    filename,
+    date: data.date,
+    site: data.site,
+    clientRefs: data.clientRefs,
+    lineCount: data.lines.length,
+    totalUnits: data.lines.reduce((n, l) => n + l.qty, 0),
+  });
+
+  await sendEmail({
+    kind: 'supplier_sheet',
+    // Never settings.supplier_recipient. See SHEET_RECIPIENT.
+    to: [SHEET_RECIPIENT],
+    subject: msg.subject,
+    body: msg.body,
+    attachments: [{ filename, content: Buffer.from(file).toString('base64') }],
+    poId,
+  });
+}
+
+/**
+ * The sheet for whatever purchase order an order raised, if it raised one.
+ *
+ * place_order() raises the purchase order inside the same transaction as the
+ * order and says so on the order's timeline, which is where this reads it
+ * from. An order fully in stock raises none and sends nothing.
+ */
+export async function notifySupplierSheetForOrder(orderId: string) {
+  const { data } = await supabaseAdmin()
+    .from('order_events').select('meta')
+    .eq('order_id', orderId).eq('type', 'supplier_ordered')
+    .order('created_at', { ascending: false }).limit(1);
+
+  const poId = (data?.[0]?.meta as { po_id?: string } | null)?.po_id;
+  if (poId) await notifySupplierSheet(poId);
 }
 
 /**
