@@ -40,13 +40,16 @@ declare v_inv uuid; v_stock integer;
 begin
   select id into v_inv from invoices where order_id = (select v from ids where k='done');
   update invoices set paid = true, paid_date = current_date where id = v_inv;
+  -- The five arrived for this order, which is the only way an order gets to
+  -- be packed: goods delivered against it never pass through free stock.
+  perform allocate_order_id((select v from ids where k='done'));
   perform mark_invoice_packed(v_inv);
   perform mark_invoice_shipped(v_inv, 'DPD', 'TRACK-A');
   perform mark_invoice_delivered(v_inv);
 
   select qty into v_stock from stock_levels s join products p on p.id = s.product_id
    where p.sku='BPB05SR25' and s.location_id = (select id from locations where name='Slough');
-  perform assert_eq(v_stock, 95, 'the five it took are off the shelf');
+  perform assert_eq(v_stock, 100, 'the shelf is untouched: the five were never on it');
 
   perform delete_order((select v from ids where k='done'), true, 'Test order from the build');
 
@@ -56,7 +59,7 @@ begin
 
   select qty into v_stock from stock_levels s join products p on p.id = s.product_id
    where p.sku='BPB05SR25' and s.location_id = (select id from locations where name='Slough');
-  perform assert_eq(v_stock, 100, 'and the five are back on the shelf');
+  perform assert_eq(v_stock, 105, 'and the five it held become free stock');
 end $$;
 
 \echo ''
@@ -89,10 +92,13 @@ insert into ids (k, v) select 'keepstock', place_order(
 do $$
 declare v_stock integer;
 begin
+  -- Four of them are in the building and held by this order, so there is
+  -- something to hand back and the flag is the only reason it is not.
+  perform allocate_order_id((select v from ids where k='keepstock'));
   perform delete_order((select v from ids where k='keepstock'), false, 'Counted since');
   select qty into v_stock from stock_levels s join products p on p.id = s.product_id
    where p.sku='BPB05SR25' and s.location_id = (select id from locations where name='Slough');
-  perform assert_eq(v_stock, 96, 'asked not to, it leaves the shelf as it reads');
+  perform assert_eq(v_stock, 105, 'asked not to, it leaves the shelf as it reads');
 end $$;
 
 \echo ''

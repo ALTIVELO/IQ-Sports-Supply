@@ -398,6 +398,39 @@ export async function markDelivered(invoiceId: string): Promise<ActionResult> {
   };
 }
 
+/**
+ * The tick on an order line: the goods are here, or they are not.
+ *
+ * Nothing is allocated when an order is taken, because everything is bought
+ * in for the order it is sold on. Usually it is the supplier receipt that
+ * says the goods have landed; this is the other way — somebody looking at
+ * them on the bench. The quantity is absolute rather than a nudge, so the
+ * tick is the whole line and clearing it is none of it.
+ */
+export async function setLineAllocation(
+  lineId: string, allocated: number,
+): Promise<ActionResult> {
+  await requireStaff();
+  const sb = await supabaseServer();
+
+  const { error } = await sb.rpc('set_line_allocation', {
+    p_line_id: lineId,
+    p_alloc: Math.max(0, Math.floor(allocated)),
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/staff/orders');
+  revalidatePath('/staff/packing');
+  revalidatePath('/staff/supplier');
+  revalidatePath('/portal/orders');
+  return {
+    ok: true,
+    message: allocated > 0
+      ? 'Marked as here — the order can be packed once everything on it is'
+      : 'Back on back order',
+  };
+}
+
 // ── supplier orders ─────────────────────────────────────────────────────────
 
 export async function createSupplierOrder(input: {

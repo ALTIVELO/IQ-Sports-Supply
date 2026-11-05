@@ -9,6 +9,11 @@ select place_order((select id from clients where name='MDI Ltd'),
   jsonb_build_array(
     jsonb_build_object('product_id',(select id from products where sku='BPB05SR25'),'qty',5),
     jsonb_build_object('product_id',(select id from products where sku='FCR9200C26'),'qty',5)));
+-- A split only means anything on an order that is part here and part owed,
+-- and nothing is here until somebody says so: the pads are in, two of the
+-- five chainsets are in, the rest is still at the supplier.
+select allocate_line('SO-001', 'BPB05SR25', 5);
+select allocate_line('SO-001', 'FCR9200C26', 2);
 \set QUIET off
 
 \echo ''

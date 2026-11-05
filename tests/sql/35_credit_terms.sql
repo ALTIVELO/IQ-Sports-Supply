@@ -79,20 +79,19 @@ declare v_inv invoices%rowtype;
 begin
   select * into v_inv from invoices where order_id = (select v from ids where k='mdi');
   perform assert_eq(v_inv.paid, false, 'their invoice is unpaid like anybody else''s');
+  -- The goods are in: what is being tested is whether the money has to be.
+  perform allocate_order_id((select v from ids where k='mdi'));
   perform mark_invoice_packed(v_inv.id);
   perform assert_eq((select packed from invoices where id = v_inv.id), true,
     'and it packs anyway, because the account carries the arrangement');
 end $$;
 
 \echo ''
-\echo '───────── C. Terms are about money, not about the shelf ─────────'
--- An account customer still cannot have what we have not got.
+\echo '───────── C. Terms are about money, not about the goods ─────────'
+-- An account customer still cannot have what has not arrived.
 do $$
 declare v_inv uuid;
 begin
-  update stock_levels set qty = 0
-   where location_id = (select id from locations where name='Slough');
-
   insert into ids (k, v) select 'short', place_order(
     (select id from clients where name='MDI Ltd'),
     (select id from locations where name='Slough'),
@@ -101,12 +100,9 @@ begin
 
   select id into v_inv from invoices where order_id = (select v from ids where k='short');
   perform assert_eq((select ready_to_pack from invoices where id = v_inv), false,
-    'nothing on the shelf, so nothing is ready');
+    'nothing has arrived, so nothing is ready');
   perform assert_fails(format('select mark_invoice_packed(%L)', v_inv),
     'and terms do not conjure stock out of the air');
-
-  update stock_levels set qty = 500
-   where location_id = (select id from locations where name='Slough');
 end $$;
 
 \echo ''

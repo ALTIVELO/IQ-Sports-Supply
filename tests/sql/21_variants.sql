@@ -88,7 +88,10 @@ begin
   -- The SKU on the order is the size's SKU, not the bike's: what was ordered
   -- is a frame, and a picker cannot ship "a Storm 7.0".
   perform assert_eq(v_line.sku, 'DRAG-STORM-7-0-M', 'the size is what was ordered');
-  perform assert_eq(v_line.alloc_qty, 2, 'and it allocated from that size''s own stock');
+  -- The size is what is owed, too: a back order against "a Storm 7.0" would
+  -- not tell the supplier which frame to send.
+  perform assert_eq(v_line.alloc_qty, 0, 'nothing is allocated at placement');
+  perform assert_eq(v_line.bo_qty, 2, 'the size''s own line is what is owed');
   perform assert_eq((select currency from orders where id = v_order), 'EUR',
     'in the currency the size is priced in');
 end $$;

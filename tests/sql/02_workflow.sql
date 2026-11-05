@@ -9,7 +9,7 @@ set session "test.user_id" = '11111111-1111-1111-1111-111111111111';
 \set QUIET off
 
 \echo ''
-\echo '───────── A. Placement: allocation, invoice, supplier order ─────────'
+\echo '───────── A. Placement: everything owed, invoice, supplier order ─────────'
 select place_order(
   (select id from clients where name='MDI Ltd'),
   (select id from locations where name='Slough'),
@@ -22,18 +22,23 @@ select place_order(
 do $$
 declare o uuid := (select id from orders where number='SO-001');
 begin
-  perform assert_eq((select alloc_qty from order_lines where order_id=o and sku='BPB05SR25'), 5, 'in-stock line fully allocated');
-  perform assert_eq((select bo_qty    from order_lines where order_id=o and sku='FCR9200C26'), 3, 'partial line backorders the shortfall');
-  perform assert_eq((select alloc_qty from order_lines where order_id=o and sku='FCR9200C26'), 2, 'partial line allocates what exists');
-  perform assert_eq((select bo_qty    from order_lines where order_id=o and sku='BBR9100B'), 4, 'zero-stock line fully backorders');
+  -- Twenty of the first are on the shelf and two of the second, and it
+  -- makes no difference to any of it: the catalogue is bought in for the
+  -- orders it is sold on, so an order owes everything on it until somebody
+  -- can see the goods.
+  perform assert_eq((select alloc_qty from order_lines where order_id=o and sku='BPB05SR25'), 0, 'a line we hold twenty of is still allocated nothing');
+  perform assert_eq((select bo_qty    from order_lines where order_id=o and sku='BPB05SR25'), 5, 'and owed in full');
+  perform assert_eq((select alloc_qty from order_lines where order_id=o and sku='FCR9200C26'), 0, 'nor does part-stock allocate part of a line');
+  perform assert_eq((select bo_qty    from order_lines where order_id=o and sku='FCR9200C26'), 5, 'which is owed in full too');
+  perform assert_eq((select bo_qty    from order_lines where order_id=o and sku='BBR9100B'), 4, 'a line we hold none of, the same');
   perform assert_eq((select qty from stock_levels sl join products p on p.id=sl.product_id
                       join locations l on l.id=sl.location_id
-                      where p.sku='BPB05SR25' and l.name='Slough'), 15, 'stock decremented at that location');
+                      where p.sku='BPB05SR25' and l.name='Slough'), 20, 'the shelf is left exactly as it was');
   perform assert_eq((select number from invoices where order_id=o), 'IQ-2026-003', 'invoice numbering continues from 002');
   perform assert_eq((select count(*)::int from invoice_lines
                       where invoice_id=(select id from invoices where order_id=o)), 3, 'full order invoiced at placement');
   perform assert_eq((select ready_to_pack from invoices where order_id=o), false, 'invoice not packable while short');
-  perform assert_eq((select count(*)::int from po_lines where so_reference='SO-001'), 2, 'supplier order raised for the shortfall');
+  perform assert_eq((select count(*)::int from po_lines where so_reference='SO-001'), 3, 'the supplier order covers the whole order');
   perform assert_eq((select bool_and(so_reference is not null) from po_lines), true, 'every supplier line carries its SO reference');
 end $$;
 
@@ -63,10 +68,11 @@ end $$;
 
 \echo ''
 \echo '───────── D. Receiving matches by SO reference, surplus to stock ─────────'
+-- Seven of the first: five for the order and two more than were asked for.
 select receive_po(
   (select id from purchase_orders where number='PO-001'),
   (select jsonb_agg(jsonb_build_object('po_line_id', id,
-           'qty', case when sku='BBR9100B' then 3 else 5 end))
+           'qty', case when sku='BBR9100B' then 3 when sku='BPB05SR25' then 7 else 5 end))
      from po_lines where po_id=(select id from purchase_orders where number='PO-001')),
   '2026-09-20');
 
@@ -77,7 +83,7 @@ begin
   perform assert_eq((select alloc_qty from order_lines where order_id=o and sku='FCR9200C26'), 5, 'allocation raised to ordered qty');
   perform assert_eq((select qty from stock_levels sl join products p on p.id=sl.product_id
                       join locations l on l.id=sl.location_id
-                      where p.sku='FCR9200C26' and l.name='Slough'), 2, 'surplus became free stock');
+                      where p.sku='BPB05SR25' and l.name='Slough'), 22, 'and what the order did not need became free stock');
   perform assert_eq((select bo_qty from order_lines where order_id=o and sku='BBR9100B'), 1, 'short receipt leaves the remainder on back order');
   perform assert_eq((select received from purchase_orders where number='PO-001'), false, 'PO not complete while a line is short');
   perform assert_eq((select ready_to_pack from invoices where order_id=o), false, 'invoice still held while short');

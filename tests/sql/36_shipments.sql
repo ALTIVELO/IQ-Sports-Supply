@@ -40,6 +40,8 @@ insert into ids (k, v) select 'order', place_order(
     'product_id',(select id from products where sku='BPB05SR25'),'qty',3)));
 insert into ids (k, v)
 select 'inv', id from invoices where order_id = (select v from ids where k='order');
+-- Everything here is about parcels leaving, so the goods have to be in.
+select allocate_order_id((select v from ids where k='order'));
 \set QUIET off
 
 \echo ''
@@ -212,6 +214,7 @@ begin
   select id into v_other from invoices where order_id = (select v from ids where k='other');
   -- Not on terms, so they pay before anything moves — which is still the rule.
   update invoices set paid = true, paid_date = current_date where id = v_other;
+  perform allocate_order_id((select v from ids where k='other'));
   perform mark_invoice_packed(v_other);
   perform mark_invoice_shipped(v_other, 'DHL', 'DHL123456');
 end $$;

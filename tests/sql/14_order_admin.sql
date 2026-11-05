@@ -79,18 +79,22 @@ begin
 end $$;
 
 \echo ''
-\echo '───────── Stock follows the edit both ways ─────────'
+\echo '───────── An edit leaves the shelf where it was ─────────'
 do $$
 declare v_order uuid := (select id from placed order by n limit 1);
 begin
-  -- 5 on the shelf, 8 ordered, so 5 allocated. Edited down to 3, so 2 go back.
+  -- Five on the shelf and eight ordered, then edited down to three. The
+  -- order never took any of the five, so there is nothing for the edit to
+  -- hand back: what changes is what is owed.
   perform assert_eq((select qty from stock_levels
                       where product_id=(select id from products where sku='OA-1')),
-                    2, 'reducing a line puts the difference back on the shelf');
+                    5, 'the shelf is untouched by an order being rewritten');
   perform assert_eq((select alloc_qty from order_lines where order_id=v_order and sku='OA-1'),
-                    3, 'and the line holds what it needs');
+                    0, 'the edited line holds nothing');
+  perform assert_eq((select bo_qty from order_lines where order_id=v_order and sku='OA-1'),
+                    3, 'and owes the quantity it now asks for');
   perform assert_eq((select bo_qty from order_lines where order_id=v_order and sku='OA-3'),
-                    4, 'a line we hold none of is entirely on back order');
+                    4, 'a line added by the edit is owed in full too');
 end $$;
 
 \echo ''
@@ -103,7 +107,9 @@ begin
   perform assert_eq(v_inv.type::text, 'proforma', 'it is a proforma');
   perform assert_eq(v_inv.paid, false, 'not marked paid');
   perform assert_eq(v_inv.due_date, v_inv.date, 'and carries no payment term');
-  perform assert_eq((select sum(qty)::integer from invoice_lines where invoice_id=v_pro), 4,
+  -- Three of the one and four of the other: the whole of what is left on the
+  -- order, because the whole of it is owed.
+  perform assert_eq((select sum(qty)::integer from invoice_lines where invoice_id=v_pro), 7,
                     'covering exactly what is on back order');
   -- Raising another replaces it rather than leaving two live.
   perform proforma_for_backorder(v_order);
@@ -222,9 +228,11 @@ insert into placed (id) select place_order(
 do $$
 declare v_order uuid := (select id from placed order by n desc limit 1);
 begin
+  -- The shelf is not what decides whether an order can be filled any more,
+  -- so an order does not spend it.
   perform assert_eq((select qty from stock_levels
                       where product_id=(select id from products where sku='OA-1')),
-                    0, 'the new order takes the last two off the shelf');
+                    5, 'the new order takes nothing off the shelf');
   perform cancel_order(v_order, 'Ordered in error');
   perform assert_eq((select status::text from orders where id=v_order), 'cancelled',
                     'the order is cancelled');
@@ -232,7 +240,7 @@ begin
                     'with the reason recorded');
   perform assert_eq((select qty from stock_levels
                       where product_id=(select id from products where sku='OA-1')),
-                    2, 'and the stock is back');
+                    5, 'and cancelling it hands nothing back, because it held nothing');
   perform assert_eq((select count(*)::integer from invoices
                       where order_id=v_order and not superseded), 0,
                     'every invoice on it is withdrawn');

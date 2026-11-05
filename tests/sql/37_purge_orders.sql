@@ -33,6 +33,11 @@ begin
       jsonb_build_object('product_id', v_prod, 'qty', 2)));
   end loop;
 end $$;
+
+-- One of the rehearsals had its goods delivered against it before anybody
+-- thought about deleting it. Those two are in the building, so the purge has
+-- something to hand back; the other sixteen are still owed and hold nothing.
+select allocate_order('SO-003');
 \set QUIET off
 
 \echo ''
@@ -108,12 +113,14 @@ begin
   perform assert_eq((select count(*)::int from orders), 3, 'three left');
   perform assert_eq((select min(number) from orders), 'SO-018', 'starting at SO-018');
 
-  -- Seventeen orders of two units each, back on the shelf.
+  -- Only the two that were actually in the building. An order that is still
+  -- owed holds nothing, so deleting it gives nothing back — the shelf must
+  -- not gain stock because a rehearsal was tidied away.
   select qty into v_stock_after from stock_levels s
     join products p on p.id = s.product_id
    where p.sku = 'BPB05SR25' and s.location_id = (select id from locations where name='Slough');
-  perform assert_eq(v_stock_after - v_stock_before, 34,
-    'and the stock they held is back on the shelf');
+  perform assert_eq(v_stock_after - v_stock_before, 2,
+    'and what they actually held is back on the shelf');
 end $$;
 
 \echo ''

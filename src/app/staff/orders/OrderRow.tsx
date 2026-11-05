@@ -8,7 +8,8 @@ import Timeline from '@/components/Timeline';
 import AgencyNotice from '@/components/AgencyNotice';
 import QtyStepper from '@/components/QtyStepper';
 import { splitInvoice, editOrder, cancelOrder, deleteOrder,
-         proformaForBackorder, creditInvoice, markPaid } from '../actions';
+         proformaForBackorder, creditInvoice, markPaid,
+         setLineAllocation } from '../actions';
 import type { InvoiceType, OrderEvent } from '@/lib/types';
 
 interface Line {
@@ -88,6 +89,15 @@ export default function OrderRow({
   const settled = realInvoices.some((i) => i.paid);
   const gone = realInvoices.some((i) => i.packed || i.shipped);
   const amendable = canAmend && !cancelled && !settled && !gone;
+  /*
+   * Whether the goods on a line can still be said to be here.
+   *
+   * Not the same gate as amending. An order that has been paid for can still
+   * have its goods arrive, and saying so is the whole of what the tick does;
+   * an order that has been packed or sent cannot, because what went out is a
+   * record of what went out rather than a plan for it.
+   */
+  const tickable = !cancelled && !gone;
   const creditable = live.filter((i) => i.type !== 'proforma' && i.type !== 'credit');
   // A proforma asks for nothing and a credit note is money going the other
   // way, so neither is ever waiting on a payment.
@@ -238,7 +248,29 @@ export default function OrderRow({
                       <td className="num">{l.sku}</td>
                       <td>{l.name}</td>
                       <td className="num text-right">{l.qty}</td>
-                      <td className="num text-right">{l.alloc_qty}</td>
+                      <td className="num text-right">
+                        {tickable && l.product_id ? (
+                          <button
+                            type="button"
+                            disabled={pending}
+                            aria-pressed={l.alloc_qty >= l.qty}
+                            title={l.alloc_qty >= l.qty
+                              ? 'Here. Click to put it back on back order'
+                              : 'Tick when the goods are here'}
+                            onClick={() => run(() => setLineAllocation(
+                              l.id, l.alloc_qty >= l.qty ? 0 : l.qty))}
+                            className={`inline-flex items-center gap-1.5 rounded border
+                              px-[7px] py-[2px] transition-colors
+                              disabled:opacity-40 disabled:cursor-not-allowed
+                              ${l.alloc_qty >= l.qty
+                                ? 'border-success/40 bg-[#F0F7F2] text-success'
+                                : 'border-line hover:bg-parch text-mute'}`}
+                          >
+                            <span aria-hidden>{l.alloc_qty >= l.qty ? '✓' : '○'}</span>
+                            <span className="num">{l.alloc_qty}</span>
+                          </button>
+                        ) : l.alloc_qty}
+                      </td>
                       <td className={`num text-right ${l.bo_qty ? 'text-danger font-semibold' : 'text-mute'}`}>
                         {l.bo_qty || '—'}
                       </td>
@@ -263,6 +295,13 @@ export default function OrderRow({
                 </tbody>
               </table>
             </div>
+            {tickable && order.order_lines.some((l) => l.product_id) && (
+              <p className="text-[11px] text-mute mt-2">
+                Everything is on back order until the goods are here. Tick a line
+                when they are, and the invoice joins the packing queue once the
+                whole order is ticked.
+              </p>
+            )}
 
             {uncosted > 0 && (
               <p className="text-[12px] text-mute mt-2">
