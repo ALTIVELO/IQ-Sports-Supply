@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { Fragment, useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate, today } from '@/lib/format';
 import { createSupplierOrder, receivePo, resendSupplierOrder } from '../actions';
@@ -33,6 +33,25 @@ export default function SupplierScreen({
   const outstandingOf = (l: PendingLine) => l.bo_qty - l.po_qty;
   const chosen = Object.entries(selected).filter(([, q]) => q > 0);
 
+  /*
+   * By order, oldest first, because that is the question being asked.
+   *
+   * A flat list of SKUs answers "what do I need to order"; it does not answer
+   * "where is SO-021", which is the other half of what this screen is for and
+   * the half somebody is usually on the phone about.
+   */
+  const byOrder = [...pending]
+    .reduce((groups, line) => {
+      const key = line.orders.number;
+      const at = groups.find((g) => g.number === key);
+      if (at) at.lines.push(line);
+      else groups.push({ number: key, order: line.orders, lines: [line] });
+      return groups;
+    }, [] as { number: string; order: PendingLine['orders']; lines: PendingLine[] }[])
+    .sort((a, b) => a.number.localeCompare(b.number));
+
+  const toPlace = pending.reduce((n, l) => n + outstandingOf(l), 0);
+
   function build() {
     setMessage(null);
     startTransition(async () => {
@@ -53,12 +72,20 @@ export default function SupplierScreen({
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
       <Card>
-        <div className="text-[12px] font-semibold mb-2.5">Build a supplier order</div>
+        <div className="flex flex-wrap items-baseline gap-2 mb-2.5">
+          <span className="text-[12px] font-semibold">Orders waiting on the supplier</span>
+          <span className="text-[11px] text-mute num">
+            {byOrder.length} order{byOrder.length === 1 ? '' : 's'}
+            {toPlace > 0
+              ? ` · ${toPlace} unit${toPlace === 1 ? '' : 's'} still to place`
+              : ' · all placed'}
+          </span>
+        </div>
 
         {pending.length === 0 && extras.length === 0 ? (
           <Empty>
-            Nothing outstanding. Back-ordered lines appear here automatically as soon as
-            an order shorts — a supplier order is also raised at placement.
+            Nothing owed. Every line on every order is either here or has been
+            received — orders appear here as they are placed.
           </Empty>
         ) : (
           <div className="overflow-x-auto">
@@ -66,33 +93,63 @@ export default function SupplierScreen({
               <thead>
                 <tr>
                   <th>SKU</th><th>Description</th>
-                  <th className="text-right">Outstanding</th>
+                  <th className="text-right">Owed</th>
+                  <th className="text-right">With supplier</th>
+                  <th className="text-right">To place</th>
                   <th className="w-[150px]">Order now</th>
-                  <th>Reference</th>
                 </tr>
               </thead>
               <tbody>
-                {pending.map((l) => {
-                  const max = outstandingOf(l);
-                  return (
-                    <tr key={l.id}>
-                      <td className="num font-semibold">{l.sku}</td>
-                      <td>{l.name}</td>
-                      <td className="num text-right">{max}</td>
-                      <td>
-                        {/* Capped at what is still outstanding, so a purchase
-                            order cannot ask for more than was short. */}
-                        <QtyStepper
-                          value={selected[l.id] ?? 0}
-                          min={0} max={max}
-                          label={`${l.sku} on this order`}
-                          onChange={(qty) => setSelected((s) => ({ ...s, [l.id]: qty }))}
-                        />
+                {byOrder.map((g) => (
+                  <Fragment key={g.number}>
+                    <tr className="bg-parch">
+                      <td colSpan={6} className="text-[12px]">
+                        <span className="num font-bold">{g.number}</span>
+                        <span className="text-mute">
+                          {' · '}{fmtDate(g.order.date)}
+                          {' · '}{g.order.clients?.name}
+                        </span>
+                        {g.lines.every((l) => outstandingOf(l) === 0) && (
+                          <span className="ml-2"><Tag tone="line">All with supplier</Tag></span>
+                        )}
                       </td>
-                      <td className="num text-[12px] text-mute">{l.orders.number}</td>
                     </tr>
-                  );
-                })}
+                    {g.lines.map((l) => {
+                      const max = outstandingOf(l);
+                      return (
+                        <tr key={l.id}>
+                          <td className="num font-semibold">{l.sku}</td>
+                          <td>{l.name}</td>
+                          <td className="num text-right">{l.bo_qty}</td>
+                          <td className="num text-right text-mute">{l.po_qty || '—'}</td>
+                          <td className={`num text-right ${max ? 'font-semibold' : 'text-mute'}`}>
+                            {max || '—'}
+                          </td>
+                          <td>
+                            {/* Capped at what is still outstanding, so a purchase
+                                order cannot ask for more than was short — and a
+                                line already placed in full has nothing to ask for. */}
+                            {max > 0 ? (
+                              <QtyStepper
+                                value={selected[l.id] ?? 0}
+                                min={0} max={max}
+                                label={`${l.sku} on this order`}
+                                onChange={(qty) => setSelected((s) => ({ ...s, [l.id]: qty }))}
+                              />
+                            ) : (
+                              <span className="text-[11px] text-mute">On order</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+                {extras.length > 0 && (
+                  <tr className="bg-parch">
+                    <td colSpan={6} className="text-[12px] font-bold">Stock top-up</td>
+                  </tr>
+                )}
                 {extras.map((e, i) => (
                   <tr key={`x${i}`}>
                     <td>
@@ -107,7 +164,7 @@ export default function SupplierScreen({
                         onChange={(ev) => setExtras((xs) => xs.map((x, j) => j === i ? { ...x, name: ev.target.value } : x))}
                       />
                     </td>
-                    <td />
+                    <td /><td /><td />
                     <td>
                       <QtyStepper
                         value={e.qty}
@@ -117,7 +174,6 @@ export default function SupplierScreen({
                           xs.map((x, j) => (j === i ? { ...x, qty } : x)))}
                       />
                     </td>
-                    <td className="text-[12px] text-mute">Stock top-up</td>
                   </tr>
                 ))}
               </tbody>
