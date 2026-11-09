@@ -9,7 +9,7 @@ import AgencyNotice from '@/components/AgencyNotice';
 import QtyStepper from '@/components/QtyStepper';
 import { splitInvoice, editOrder, cancelOrder, deleteOrder,
          proformaForBackorder, creditInvoice, markPaid,
-         setLineAllocation } from '../actions';
+         setLineAllocation, sendOrdersToJames } from '../actions';
 import type { InvoiceType, OrderEvent } from '@/lib/types';
 
 interface Line {
@@ -49,13 +49,19 @@ export interface OrderData {
 }
 
 export default function OrderRow({
-  order, products, costOf, company, canAmend, canDelete,
+  order, products, costOf, company, canAmend, canDelete, picked, onPick,
 }: {
   order: OrderData; products: ProductLite[];
   /** Order line id → what it cost us, where we know. */
   costOf: Record<string, number>;
   company: string;
   canAmend: boolean; canDelete: boolean;
+  /**
+   * Set when the list is offering to send several orders at once. Left out
+   * everywhere else, and then there is no box to tick.
+   */
+  picked?: boolean;
+  onPick?: (picked: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [splitting, setSplitting] = useState(false);
@@ -125,6 +131,15 @@ export default function OrderRow({
   return (
     <Card className={cancelled ? voidedRow : ''}>
       <div className="flex flex-wrap items-center gap-3">
+        {onPick && (
+          <input
+            type="checkbox"
+            checked={Boolean(picked)}
+            onChange={(e) => onPick(e.target.checked)}
+            aria-label={`Pick ${order.number} to send to James`}
+            className="shrink-0"
+          />
+        )}
         <button
           onClick={() => setOpen(!open)}
           className={`num text-[14px] font-bold hover:text-flame-text
@@ -337,6 +352,15 @@ export default function OrderRow({
               {canAmend && payable.length > 0 && mode === 'none' && (
                 <Button small kind="accent" onClick={() => { setMode('paid'); setError(''); }}>
                   Mark paid
+                </Button>
+              )}
+              {!cancelled && backordered > 0 && (
+                /* The sheet goes to James, never to Madison, and he forwards
+                   it. Anything owed and not yet on a purchase order goes on
+                   one as it is sent. */
+                <Button small kind="ghost" disabled={pending}
+                        onClick={() => run(() => sendOrdersToJames([order.id]))}>
+                  Send to James
                 </Button>
               )}
               {canAmend && !cancelled && backordered > 0 && (

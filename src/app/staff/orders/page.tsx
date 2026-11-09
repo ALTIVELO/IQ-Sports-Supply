@@ -4,7 +4,7 @@ import { fetchAll } from '@/lib/supabase/chunk';
 import Link from 'next/link';
 import { PageHeading, Card, Empty, Money, Tag } from '@/components/ui';
 import { summarise, type HistoryOrder } from '@/lib/orders/history';
-import OrderRow from './OrderRow';
+import OrderList from './OrderList';
 
 export const dynamic = 'force-dynamic';
 
@@ -167,19 +167,14 @@ export default async function OrdersPage({
           </Empty>
         </Card>
       ) : (
-        <div className="space-y-2.5">
-          {rows.map((o) => (
-            <OrderRow
-              key={o.id}
-              order={o as never}
-              products={products as never}
-              costOf={costOf}
-              company={settings?.company ?? 'IQ Sports Supply'}
-              canAmend={user.role === 'admin' || user.role === 'accounts'}
-              canDelete={user.role === 'admin'}
-            />
-          ))}
-        </div>
+        <OrderList
+          rows={rows as never}
+          products={products as never}
+          costOf={costOf}
+          company={settings?.company ?? 'IQ Sports Supply'}
+          canAmend={user.role === 'admin' || user.role === 'accounts'}
+          canDelete={user.role === 'admin'}
+        />
       )}
     </>
   );

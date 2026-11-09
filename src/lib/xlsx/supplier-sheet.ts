@@ -63,7 +63,14 @@ export interface SupplierSheetData {
  * never shown a secret proves nothing.
  */
 export interface SupplierSheetSource {
-  po: { number: string; date: string };
+  /**
+   * The purchase orders the sheet covers. Usually one. Several when James
+   * sends Madison a morning's worth of orders as one order: the supplier
+   * would rather pick one list than five, and every line carries the SO it
+   * is for either way.
+   */
+  pos: { number: string }[];
+  date: string;
   lines: {
     sku: string; name: string; qty: number; so_reference?: string | null;
     [ignored: string]: unknown;
@@ -73,14 +80,31 @@ export interface SupplierSheetSource {
   [ignored: string]: unknown;
 }
 
-/** IQ-PO-001 from PO-001: ours is the same number, said as ours. */
-export function sheetReference(poNumber: string): string {
-  return /^IQ-/i.test(poNumber) ? poNumber : `IQ-${poNumber}`;
+const ours = (poNumber: string) => (/^IQ-/i.test(poNumber) ? poNumber : `IQ-${poNumber}`);
+
+/**
+ * IQ-PO-001 from PO-001: ours is the same number, said as ours. Several of
+ * them read as a list, which is what the supplier is being asked to quote
+ * back on the delivery note.
+ */
+export function sheetReference(poNumbers: string[]): string {
+  if (poNumbers.length === 0) throw new Error('A supplier sheet needs a purchase order behind it');
+  return poNumbers.map(ours).join(', ');
 }
 
-/** IQ-PO-001.xlsx. No client reference in the filename — it is a filename. */
-export function sheetFilename(poNumber: string): string {
-  return `${sheetReference(poNumber).replace(/[^A-Za-z0-9._-]+/g, '-')}.xlsx`;
+/**
+ * IQ-PO-001.xlsx, or IQ-PO-001-002-003.xlsx for several — the later numbers
+ * without the prefix they all share, because a filename is read at a glance.
+ * Past a handful it is counted instead of listed. No client reference in it:
+ * it is a filename, and filenames get forwarded, quoted and filed.
+ */
+export function sheetFilename(poNumbers: string[]): string {
+  const [first, ...rest] = poNumbers;
+  const head = sheetReference([first]);
+  const base = rest.length === 0 ? head
+    : rest.length <= 3 ? [head, ...rest.map((n) => n.replace(/^(IQ-)?PO-/i, ''))].join('-')
+    : `${head}-and-${rest.length}-more`;
+  return `${base.replace(/[^A-Za-z0-9._-]+/g, '-')}.xlsx`;
 }
 
 /**
@@ -100,8 +124,8 @@ export function supplierSheetData(src: SupplierSheetSource): SupplierSheetData {
   refs.sort((a, b) => a.localeCompare(b));
 
   return {
-    reference: sheetReference(src.po.number),
-    date: src.po.date,
+    reference: sheetReference(src.pos.map((p) => p.number)),
+    date: src.date,
     clientRefs: refs,
     site: src.location?.name ?? '',
     siteAddress: src.location?.address ?? null,

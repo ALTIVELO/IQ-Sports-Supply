@@ -75,7 +75,8 @@ const dirtyLines = [
 ];
 
 const source = {
-  po: { number: 'PO-042', date: '2026-11-05' },
+  pos: [{ number: 'PO-042' }],
+  date: '2026-11-05',
   lines: dirtyLines,
   location: { name: 'Slough', address: '2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ' },
   // Everything the app knows about the order, handed over whole.
@@ -89,7 +90,7 @@ const file = await buildSupplierSheet(data, template);
 const entries = unzipText(file);
 const whole = Object.values(entries).join('\n');
 
-const filename = sheetFilename(source.po.number);
+const filename = sheetFilename(source.pos.map((p) => p.number));
 const email = supplierSheet({
   company: 'IQ Sports Supply', reference: data.reference, filename, date: data.date,
   site: data.site, clientRefs: data.clientRefs,
@@ -124,7 +125,7 @@ for (const n of [129.99, 87.5, 64.25, 1559.88, 41.1]) {
 ok('the PO is referenced as ours', data.reference === 'IQ-PO-042', data.reference);
 ok('the filename is the reference', filename === 'IQ-PO-042.xlsx', filename);
 ok('the reference is left alone if it is already ours',
-  sheetReference('IQ-PO-042') === 'IQ-PO-042');
+  sheetReference(['IQ-PO-042']) === 'IQ-PO-042');
 for (const l of dirtyLines) {
   ok(`${l.sku} is on the sheet`, whole.includes(l.sku));
   ok(`${l.name} is on the sheet`, whole.includes(l.name));
@@ -252,5 +253,53 @@ ok('and the printed page was told', bigSheet.pageSetup.printArea === `A1:F${tota
   bigSheet.pageSetup.printArea);
 ok('a sixty-line sheet prices nothing either',
   !Object.values(unzipText(bigFile)).join('').includes('99.99'));
+
+// ── a morning's orders as one order ────────────────────────────────────────
+//
+// Madison would rather pick one list than five, and the form is built for it:
+// the header names every purchase order on the sheet and every line names the
+// order it is for. What must not change is the part the whole feature exists
+// for — more orders on the sheet is more customers whose names must not be.
+ok('several purchase orders read as a list',
+  sheetReference(['PO-003', 'PO-004', 'PO-005']) === 'IQ-PO-003, IQ-PO-004, IQ-PO-005',
+  sheetReference(['PO-003', 'PO-004', 'PO-005']));
+ok('and the filename says them once',
+  sheetFilename(['PO-003', 'PO-004', 'PO-005']) === 'IQ-PO-003-004-005.xlsx',
+  sheetFilename(['PO-003', 'PO-004', 'PO-005']));
+ok('past a handful it counts them instead',
+  sheetFilename(['PO-003', 'PO-004', 'PO-005', 'PO-006', 'PO-007'])
+    === 'IQ-PO-003-and-4-more.xlsx',
+  sheetFilename(['PO-003', 'PO-004', 'PO-005', 'PO-006', 'PO-007']));
+ok('and a sheet with no purchase order behind it is refused', (() => {
+  try { sheetReference([]); return false; } catch { return true; }
+})());
+
+const batch = supplierSheetData({
+  pos: [{ number: 'PO-003' }, { number: 'PO-004' }],
+  date: '2026-11-09',
+  lines: [
+    ...dirtyLines,
+    { sku: 'BBR9100B', name: 'Shimano BB-R9100 Bottom Bracket', qty: 1,
+      so_reference: 'SO-020', unit_price: 44.0, client_name: CLIENT.name },
+  ],
+  location: { name: 'Slough', address: '2 Carnegie Court, The Broadway, Farnham Common, Slough SL2 3GQ' },
+  client: CLIENT,
+});
+const batchFile = await buildSupplierSheet(batch, template);
+const batchWhole = Object.values(unzipText(batchFile)).join('\n');
+
+ok('the batch names both purchase orders', batch.reference === 'IQ-PO-003, IQ-PO-004',
+  batch.reference);
+ok('and all three customer orders', batch.clientRefs.join(',') === 'SO-018,SO-019,SO-020',
+  batch.clientRefs.join(','));
+ok('every line is on it', ['ISMRT800SS', 'EWSD300L120', 'BBR9100B']
+  .every((sku) => batchWhole.includes(sku)));
+for (const [what, value] of Object.entries(CLIENT)) {
+  ok(`a batch does not carry the customer's ${what} either`,
+    !batchWhole.includes(value), value);
+}
+for (const price of [...PRICES, '44.00', '44']) {
+  ok(`nor a price (${price})`, !new RegExp(`>${price}<`).test(batchWhole), price);
+}
 
 if (fail) process.exitCode = 1;

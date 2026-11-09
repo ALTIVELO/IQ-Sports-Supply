@@ -142,28 +142,62 @@ export async function notifySupplierOrder(poId: string) {
  * retried action or a second route to the same PO does not send it twice —
  * `force` is for the resend button, where sending it again is the request.
  */
-export async function notifySupplierSheet(poId: string, opts: { force?: boolean } = {}) {
+export async function notifySupplierSheet(
+  po: string | string[], opts: { force?: boolean } = {},
+) {
   const db = supabaseAdmin();
+  const poIds = (Array.isArray(po) ? po : [po]).filter(Boolean);
+  if (poIds.length === 0) return;
 
-  const { data: po } = await db
+  const { data: pos } = await db
     .from('purchase_orders')
-    .select('number, date, receive_location_id, po_lines(sku, name, qty, so_reference)')
-    .eq('id', poId)
-    .single();
-  if (!po) return;
+    .select('id, number, date, receive_location_id, po_lines(sku, name, qty, received_qty, so_reference)')
+    .in('id', poIds)
+    .order('number');
+  if (!pos?.length) return;
+
+  /*
+   * Logged against the first of them, because an email belongs to one row.
+   * It is also the one the guard reads, which is why a deliberate send — the
+   * button, rather than an order being placed — passes `force`.
+   */
+  const logAgainst = pos[0].id;
 
   if (!opts.force) {
     const { data: already } = await db
       .from('email_log').select('id')
-      .eq('po_id', poId).eq('kind', 'supplier_sheet')
+      .eq('po_id', logAgainst).eq('kind', 'supplier_sheet')
       .in('status', ['sent', 'suppressed']).limit(1);
     if (already?.length) return;
   }
 
+  /*
+   * One site, because one sheet is one delivery. Where several purchase
+   * orders receive into different places the first one's address goes on it
+   * and the caller is the one that refused the mix — but it cannot refuse a
+   * purchase order raised before the rule existed, so this does not assume.
+   */
   const [{ data: location }, { data: settings }] = await Promise.all([
-    db.from('locations').select('name, address').eq('id', po.receive_location_id).single(),
+    db.from('locations').select('name, address')
+      .eq('id', pos[0].receive_location_id).single(),
     db.from('settings').select('company').eq('id', 1).single(),
   ]);
+
+  type Row = {
+    sku: string; name: string; qty: number; received_qty: number;
+    so_reference: string | null;
+  };
+
+  /*
+   * What is still to come, not what was ordered. A purchase order half
+   * received would otherwise ask the supplier a second time for the half
+   * that is already on the shelf.
+   */
+  const lines = pos
+    .flatMap((p) => (p.po_lines as Row[]))
+    .map((l) => ({ ...l, qty: l.qty - (l.received_qty ?? 0) }))
+    .filter((l) => l.qty > 0);
+  if (lines.length === 0) return;
 
   /*
    * Everything the supplier may see, and nothing else, is decided in one
@@ -172,13 +206,16 @@ export async function notifySupplierSheet(poId: string, opts: { force?: boolean 
    * — but the guarantee does not rest on that staying true.
    */
   const data = supplierSheetData({
-    po: { number: po.number, date: po.date },
-    lines: po.po_lines as { sku: string; name: string; qty: number; so_reference: string | null }[],
+    pos: pos.map((p) => ({ number: p.number })),
+    // The newest of them: the sheet is written today, whenever the earliest
+    // of the orders on it was raised.
+    date: pos.map((p) => p.date).sort().slice(-1)[0],
+    lines,
     location: location ?? null,
   });
 
   const file = await buildSupplierSheet(data);
-  const filename = sheetFilename(po.number);
+  const filename = sheetFilename(pos.map((p) => p.number));
 
   const msg = supplierSheet({
     company: settings!.company,
@@ -198,17 +235,10 @@ export async function notifySupplierSheet(poId: string, opts: { force?: boolean 
     subject: msg.subject,
     body: msg.body,
     attachments: [{ filename, content: Buffer.from(file).toString('base64') }],
-    poId,
+    poId: logAgainst,
   });
 }
 
-/**
- * The sheet for whatever purchase order an order raised, if it raised one.
- *
- * place_order() raises the purchase order inside the same transaction as the
- * order and says so on the order's timeline, which is where this reads it
- * from. An order fully in stock raises none and sends nothing.
- */
 export async function notifySupplierSheetForOrder(orderId: string) {
   const { data } = await supabaseAdmin()
     .from('order_events').select('meta')

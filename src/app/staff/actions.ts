@@ -431,6 +431,111 @@ export async function setLineAllocation(
   };
 }
 
+/**
+ * Send these orders to James as one Madison form, from the Orders screen.
+ *
+ * The screen the orders are on is where somebody decides to order them, so
+ * this is the button that does it: tick a morning's worth, send one sheet.
+ * Madison would rather pick one list than five, and every line on it carries
+ * the SO it belongs to, so the delivery still books back to the right order.
+ *
+ * Anything owed that is not yet on a purchase order goes on one first —
+ * telling the supplier to send goods and not recording that we ordered them
+ * is how a line gets ordered twice. Lines already on a purchase order keep
+ * it; nothing is merged or renumbered.
+ *
+ * As ever the sheet goes to James and to nobody else, and he forwards it.
+ */
+export async function sendOrdersToJames(orderIds: string[]): Promise<ActionResult> {
+  await requireStaff();
+  const sb = await supabaseServer();
+
+  const ids = [...new Set(orderIds.filter(Boolean))];
+  if (ids.length === 0) return { ok: false, error: 'No orders were picked' };
+
+  const { data: orders, error: oErr } = await sb.from('orders')
+    .select('id, number, status, fulfilment_location_id').in('id', ids).order('number');
+  if (oErr) return { ok: false, error: oErr.message };
+  if (!orders?.length) return { ok: false, error: 'Those orders could not be read' };
+
+  const dead = orders.filter((o) => o.status === 'cancelled');
+  if (dead.length) {
+    return {
+      ok: false,
+      error: `${dead.map((o) => o.number).join(', ')} ${dead.length === 1 ? 'is' : 'are'} `
+           + 'cancelled, so there is nothing to order',
+    };
+  }
+
+  // One sheet is one delivery to one place. Two sites on it would put the
+  // wrong address at the top of somebody's order.
+  const sites = [...new Set(orders.map((o) => o.fulfilment_location_id))];
+  if (sites.length > 1) {
+    return {
+      ok: false,
+      error: 'Those orders are fulfilled from different sites, so they cannot go on one '
+           + 'sheet — the delivery address is part of it. Send them a site at a time.',
+    };
+  }
+
+  const { data: owed, error: lErr } = await sb.from('order_lines')
+    .select('id, bo_qty, po_qty').in('order_id', ids).gt('bo_qty', 0);
+  if (lErr) return { ok: false, error: lErr.message };
+  if (!owed?.length) {
+    return {
+      ok: false,
+      error: orders.length === 1
+        ? `Nothing on ${orders[0].number} is waiting on the supplier.`
+        : 'Nothing on those orders is waiting on the supplier.',
+    };
+  }
+
+  // Whatever is owed and not yet placed is placed now, as one purchase order.
+  const toPlace = owed
+    .filter((l) => l.bo_qty > l.po_qty)
+    .map((l) => ({ order_line_id: l.id, qty: l.bo_qty - l.po_qty }));
+
+  if (toPlace.length) {
+    const { error } = await sb.rpc('create_supplier_order', {
+      p_location_id: sites[0],
+      p_backorder_lines: toPlace,
+      p_extra_lines: [],
+    });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  /*
+   * Every purchase order still carrying something for these orders, the one
+   * just raised included. A purchase order already received in full is left
+   * off: its goods are here, and asking for them again is how a delivery
+   * arrives twice.
+   */
+  const { data: onPos } = await sb.from('po_lines').select('po_id').in('order_id', ids);
+  const poIds = [...new Set((onPos ?? []).map((l) => l.po_id as string))];
+
+  const { data: live } = await sb.from('purchase_orders')
+    .select('id').in('id', poIds).eq('received', false).order('number');
+  const sending = (live ?? []).map((p) => p.id as string);
+
+  if (sending.length === 0) {
+    return { ok: false, error: 'Everything on those orders has already been received.' };
+  }
+
+  const warning = await notify(
+    () => notifySupplierSheet(sending, { force: true }), 'The Madison order sheet');
+
+  revalidatePath('/staff/orders');
+  revalidatePath('/staff/supplier');
+  return warning
+    ? { ok: false, error: warning }
+    : {
+        ok: true,
+        message: orders.length === 1
+          ? `${orders[0].number} sent to James to forward`
+          : `${orders.length} orders sent to James as one sheet`,
+      };
+}
+
 // ── supplier orders ─────────────────────────────────────────────────────────
 
 export async function createSupplierOrder(input: {
