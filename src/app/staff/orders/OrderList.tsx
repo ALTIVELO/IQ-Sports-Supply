@@ -25,11 +25,23 @@ export default function OrderList({
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
 
-  // Only an order with something still owed can be sent; the rest have
-  // nothing the supplier is waiting to hear about.
-  const owing = (o: OrderData) =>
-    o.status !== 'cancelled' && o.order_lines.some((l) => l.bo_qty > 0);
-  const sendable = rows.filter(owing);
+  /*
+   * What can go to the supplier.
+   *
+   * An order with something owed, obviously. Also one marked as fully here:
+   * the tick is sometimes wrong, and the goods are sometimes damaged or
+   * missing when somebody goes to pack them, and the answer to both is to
+   * order them. Sending such an order puts it back on back order, which the
+   * bar says before the button is pressed.
+   *
+   * Not a cancelled one, and not one already packed or sent: what went out
+   * is a record of what went out.
+   */
+  const gone = (o: OrderData) => o.invoices
+    .some((i) => !i.superseded && (i.packed || i.shipped));
+  const sendable = rows.filter((o) =>
+    o.status !== 'cancelled' && !gone(o) && o.order_lines.some((l) => l.product_id));
+  const owing = (o: OrderData) => o.order_lines.some((l) => l.bo_qty > 0);
 
   // Picked orders that are still on screen: a filter can take one away
   // underneath the selection, and sending one that is no longer listed is
@@ -45,8 +57,10 @@ export default function OrderList({
     });
   }
 
-  const sites = new Set(sendable.filter((o) => chosen.includes(o.id))
-    .map((o) => o.locations?.name ?? ''));
+  const picks = sendable.filter((o) => chosen.includes(o.id));
+  const sites = new Set(picks.map((o) => o.locations?.name ?? ''));
+  // The ones the send would take back out of the packing queue.
+  const here = picks.filter((o) => !owing(o));
 
   return (
     <>
@@ -67,8 +81,8 @@ export default function OrderList({
           </label>
           <span className="text-[12px] text-mute num">
             {chosen.length
-              ? `${chosen.length} of ${sendable.length} waiting on the supplier`
-              : `${sendable.length} waiting on the supplier`}
+              ? `${chosen.length} of ${sendable.length} picked`
+              : `${sendable.filter(owing).length} of ${sendable.length} waiting on the supplier`}
           </span>
           {chosen.length > 0 && (
             <Button small kind="accent" onClick={send} disabled={pending || sites.size > 1}>
@@ -81,6 +95,14 @@ export default function OrderList({
             <span className="text-[12px] text-danger">
               Those are fulfilled from different sites — one sheet is one delivery
               address, so send them a site at a time.
+            </span>
+          )}
+          {sites.size <= 1 && here.length > 0 && (
+            <span className="text-[12px] text-mute">
+              {here.map((o) => o.number).join(', ')}{' '}
+              {here.length === 1 ? 'is' : 'are'} marked as here — sending{' '}
+              {here.length === 1 ? 'it' : 'them'} puts {here.length === 1 ? 'it' : 'them'}{' '}
+              back on back order.
             </span>
           )}
         </div>
@@ -100,7 +122,7 @@ export default function OrderList({
             canAmend={canAmend}
             canDelete={canDelete}
             picked={picked.includes(o.id)}
-            onPick={owing(o)
+            onPick={sendable.includes(o)
               ? (on) => setPicked((p) =>
                   (on ? [...new Set([...p, o.id])] : p.filter((id) => id !== o.id)))
               : undefined}

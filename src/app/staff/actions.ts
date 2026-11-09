@@ -478,10 +478,63 @@ export async function sendOrdersToJames(orderIds: string[]): Promise<ActionResul
     };
   }
 
-  const { data: owed, error: lErr } = await sb.from('order_lines')
-    .select('id, bo_qty, po_qty').in('order_id', ids).gt('bo_qty', 0);
+  // Nothing on a packed or shipped order can be put back on order, so say so
+  // here rather than letting it fail halfway through.
+  const { data: out } = await sb.from('invoices')
+    .select('order_id, packed, shipped').in('order_id', ids).eq('superseded', false);
+  const gone = orders.filter((o) =>
+    (out ?? []).some((i) => i.order_id === o.id && (i.packed || i.shipped)));
+  if (gone.length) {
+    return {
+      ok: false,
+      error: `${gone.map((o) => o.number).join(', ')} `
+           + `${gone.length === 1 ? 'has' : 'have'} already been packed, so there is `
+           + 'nothing left to order',
+    };
+  }
+
+  const { data: all, error: lErr } = await sb.from('order_lines')
+    .select('id, order_id, qty, alloc_qty, bo_qty, po_qty, product_id').in('order_id', ids);
   if (lErr) return { ok: false, error: lErr.message };
-  if (!owed?.length) {
+
+  // A typed line has no supplier behind it, so it is never on one of these.
+  const lines = (all ?? []).filter((l) => l.product_id);
+  if (!lines.length) {
+    return {
+      ok: false,
+      error: 'There is nothing on those orders that comes from the supplier.',
+    };
+  }
+
+  /*
+   * The override: an order that is marked as here, sent anyway.
+   *
+   * Usually because it is not here — the tick was wrong, or the goods turned
+   * out to be damaged or missing when somebody went to pack it. Either way
+   * ordering it from Madison and holding it as allocated are two things that
+   * cannot both be true, and the second one would keep it in the packing
+   * queue for goods that are on a van somewhere. So sending it puts it back
+   * on back order, which is also what makes a purchase order for it possible
+   * at all: a line owes nothing, so there is nothing to place.
+   *
+   * By the order, not by the line, because that is the state somebody is
+   * looking at when they tick it. An order already part owed is sent as it
+   * stands.
+   */
+  const owedOn = new Map<string, number>();
+  for (const l of lines) owedOn.set(l.order_id, (owedOn.get(l.order_id) ?? 0) + l.bo_qty);
+  const reopen = lines.filter((l) => (owedOn.get(l.order_id) ?? 0) === 0 && l.alloc_qty > 0);
+
+  for (const l of reopen) {
+    const { error } = await sb.rpc('set_line_allocation', { p_line_id: l.id, p_alloc: 0 });
+    if (error) return { ok: false, error: error.message };
+    l.bo_qty = l.qty;
+    l.alloc_qty = 0;
+  }
+
+  const reopened = [...new Set(reopen.map((l) => l.order_id))];
+
+  if (!lines.some((l) => l.bo_qty > 0)) {
     return {
       ok: false,
       error: orders.length === 1
@@ -491,7 +544,7 @@ export async function sendOrdersToJames(orderIds: string[]): Promise<ActionResul
   }
 
   // Whatever is owed and not yet placed is placed now, as one purchase order.
-  const toPlace = owed
+  const toPlace = lines
     .filter((l) => l.bo_qty > l.po_qty)
     .map((l) => ({ order_line_id: l.id, qty: l.bo_qty - l.po_qty }));
 
@@ -525,14 +578,24 @@ export async function sendOrdersToJames(orderIds: string[]): Promise<ActionResul
     () => notifySupplierSheet(sending, { force: true }), 'The Madison order sheet');
 
   revalidatePath('/staff/orders');
+  revalidatePath('/staff/packing');
   revalidatePath('/staff/supplier');
+  revalidatePath('/portal/orders');
+
+  // Said plainly, because it is a change to the order and not just an email.
+  const note = reopened.length === 0 ? ''
+    : orders.length === 1
+      ? ' — it was marked as here, and is back on back order'
+      : ` — ${reopened.length} of them ${reopened.length === 1 ? 'was' : 'were'} marked as `
+        + `here, and ${reopened.length === 1 ? 'is' : 'are'} back on back order`;
+
   return warning
     ? { ok: false, error: warning }
     : {
         ok: true,
-        message: orders.length === 1
+        message: (orders.length === 1
           ? `${orders[0].number} sent to James to forward`
-          : `${orders.length} orders sent to James as one sheet`,
+          : `${orders.length} orders sent to James as one sheet`) + note,
       };
 }
 

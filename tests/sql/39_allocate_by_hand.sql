@@ -153,6 +153,77 @@ begin
 end $$;
 
 \echo ''
+\echo '───────── G2. Ordering an order that is marked as here ─────────'
+-- The override behind the Send to James button: the tick was wrong, or the
+-- goods turned out to be damaged when somebody went to pack them. Holding
+-- them and waiting for them cannot both be true, so the line goes back on
+-- back order and that is what makes a purchase order for it possible.
+\set QUIET on
+insert into ids (k, v) select 'here', place_order(
+  (select id from clients where name='MDI Ltd'),
+  (select id from locations where name='Slough'),
+  jsonb_build_array(jsonb_build_object(
+    'product_id',(select id from products where sku='BBR9100B'),'qty',6)));
+\set QUIET off
+do $$
+declare o uuid := (select v from ids where k='here'); l order_lines%rowtype; v_po uuid;
+begin
+  perform allocate_order_id(o);
+  perform assert_eq((select ready_to_pack from invoices where order_id=o), true,
+                    'ticked in, it is ready to pack');
+
+  select * into l from order_lines where order_id = o;
+  -- What the send does, in the order it does it.
+  perform set_line_allocation(l.id, 0);
+  v_po := create_supplier_order(
+    (select fulfilment_location_id from orders where id = o),
+    jsonb_build_array(jsonb_build_object('order_line_id', l.id, 'qty', 6)),
+    '[]'::jsonb);
+
+  perform assert_eq((select ready_to_pack from invoices where order_id=o), false,
+                    'sending it takes it out of the packing queue');
+  perform assert_eq((select bo_qty from order_lines where id = l.id), 6,
+                    'the whole line is owed again');
+  perform assert_eq((select po_qty from order_lines where id = l.id), 6,
+                    'and all of it is with the supplier');
+  perform assert_eq((select count(*)::int from po_lines where po_id = v_po), 1,
+                    'one line on the purchase order');
+  perform assert_eq((select so_reference from po_lines where po_id = v_po),
+                    (select number from orders where id = o),
+                    'carrying the order it is for, so it books back to it');
+  -- And it cannot be ordered a second time by pressing the button twice: the
+  -- line owes six and six are already with the supplier.
+  perform assert_fails(format(
+    'select create_supplier_order(%L, %L::jsonb, ''[]''::jsonb)',
+    (select fulfilment_location_id from orders where id = o),
+    jsonb_build_array(jsonb_build_object('order_line_id', l.id, 'qty', 6))::text),
+    'and pressing it again orders nothing');
+end $$;
+
+\echo ''
+\echo '───────── G3. A supplier order for nobody in particular ─────────'
+-- Topping up the shelf, with no customer order behind it. Worth its own
+-- assertion because it is the path with no order lines at all, and the bug
+-- that stopped the one above stopped this too: the event insert is planned
+-- whether or not there is an order to write an event for.
+do $$
+declare v_po uuid;
+begin
+  v_po := create_supplier_order(
+    (select id from locations where name='Slough'),
+    '[]'::jsonb,
+    jsonb_build_array(jsonb_build_object('sku','BPB05SR25','name','Brake pads','qty',20)));
+  perform assert_eq((select qty from po_lines where po_id = v_po), 20,
+                    'a stock top-up raises a purchase order of its own');
+  perform assert_eq((select so_reference is null from po_lines where po_id = v_po), true,
+                    'with no client reference on it, because there is no client');
+  perform assert_fails(format(
+    'select create_supplier_order(%L, ''[]''::jsonb, ''[]''::jsonb)',
+    (select id from locations where name='Slough')),
+    'and one with nothing on it is refused');
+end $$;
+
+\echo ''
 \echo '───────── H. What has gone out is not moved ─────────'
 do $$
 declare o uuid := (select v from ids where k='order'); v_inv uuid; l uuid;

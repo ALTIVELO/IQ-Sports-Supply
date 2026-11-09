@@ -354,13 +354,21 @@ export default function OrderRow({
                   Mark paid
                 </Button>
               )}
-              {!cancelled && backordered > 0 && (
+              {!cancelled && !gone && order.order_lines.some((l) => l.product_id) && (
                 /* The sheet goes to James, never to Madison, and he forwards
                    it. Anything owed and not yet on a purchase order goes on
-                   one as it is sent. */
-                <Button small kind="ghost" disabled={pending}
-                        onClick={() => run(() => sendOrdersToJames([order.id]))}>
-                  Send to James
+                   one as it is sent — and an order marked as fully here can
+                   be sent too, which puts it back on back order, because
+                   holding the goods and waiting for them cannot both be
+                   true. */
+                <Button
+                  small kind="ghost" disabled={pending}
+                  title={backordered > 0
+                    ? 'Send the Madison form for this order to James to forward'
+                    : 'This order is marked as here. Sending it puts it back on back order.'}
+                  onClick={() => run(() => sendOrdersToJames([order.id]))}
+                >
+                  {backordered > 0 ? 'Send to James' : 'Send to James anyway'}
                 </Button>
               )}
               {canAmend && !cancelled && backordered > 0 && (
