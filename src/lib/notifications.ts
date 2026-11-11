@@ -2,15 +2,15 @@ import 'server-only';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { sendEmail } from '@/lib/email/send';
 import {
-  orderConfirmation, supplierOrder, supplierSheet, shippedNotice, deliveredNotice,
-  welcomeEmail, rejectionEmail, dropshipNotice, returnRaised, returnDecision,
-  returnSettled,
+  orderConfirmation, supplierOrder, supplierSheet, packingList, shippedNotice,
+  deliveredNotice, welcomeEmail, rejectionEmail, dropshipNotice, returnRaised,
+  returnDecision, returnSettled,
 } from '@/lib/email/templates';
 import {
   SHEET_RECIPIENT, buildSupplierSheet, sheetFilename, supplierSheetData,
 } from '@/lib/xlsx/supplier-sheet';
 import { RETURN_REASONS } from '@/lib/types';
-import { invoiceDocData, renderInvoicePdf } from '@/lib/pdf/render';
+import { invoiceDocData, renderInvoicePdf, renderPackingListPdf } from '@/lib/pdf/render';
 import { appUrl } from '@/lib/app-url';
 
 /**
@@ -247,6 +247,73 @@ export async function notifySupplierSheetForOrder(orderId: string) {
 
   const poId = (data?.[0]?.meta as { po_id?: string } | null)?.po_id;
   if (poId) await notifySupplierSheet(poId);
+}
+
+/**
+ * The packing list, to whoever is packing it.
+ *
+ * Deliberately not gated on the invoice being paid or the stock being in.
+ * Our own stock sits at sites we do not staff, and a list that cannot be sent
+ * until the morning it ships is a list that arrives after the van. What the
+ * gate protects — goods leaving before they are paid for or before they
+ * exist — is protected where it actually matters, at mark_invoice_packed();
+ * sending a piece of paper early cannot dispatch anything. The email says
+ * what is outstanding so nobody reads the list as permission to send it.
+ */
+export async function notifyPackingList(invoiceId: string, to: string[]) {
+  const db = supabaseAdmin();
+
+  const { data: inv } = await db
+    .from('invoices')
+    .select(`number, paid, ready_to_pack, locations(name),
+             clients(name, credit_account), orders(number, ship_to, dropship),
+             invoice_lines(qty)`)
+    .eq('id', invoiceId)
+    .single();
+  if (!inv) throw new Error('That invoice no longer exists');
+  if (to.length === 0) throw new Error('No address to send the packing list to');
+
+  const { data: settings } = await db
+    .from('settings').select('company').eq('id', 1).single();
+
+  const client = inv.clients as unknown as { name: string; credit_account: boolean };
+  const order = inv.orders as unknown as
+    { number: string; ship_to: string | null; dropship: boolean | null };
+  const site = inv.locations as unknown as { name: string } | null;
+  const lines = (inv.invoice_lines ?? []) as { qty: number }[];
+
+  // A client on terms is not awaiting payment; that is what terms are.
+  const owes = !inv.paid && !client.credit_account;
+  const short = !inv.ready_to_pack;
+  const hold = owes && short ? 'both' : owes ? 'payment' : short ? 'stock' : null;
+
+  const msg = packingList({
+    company: settings!.company,
+    invoiceNumber: inv.number,
+    orderNumber: order.number,
+    clientName: client.name,
+    site: site?.name ?? '',
+    lineCount: lines.length,
+    totalUnits: lines.reduce((n, l) => n + l.qty, 0),
+    hold,
+    shipTo: order.dropship ? order.ship_to : null,
+  });
+
+  const doc = await invoiceDocData(invoiceId);
+  if (!doc) throw new Error('That invoice no longer exists');
+  const pdf = await renderPackingListPdf(doc);
+
+  await sendEmail({
+    kind: 'packing_list',
+    to,
+    subject: msg.subject,
+    body: msg.body,
+    attachments: [{
+      filename: `packing-${inv.number}.pdf`,
+      content: Buffer.from(pdf).toString('base64'),
+    }],
+    invoiceId,
+  });
 }
 
 /**

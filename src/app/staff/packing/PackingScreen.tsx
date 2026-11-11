@@ -5,7 +5,8 @@ import { useState, useTransition } from 'react';
 import { Button, Card, Empty, Notice, Tag } from '@/components/ui';
 import { fmtDate, money } from '@/lib/format';
 import { markPacked, markShipped, markDelivered,
-         addShipment, updateShipment, removeShipment, resendShipped } from '../actions';
+         addShipment, updateShipment, removeShipment, resendShipped,
+         sendPackingList } from '../actions';
 import type { ActionResult } from '../actions';
 import type { InvoiceType } from '@/lib/types';
 
@@ -30,7 +31,7 @@ interface Balance { client_id: string; currency: string; due: number; overdue: n
 
 export default function PackingScreen({
   locations, activeLocation, queue, waiting, recent, owed = {},
-  mayEditTracking = false,
+  mayEditTracking = false, packers = '',
 }: {
   locations: Named[]; activeLocation: string;
   queue: Inv[]; waiting: Inv[]; recent: Inv[];
@@ -38,6 +39,8 @@ export default function PackingScreen({
   owed?: Record<string, Balance[]>;
   /** Whether this person may correct a number a customer already has. */
   mayEditTracking?: boolean;
+  /** Who works this site, as a default for the send box. Editable there. */
+  packers?: string;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<{ tone: 'error' | 'success' | 'info'; text: string } | null>(null);
@@ -68,7 +71,8 @@ export default function PackingScreen({
           <div className="space-y-2.5">
             {queue.map((inv) => (
               <PackRow key={inv.id} inv={inv} balance={owed[inv.clients.id]}
-                       mayEditTracking={mayEditTracking} onMessage={setMessage} />
+                       mayEditTracking={mayEditTracking} packers={packers}
+                       onMessage={setMessage} />
             ))}
           </div>
         )}
@@ -89,12 +93,20 @@ export default function PackingScreen({
                   {!inv.paid && !inv.clients.credit_account && <Tag tone="red">Awaiting payment</Tag>}
                   {!inv.paid && inv.clients.credit_account && <Tag tone="amber">On account</Tag>}
                   {inv.paid && !inv.ready_to_pack && <Tag tone="amber">Awaiting stock</Tag>}
-                  <a
-                    href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer"
-                    className="ml-auto text-[12px] font-semibold border border-line rounded px-[10px] py-[5px] bg-white hover:bg-parch"
-                  >
-                    Invoice
-                  </a>
+                  <div className="ml-auto flex flex-wrap gap-1.5">
+                    <a
+                      href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer"
+                      className="text-[12px] font-semibold border border-line rounded px-[10px] py-[5px] bg-white hover:bg-parch"
+                    >
+                      Invoice
+                    </a>
+                    {/* Held is about dispatch, not about paper. Somebody has
+                        to be able to pick it, check it against the shelf and
+                        send it to the site holding the stock, and none of
+                        that puts anything in a van. */}
+                    <PackingListActions invoice={inv} packers={packers}
+                                        onMessage={setMessage} />
+                  </div>
                 </div>
               </Card>
             ))}
@@ -110,7 +122,8 @@ export default function PackingScreen({
           <div className="space-y-2.5">
             {recent.map((inv) => (
               <PackRow key={inv.id} inv={inv} balance={owed[inv.clients.id]}
-                       mayEditTracking={mayEditTracking} onMessage={setMessage} />
+                       mayEditTracking={mayEditTracking} packers={packers}
+                       onMessage={setMessage} />
             ))}
           </div>
         </section>
@@ -119,10 +132,77 @@ export default function PackingScreen({
   );
 }
 
-function PackRow({
-  inv, balance, mayEditTracking = false, onMessage,
+/**
+ * Download the packing list, or send it to somebody.
+ *
+ * On every invoice on the screen, held or not. The paperwork is not what
+ * keeps goods in the building, and the people who need it are often not the
+ * people looking at this screen: a site that holds our stock, somebody
+ * getting a pick ready for the morning. The address is typed rather than
+ * looked up, because half of them are not on this system — the site's own
+ * staff is only the default.
+ */
+function PackingListActions({
+  invoice, packers = '', onMessage,
 }: {
-  inv: Inv;
+  invoice: { id: string; number: string };
+  packers?: string;
+  onMessage: (m: { tone: 'error' | 'success' | 'info'; text: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [to, setTo] = useState(packers);
+  const [pending, startTransition] = useTransition();
+
+  function send() {
+    startTransition(async () => {
+      const r = await sendPackingList(invoice.id, to);
+      if (r.ok) {
+        setOpen(false);
+        onMessage({ tone: 'success', text: r.message ?? 'Sent' });
+      } else {
+        onMessage({ tone: 'error', text: r.error ?? 'That could not be sent' });
+      }
+    });
+  }
+
+  return (
+    <>
+      <a
+        href={`/api/invoices/${invoice.id}/packing-list`} target="_blank" rel="noreferrer"
+        className="text-[12px] font-semibold border border-line rounded px-[10px] py-[5px] bg-white hover:bg-parch"
+      >
+        Packing list
+      </a>
+      <Button small kind="ghost" onClick={() => setOpen(!open)}>
+        {open ? 'Cancel' : 'Send list'}
+      </Button>
+      {open && (
+        <div className="basis-full mt-2 flex flex-wrap items-end gap-2">
+          <label className="text-[12px] grow max-w-[380px]">
+            <span className="block font-semibold mb-1">
+              Send {invoice.number} to
+            </span>
+            <input
+              type="text" value={to} autoFocus
+              placeholder="name@example.com, someone@else.com"
+              onChange={(e) => setTo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && to.trim()) send(); }}
+              className="w-full"
+            />
+          </label>
+          <Button small kind="accent" onClick={send} disabled={pending || !to.trim()}>
+            {pending ? 'Sending…' : 'Send'}
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+function PackRow({
+  inv, balance, mayEditTracking = false, packers = '', onMessage,
+}: {
+  inv: Inv; packers?: string;
   /** Whether this person may correct a number a customer already has. */
   mayEditTracking?: boolean;
   /** What this client owes, where it matters — an invoice going out unpaid. */
@@ -176,12 +256,7 @@ function PackRow({
         )}
 
         <div className="ml-auto flex flex-wrap gap-1.5">
-          <a
-            href={`/api/invoices/${inv.id}/packing-list`} target="_blank" rel="noreferrer"
-            className="text-[12px] font-semibold border border-line rounded px-[10px] py-[5px] bg-white hover:bg-parch"
-          >
-            Packing list
-          </a>
+          <PackingListActions invoice={inv} packers={packers} onMessage={onMessage} />
           {!inv.packed && (
             <Button small onClick={() => run(() => markPacked(inv.id))} disabled={pending}>
               Mark packed

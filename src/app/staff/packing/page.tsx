@@ -72,6 +72,22 @@ export default async function PackingPage({
     sb.rpc('client_balances'),
   ]);
 
+  /*
+   * Who works this site, as the address the send box starts with.
+   *
+   * Only a default: the list often goes to somebody who is not on this
+   * system at all — a partner site holding our stock — so the box is a text
+   * field rather than a picker, and this just saves the common case being
+   * typed out every time.
+   */
+  const { data: packing } = await sb
+    .from('ops_locations')
+    .select('profiles(email)')
+    .eq('location_id', activeLocation);
+  const packers = [...new Set(((packing ?? []) as unknown as
+    { profiles: { email: string | null } | null }[])
+    .map((p) => p.profiles?.email).filter(Boolean) as string[])].join(', ');
+
   type Row = {
     id: string; paid: boolean; ready_to_pack: boolean;
     clients: { id: string; credit_account: boolean };
@@ -94,7 +110,7 @@ export default async function PackingPage({
 
   return (
     <>
-      <PageHeading sub="One packing list per invoice. Nothing appears here until its stock is on the shelf and the invoice is paid — or the client is on terms, in which case what they owe is shown beside it.">
+      <PageHeading sub="One packing list per invoice. Nothing is ready to pack until its stock is on the shelf and the invoice is paid — or the client is on terms, in which case what they owe is shown beside it. The list itself can be printed or sent at any point, held or not; what stops goods leaving is marking the invoice packed.">
         Packing
       </PageHeading>
       <PackingScreen
@@ -105,6 +121,7 @@ export default async function PackingPage({
         recent={(recent ?? []) as never}
         owed={owed}
         mayEditTracking={mayEditTracking}
+        packers={packers}
       />
     </>
   );

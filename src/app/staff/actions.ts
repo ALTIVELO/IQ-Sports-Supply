@@ -8,8 +8,9 @@ import { trackingUrlFor } from '@/lib/format';
 import { splitOrders } from '@/lib/orders/split';
 import {
   notifyOrderPlaced, notifySupplierOrder, notifySupplierSheet, notifySupplierSheetForOrder,
-  notifyShipped, notifyDelivered, notifyDropshipPartners,
+  notifyShipped, notifyDelivered, notifyDropshipPartners, notifyPackingList,
 } from '@/lib/notifications';
+import { parseRecipients } from '@/lib/email/recipients';
 
 export interface ActionResult {
   ok: boolean;
@@ -376,6 +377,44 @@ export async function markShipped(input: {
     ok: true,
     message: warning ? 'Marked shipped' : 'Shipped — the client has been sent the tracking link',
     warning,
+  };
+}
+
+/**
+ * Email the packing list to whoever is packing it.
+ *
+ * No state gate. The list can go out before the invoice is paid and before
+ * the stock is in, because the people who need it are often not the people
+ * who can see this screen — a partner site holding our stock, somebody
+ * getting a pick ready for the morning. What stops goods leaving early is
+ * mark_invoice_packed(), and it still does.
+ */
+export async function sendPackingList(
+  invoiceId: string, to: string,
+): Promise<ActionResult> {
+  await requireStaff();
+
+  const { to: addresses, bad } = parseRecipients(to);
+  if (bad.length) {
+    return {
+      ok: false,
+      error: `${bad.join(', ')} ${bad.length === 1 ? 'is not an address' : 'are not addresses'}`
+           + ' — nothing was sent',
+    };
+  }
+  if (addresses.length === 0) {
+    return { ok: false, error: 'Type an address to send it to' };
+  }
+
+  const warning = await notify(
+    () => notifyPackingList(invoiceId, addresses), 'The packing list');
+  if (warning) return { ok: false, error: warning };
+
+  revalidatePath('/staff/packing');
+  revalidatePath('/staff/outbox');
+  return {
+    ok: true,
+    message: `Packing list sent to ${addresses.join(', ')}`,
   };
 }
 

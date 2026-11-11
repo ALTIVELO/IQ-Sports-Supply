@@ -22,7 +22,7 @@ const BASE_SELECT = `*, orders(number),
              invoice_lines(sku, name, qty, unit_price)`;
 
 const FULL_SELECT = `*, orders(number, ship_to, dropship, agency_terms, brands!orders_agent_brand_id_fkey(name)),
-             clients(name, address, invoicing_address, vat_no),
+             clients(name, address, invoicing_address, vat_no, credit_account),
              locations(name),
              invoice_lines(sku, name, qty, unit_price)`;
 
@@ -91,6 +91,8 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
   const client = inv.clients as {
     name: string; address: string | null;
     invoicing_address?: string | null; vat_no: string | null;
+    /** Absent on a database that has not had the credit-terms migration. */
+    credit_account?: boolean;
   };
   const order = inv.orders as {
     number: string; ship_to?: string | null; dropship?: boolean | null;
@@ -126,6 +128,22 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     company: settings.company,
     companyAddress: settings.company_address,
     paid: inv.paid,
+    /*
+     * Why it is not going out, for the packing list to say on its face.
+     *
+     * A client on terms is not awaiting payment; that is what terms are. An
+     * invoice already packed is not awaiting anything — it has gone. And a
+     * database without the credit-account migration falls back to BASE_SELECT,
+     * where the column is simply absent: an order on terms would then be
+     * stamped as unpaid, which is wrong but is the safe direction to be wrong
+     * in, and only on a deployment that is already behind.
+     */
+    hold: (() => {
+      if (inv.packed) return null;
+      const owes = !inv.paid && !client.credit_account;
+      const short = inv.ready_to_pack === false;
+      return owes && short ? 'both' : owes ? 'payment' : short ? 'stock' : null;
+    })(),
     note: inv.note ?? null,
     locationName: (inv.locations as { name: string } | null)?.name ?? null,
   };

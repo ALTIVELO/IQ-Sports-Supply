@@ -162,6 +162,54 @@ ${legalFooter()}`,
   };
 }
 
+/**
+ * A packing list, sent to whoever is packing it.
+ *
+ * Ours, not the customer's: it names them because it is the note that goes in
+ * the box, and it goes to our own people or to a site holding our stock.
+ *
+ * `hold` is the point of the email. The list can be sent before the money or
+ * the goods have arrived — so a picker can get ahead, so a partner site knows
+ * what is coming — and a list that arrives looking exactly like a list for an
+ * order that is ready to go out is how an unpaid order gets shipped. So when
+ * it is held, the email says so first and says what for.
+ */
+export function packingList(o: {
+  company: string; invoiceNumber: string; orderNumber: string; clientName: string;
+  site: string; lineCount: number; totalUnits: number;
+  /** null when it is genuinely ready to pack. */
+  hold: 'payment' | 'stock' | 'both' | null;
+  shipTo?: string | null;
+}) {
+  const held = {
+    payment: 'This invoice has not been paid yet.',
+    stock: 'Not all of this order is in stock yet.',
+    both: 'This invoice has not been paid yet, and not all of it is in stock.',
+  };
+
+  const warning = o.hold
+    ? `${held[o.hold]} The list is attached so it can be picked and checked — `
+      + 'nothing on it should leave the building until that changes.\n\n'
+    : '';
+
+  return {
+    subject: `Packing list ${o.invoiceNumber} — ${o.orderNumber}`
+           + (o.hold ? ' (do not dispatch yet)' : ''),
+    body: `${warning}Packing list for ${o.orderNumber} is attached.
+
+Invoice     ${o.invoiceNumber}
+For         ${o.clientName}
+From        ${o.site}
+             ${o.lineCount} line${o.lineCount === 1 ? '' : 's'}, `
+         + `${o.totalUnits} unit${o.totalUnits === 1 ? '' : 's'}`
+         + (o.shipTo ? `\n\nGoing direct to:\n${o.shipTo}` : '')
+         + `
+
+${o.company}
+${legalFooter()}`,
+  };
+}
+
 export interface Parcel {
   carrier: string; tracking: string; trackingUrl: string | null;
 }

@@ -18,7 +18,8 @@ $TSC src/lib/import/*.ts    --outDir .test-build/import    >/dev/null 2>&1
 $TSC src/lib/reporting/*.ts --outDir .test-build/reporting >/dev/null 2>&1
 $TSC src/lib/orders/*.ts    --outDir .test-build/orders    >/dev/null 2>&1
 $TSC src/lib/returns/*.ts   --outDir .test-build/returns   >/dev/null 2>&1
-$TSC src/lib/email/templates.ts --outDir .test-build/email >/dev/null 2>&1
+$TSC src/lib/email/templates.ts src/lib/email/recipients.ts \
+     --outDir .test-build/email >/dev/null 2>&1
 $TSC src/lib/supabase/chunk.ts --outDir .test-build/supabase >/dev/null 2>&1
 # The supplier order sheet. Server-only for the same reason as chunk.ts, and
 # the marker is dropped the same way; it reads the template off disk, which is

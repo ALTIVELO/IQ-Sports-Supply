@@ -80,6 +80,10 @@ const s = StyleSheet.create({
     marginBottom: 6, marginLeft: 'auto',
   },
   parties: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, marginBottom: 18 },
+  // Loud on purpose. It is read across a bench, upside down, by somebody
+  // holding a box.
+  hold: { marginTop: 18, borderWidth: 1.5, borderColor: FLAME, padding: 7 },
+  holdText: { color: FLAME, fontSize: 11, fontFamily: 'Helvetica-Bold' },
   label: { fontSize: 7, color: MUTE, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5 },
   strong: { fontFamily: 'Helvetica-Bold' },
   addr: { maxWidth: 220 },
@@ -114,6 +118,17 @@ export interface DocLine { sku: string; name: string; qty: number; unit_price: n
 
 export interface DocData {
   invoiceNumber: string;
+  /**
+   * Why this order is not going out yet, if it is not.
+   *
+   * A packing list can be printed or emailed before the money and before the
+   * goods — a picker getting ahead, a site holding our stock being told what
+   * is coming. The sheet of paper that results then sits on a bench looking
+   * exactly like one for an order that is ready, which is how an unpaid order
+   * gets put in a van. So it says so on its face, not only in the email that
+   * carried it.
+   */
+  hold?: 'payment' | 'stock' | 'both' | null;
   /**
    * Going direct to the client's own customer.
    *
@@ -351,11 +366,31 @@ export function InvoiceDocument({ d }: { d: DocData }) {
   );
 }
 
+/**
+ * What the band across a held packing list says.
+ *
+ * Its own function because the wording is the entire safeguard: the list is
+ * allowed out early, so the only thing standing between it and an unpaid
+ * order in a van is a sentence somebody reads across a bench. Naming what is
+ * missing matters as much as the instruction — "do not dispatch" alone has
+ * whoever is holding it going to find out why.
+ */
+export function holdNotice(hold: NonNullable<DocData['hold']>): string {
+  const what = hold === 'payment' ? 'Awaiting payment'
+    : hold === 'stock' ? 'Awaiting stock'
+    : 'Awaiting payment and stock';
+  return `${what} — pick and check, but do not dispatch`;
+}
+
 export function PackingListDocument({ d }: { d: DocData }) {
   return (
     <Document title={`Packing list ${d.invoiceNumber}`}>
       <Page size="A4" style={s.page}>
         <Header d={d} title="Packing list" />
+
+        {d.hold ? (
+          <View style={s.hold}><Text style={s.holdText}>{holdNotice(d.hold)}</Text></View>
+        ) : null}
 
         <View style={s.parties}>
           <View>
