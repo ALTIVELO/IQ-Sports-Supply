@@ -3,6 +3,7 @@ import React from 'react';
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer';
 import { InvoiceDocument, PackingListDocument, type DocData } from './documents';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { buildSheets, wantsBuildSheet, type BuildSheet, type SheetGroup } from '@/lib/orders/build-sheet';
 
 /** Why a document could not be built, in words a person can act on. */
 export class DocDataError extends Error {
@@ -42,6 +43,56 @@ async function priceNotesFor(
   return [...new Set((data ?? [])
     .map((p) => (p.price_note ?? '').trim())
     .filter(Boolean))];
+}
+
+/**
+ * The groupsets whose parts appear on these lines, with every one of their
+ * steps — including the steps the order has nothing for, because "no rotors"
+ * is exactly what the packing list has to say out loud.
+ *
+ * Best effort: a sheet that cannot be worked out leaves the packing list as
+ * it always was rather than stopping it printing.
+ */
+async function buildSheetsFor(
+  db: ReturnType<typeof supabaseAdmin>, lines: { sku: string; name: string; qty: number }[],
+): Promise<BuildSheet[]> {
+  const skus = [...new Set(lines.map((l) => l.sku).filter(Boolean))];
+  if (!skus.length) return [];
+  try {
+    const { data: hits, error } = await db
+      .from('product_group_options')
+      .select('products!inner(sku), product_group_steps!inner(group_id)')
+      .in('products.sku', skus);
+    if (error || !hits?.length) return [];
+    const groupIds = [...new Set(hits.map((h) =>
+      (h.product_group_steps as unknown as { group_id: string }).group_id))];
+
+    const { data: groups, error: gErr } = await db
+      .from('product_groups')
+      .select(`id, name, sort, product_group_steps(name, sort, spec, axis1_name, axis2_name,
+               product_group_options(products(sku)))`)
+      .in('id', groupIds)
+      .order('sort');
+    if (gErr || !groups) return [];
+
+    const shaped: SheetGroup[] = groups.map((g) => ({
+      name: g.name as string,
+      steps: ((g.product_group_steps ?? []) as unknown as {
+        name: string; sort: number; spec: string | null;
+        axis1_name: string | null; axis2_name: string | null;
+        product_group_options: { products: { sku: string } | null }[];
+      }[]).map((st) => ({
+        name: st.name, sort: st.sort, spec: st.spec,
+        axis1_name: st.axis1_name, axis2_name: st.axis2_name,
+        skus: (st.product_group_options ?? [])
+          .map((o) => o.products?.sku).filter((x): x is string => Boolean(x)),
+      })),
+    }));
+    return buildSheets(lines, shaped);
+  } catch (e) {
+    console.error('Build sheet could not be worked out:', e);
+    return [];
+  }
 }
 
 /**
@@ -117,6 +168,7 @@ export async function invoiceDocData(invoiceId: string): Promise<DocData | null>
     agencyTerms: order.agency_terms ?? null,
     agentBrand: order.brands?.name ?? null,
     lines: [...lines].sort((a, b) => a.sku.localeCompare(b.sku)),
+    buildSheets: wantsBuildSheet(order.number) ? await buildSheetsFor(db, lines) : [],
     clientName: client.name,
     clientAddress: client.invoicing_address ?? client.address,
     // Snapshotted when the order was placed, so correcting an address today
