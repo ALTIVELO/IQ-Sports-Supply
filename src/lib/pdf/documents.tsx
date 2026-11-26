@@ -4,6 +4,7 @@ import { fmtDate, money, totals } from '@/lib/format';
 import { COMPANY_NUMBER, REGISTERED_IN, VAT_NUMBER, legalFooter } from '@/lib/company';
 import { LOGO_PNG, LOGO_WIDTH, LOGO_HEIGHT } from './logo';
 import { agencyHeading, agencyLines } from '@/lib/orders/agency';
+import type { BuildSheet } from '@/lib/orders/build-sheet';
 
 /*
  * Characters the built-in PDF fonts cannot print.
@@ -112,6 +113,12 @@ const s = StyleSheet.create({
                 letterSpacing: 0.5, marginBottom: 5 },
   agencyLine: { fontSize: 8, lineHeight: 1.5, marginTop: 2 },
   box: { width: 10, height: 10, borderWidth: 1, borderColor: '#B9C4CE' },
+  sheet: { marginTop: 22 },
+  sheetHead: { fontFamily: 'Helvetica-Bold', fontSize: 11, marginBottom: 6 },
+  sheetRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#EDEFF2', paddingVertical: 4 },
+  cPart: { width: 110, fontFamily: 'Helvetica-Bold' },
+  cSpec: { flex: 1, paddingRight: 8 },
+  missing: { flex: 1, color: FLAME, fontFamily: 'Helvetica-Bold' },
 });
 
 export interface DocLine { sku: string; name: string; qty: number; unit_price: number }
@@ -165,6 +172,11 @@ export interface DocData {
   agencyTerms?: string | null;
   agentBrand?: string | null;
   lines: DocLine[];
+  /**
+   * Each groupset on the order, part by part, with what was not ordered
+   * written as such. Packing list only; empty for orders before SO-1280.
+   */
+  buildSheets?: BuildSheet[];
   clientName: string;
   /** Billing address: the legal invoicing address where one is given. */
   clientAddress: string | null;
@@ -428,6 +440,35 @@ export function PackingListDocument({ d }: { d: DocData }) {
             <Text style={s.cName}>{l.name}</Text>
             <Text style={s.cQty}>{l.qty}</Text>
             <View style={s.cBox}><View style={s.box} /></View>
+          </View>
+        ))}
+
+        {(d.buildSheets ?? []).map((sheet, si) => (
+          <View key={si} style={s.sheet}>
+            <Text style={s.sheetHead}>Groupset spec - {sheet.group}</Text>
+            <View style={s.tHead}>
+              <Text style={[s.th, s.cPart]}>Part</Text>
+              <Text style={[s.th, s.cSpec]}>Size / spec</Text>
+              <Text style={[s.th, s.cQty]}>Qty</Text>
+              <Text style={[s.th, s.cBox]}>Checked</Text>
+            </View>
+            {sheet.rows.map((row, ri) => row.items.length ? (
+              row.items.map((it, ii) => (
+                <View key={`${ri}-${ii}`} style={s.sheetRow} wrap={false}>
+                  <Text style={s.cPart}>{ii === 0 ? row.part : ''}</Text>
+                  <Text style={s.cSpec}>{it.detail} ({it.sku})</Text>
+                  <Text style={s.cQty}>{it.qty}</Text>
+                  <View style={s.cBox}><View style={s.box} /></View>
+                </View>
+              ))
+            ) : (
+              <View key={ri} style={s.sheetRow} wrap={false}>
+                <Text style={s.cPart}>{row.part}</Text>
+                <Text style={s.missing}>NOT INCLUDED - not on this order</Text>
+                <Text style={s.cQty}>0</Text>
+                <View style={s.cBox} />
+              </View>
+            ))}
           </View>
         ))}
 
